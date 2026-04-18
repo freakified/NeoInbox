@@ -1,0 +1,29 @@
+{
+  "manifest_version": 2,
+  "name": "NeoInbox",
+  "version": "0.1.0",
+  "description": "Bring back Google Inbox, in Thunderbird.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "neoinbox@freakified.dev",
+      "strict_min_version": "115.0"
+    }
+  },
+  "browser_action": {
+    "default_title": "Open NeoInbox"
+  },
+  "background": {
+    "scripts": ["background.js"],
+    "type": "module"
+  },
+  "permissions": [
+    "messagesRead",
+    "messagesUpdate",
+    "messagesTags",
+    "messagesMove",
+    "accountsRead",
+    "storage",
+    "alarms",
+    "tabs"
+  ]
+}
