@@ -5,12 +5,22 @@ export interface InboxFolder {
 }
 
 export async function collectInboxFolders(): Promise<InboxFolder[]> {
+  return collectFolders(isInbox);
+}
+
+export async function collectSentFolders(): Promise<InboxFolder[]> {
+  return collectFolders(isSent);
+}
+
+async function collectFolders(
+  match: (f: messenger.folders.MailFolder) => boolean,
+): Promise<InboxFolder[]> {
   const accounts = await messenger.accounts.list();
   const out: InboxFolder[] = [];
   for (const acc of accounts) {
     walk(acc.folders ?? [], (f) => {
       if (!f.id) return;
-      if (!isInbox(f)) return;
+      if (!match(f)) return;
       out.push({
         id: f.id,
         name: f.name ?? f.path,
@@ -24,6 +34,12 @@ export async function collectInboxFolders(): Promise<InboxFolder[]> {
 function isInbox(f: messenger.folders.MailFolder): boolean {
   if (f.specialUse?.includes("inbox")) return true;
   if (f.type === "inbox") return true;
+  return false;
+}
+
+function isSent(f: messenger.folders.MailFolder): boolean {
+  if (f.specialUse?.includes("sent")) return true;
+  if (f.type === "sent") return true;
   return false;
 }
 

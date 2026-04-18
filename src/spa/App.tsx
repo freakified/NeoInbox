@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
-import type { Category, RawMessage } from "../shared/types";
+import type { Category, RawMessage, Thread } from "../shared/types";
 import { CATEGORIES } from "../shared/categories";
 import {
-  loadInboxMessages,
+  buildThreads,
+  loadInbox,
   sendDone,
   sendPin,
   sendSnooze,
@@ -44,60 +45,60 @@ function dateBucket(epochMs: number): string {
 // ─── stream model ──────────────────────────────────────────────────────────
 
 type StreamItem =
-  | { type: "message"; date: number; message: RawMessage }
-  | { type: "bundle"; date: number; category: Category; sliceMessages: RawMessage[] };
+  | { type: "thread"; date: number; thread: Thread }
+  | { type: "bundle"; date: number; category: Category; sliceThreads: Thread[] };
 
 interface DateGroup {
   label: string;
   items: StreamItem[];
 }
 
-function buildDateGroups(messages: RawMessage[]): DateGroup[] {
-  const bucketById = new Map(messages.map((m) => [m.id, dateBucket(m.date)]));
+function buildDateGroups(threads: Thread[]): DateGroup[] {
+  const bucketById = new Map(threads.map((t) => [t.id, dateBucket(t.latestDate)]));
   const bucketOrder: string[] = [];
   const seen = new Set<string>();
-  for (const m of messages) {
-    const b = bucketById.get(m.id)!;
+  for (const t of threads) {
+    const b = bucketById.get(t.id)!;
     if (!seen.has(b)) { bucketOrder.push(b); seen.add(b); }
   }
   return bucketOrder.map((label) => {
-    const inBucket = messages.filter((m) => bucketById.get(m.id) === label);
-    const byCategory = new Map<Category, RawMessage[]>();
-    const personal: RawMessage[] = [];
-    for (const m of inBucket) {
-      if (m.category) {
-        const arr = byCategory.get(m.category) ?? [];
-        arr.push(m);
-        byCategory.set(m.category, arr);
+    const inBucket = threads.filter((t) => bucketById.get(t.id) === label);
+    const byCategory = new Map<Category, Thread[]>();
+    const personal: Thread[] = [];
+    for (const t of inBucket) {
+      if (t.category) {
+        const arr = byCategory.get(t.category) ?? [];
+        arr.push(t);
+        byCategory.set(t.category, arr);
       } else {
-        personal.push(m);
+        personal.push(t);
       }
     }
     const items: StreamItem[] = [
-      ...Array.from(byCategory.entries()).map(([category, msgs]) => ({
+      ...Array.from(byCategory.entries()).map(([category, ts]) => ({
         type: "bundle" as const,
-        date: msgs[0].date,
+        date: ts[0].latestDate,
         category,
-        sliceMessages: msgs,
+        sliceThreads: ts,
       })),
-      ...personal.map((m) => ({ type: "message" as const, date: m.date, message: m })),
+      ...personal.map((t) => ({ type: "thread" as const, date: t.latestDate, thread: t })),
     ].sort((a, b) => b.date - a.date);
     return { label, items };
   });
 }
 
 // Flat date grouping — no bundle splitting, used inside expanded bundles
-function buildFlatDateGroups(messages: RawMessage[]): { label: string; messages: RawMessage[] }[] {
-  const bucketById = new Map(messages.map((m) => [m.id, dateBucket(m.date)]));
+function buildFlatDateGroups(threads: Thread[]): { label: string; threads: Thread[] }[] {
+  const bucketById = new Map(threads.map((t) => [t.id, dateBucket(t.latestDate)]));
   const bucketOrder: string[] = [];
   const seen = new Set<string>();
-  for (const m of messages) {
-    const b = bucketById.get(m.id)!;
+  for (const t of threads) {
+    const b = bucketById.get(t.id)!;
     if (!seen.has(b)) { bucketOrder.push(b); seen.add(b); }
   }
   return bucketOrder.map((label) => ({
     label,
-    messages: messages.filter((m) => bucketById.get(m.id) === label),
+    threads: threads.filter((t) => bucketById.get(t.id) === label),
   }));
 }
 
@@ -184,15 +185,16 @@ function senderInitial(author: string): string {
 // ─── shared types ──────────────────────────────────────────────────────────
 
 type Actions = {
-  onPin: (m: RawMessage) => void;
-  onDone: (m: RawMessage) => void;
-  onSnooze: (m: RawMessage, wakeAt: number) => void;
+  onPin: (t: Thread) => void;
+  onDone: (t: Thread) => void;
+  onSnooze: (t: Thread, wakeAt: number) => void;
 };
 
 // ─── App ───────────────────────────────────────────────────────────────────
 
 export function App() {
   const [messages, setMessages] = useState<RawMessage[] | null>(null);
+  const [myEmails, setMyEmails] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -201,8 +203,12 @@ export function App() {
 
   const load = useCallback(() => {
     setLoading(true);
-    loadInboxMessages()
-      .then((m) => { setMessages(m); setError(null); })
+    loadInbox()
+      .then(({ messages, myEmails }) => {
+        setMessages(messages);
+        setMyEmails(myEmails);
+        setError(null);
+      })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }, []);
@@ -220,28 +226,48 @@ export function App() {
     try { await triggerBackfill(); load(); } finally { setBusy(false); }
   };
 
-  const optimisticRemove = (id: number) =>
-    setMessages((prev) => prev?.filter((m) => m.id !== id) ?? null);
-  const optimisticTogglePin = (id: number, pinned: boolean) =>
-    setMessages((prev) => prev?.map((m) => (m.id === id ? { ...m, pinned } : m)) ?? null);
+  const optimisticRemoveIds = (ids: number[]) => {
+    const idSet = new Set(ids);
+    setMessages((prev) => prev?.filter((m) => !idSet.has(m.id)) ?? null);
+  };
+  const optimisticTogglePinIds = (ids: number[], pinned: boolean) => {
+    const idSet = new Set(ids);
+    setMessages((prev) => prev?.map((m) => (idSet.has(m.id) ? { ...m, pinned } : m)) ?? null);
+  };
 
-  const onPin = async (m: RawMessage) => { optimisticTogglePin(m.id, !m.pinned); await sendPin(m.id, !m.pinned); };
-  const onDone = async (m: RawMessage) => { optimisticRemove(m.id); await sendDone(m.id, m.accountId); };
-  const onSnooze = async (m: RawMessage, wakeAt: number) => { optimisticRemove(m.id); await sendSnooze(m.id, wakeAt); };
+  const onPin = async (t: Thread) => {
+    const next = !t.pinned;
+    const ids = t.messages.map((m) => m.id);
+    optimisticTogglePinIds(ids, next);
+    await Promise.all(ids.map((id) => sendPin(id, next)));
+  };
+  const onDone = async (t: Thread) => {
+    const inboxMsgs = t.messages.filter((m) => m.origin === "inbox");
+    optimisticRemoveIds(inboxMsgs.map((m) => m.id));
+    await Promise.all(inboxMsgs.map((m) => sendDone(m.id, m.accountId)));
+  };
+  const onSnooze = async (t: Thread, wakeAt: number) => {
+    const ids = t.messages.map((m) => m.id);
+    optimisticRemoveIds(ids);
+    await Promise.all(ids.map((id) => sendSnooze(id, wakeAt)));
+  };
 
   const actions: Actions = { onPin, onDone, onSnooze };
-  const all = messages ?? [];
-  const pinned = all.filter((m) => m.pinned);
-  const unpinned = all.filter((m) => !m.pinned);
 
-  // all messages per category — passed to bundle rows so they show every message when open
+  const threads = useMemo(
+    () => (messages ? buildThreads(messages, myEmails) : []),
+    [messages, myEmails],
+  );
+  const pinned = threads.filter((t) => t.pinned);
+  const unpinned = threads.filter((t) => !t.pinned);
+
   const allByCategory = useMemo(() => {
-    const map = new Map<Category, RawMessage[]>();
-    for (const m of unpinned) {
-      if (m.category) {
-        const arr = map.get(m.category) ?? [];
-        arr.push(m);
-        map.set(m.category, arr);
+    const map = new Map<Category, Thread[]>();
+    for (const t of unpinned) {
+      if (t.category) {
+        const arr = map.get(t.category) ?? [];
+        arr.push(t);
+        map.set(t.category, arr);
       }
     }
     return map;
@@ -284,12 +310,12 @@ export function App() {
                 <div className="max-w-3xl mx-auto"><SectionLabel>Pinned</SectionLabel></div>
                 <LayoutGroup>
                   <div className="flex flex-col">
-                    {pinned.map((m) => (
-                      <MessageRow
-                        key={m.id}
-                        message={m}
-                        isExpanded={expandedKey === `msg:${m.id}`}
-                        onToggleExpand={() => toggleKey(`msg:${m.id}`)}
+                    {pinned.map((t) => (
+                      <ThreadRow
+                        key={t.id}
+                        thread={t}
+                        isExpanded={expandedKey === `thread:${t.id}`}
+                        onToggleExpand={() => toggleKey(`thread:${t.id}`)}
                         expandedRef={expandedRef}
                         {...actions}
                       />
@@ -305,12 +331,12 @@ export function App() {
                 <LayoutGroup>
                   <div className="flex flex-col">
                     {group.items.map((item) =>
-                      item.type === "message" ? (
-                        <MessageRow
-                          key={item.message.id}
-                          message={item.message}
-                          isExpanded={expandedKey === `msg:${item.message.id}`}
-                          onToggleExpand={() => toggleKey(`msg:${item.message.id}`)}
+                      item.type === "thread" ? (
+                        <ThreadRow
+                          key={item.thread.id}
+                          thread={item.thread}
+                          isExpanded={expandedKey === `thread:${item.thread.id}`}
+                          onToggleExpand={() => toggleKey(`thread:${item.thread.id}`)}
                           expandedRef={expandedRef}
                           {...actions}
                         />
@@ -319,8 +345,8 @@ export function App() {
                           key={`${group.label}|${item.category}`}
                           bundleKey={`bundle:${group.label}|${item.category}`}
                           category={item.category}
-                          allMessages={allByCategory.get(item.category) ?? item.sliceMessages}
-                          previewMessages={item.sliceMessages}
+                          allThreads={allByCategory.get(item.category) ?? item.sliceThreads}
+                          previewThreads={item.sliceThreads}
                           isOpen={expandedKey === `bundle:${group.label}|${item.category}`}
                           onToggle={toggleKey}
                           expandedRef={expandedRef}
@@ -333,7 +359,7 @@ export function App() {
               </section>
             ))}
 
-            {all.length === 0 && <p className="text-neutral-500 text-sm">No messages found.</p>}
+            {threads.length === 0 && <p className="text-neutral-500 text-sm">No messages found.</p>}
           </>
         )}
       </div>
@@ -346,8 +372,8 @@ export function App() {
 function BundleSliceRow({
   bundleKey,
   category,
-  allMessages,
-  previewMessages,
+  allThreads,
+  previewThreads,
   isOpen,
   onToggle,
   expandedRef,
@@ -357,28 +383,34 @@ function BundleSliceRow({
 }: {
   bundleKey: string;
   category: Category;
-  allMessages: RawMessage[];      // all messages in this category (shown when expanded)
-  previewMessages: RawMessage[];  // just this date-slice (shown in collapsed preview)
+  allThreads: Thread[];
+  previewThreads: Thread[];
   isOpen: boolean;
   onToggle: (key: string) => void;
   expandedRef: React.RefObject<HTMLDivElement | null>;
 } & Actions) {
   const meta = CATEGORIES[category];
-  const unread = allMessages.filter((m) => !m.read).length;
-  const preview = previewMessages.slice(0, 3).map((m) => senderName(m.author)).join(" · ");
-  const [openMessageId, setOpenMessageId] = useState<number | null>(null);
+  const unread = allThreads.reduce((n, t) => n + t.unreadCount, 0);
+  const preview = previewThreads
+    .slice(0, 3)
+    .map((t) => {
+      const latest = t.messages[t.messages.length - 1];
+      return senderName(latest.author);
+    })
+    .join(" · ");
+  const [openThreadId, setOpenThreadId] = useState<string | null>(null);
 
-  useEffect(() => { if (!isOpen) setOpenMessageId(null); }, [isOpen]);
+  useEffect(() => { if (!isOpen) setOpenThreadId(null); }, [isOpen]);
 
-  const toggleMsg = (id: number) =>
-    setOpenMessageId((prev) => (prev === id ? null : id));
+  const toggleThread = (id: string) =>
+    setOpenThreadId((prev) => (prev === id ? null : id));
 
   const handleDoneAll = (e: React.MouseEvent) => {
     e.stopPropagation();
-    allMessages.forEach((m) => void onDone(m));
+    allThreads.forEach((t) => void onDone(t));
   };
 
-  const flatGroups = buildFlatDateGroups(allMessages);
+  const flatGroups = buildFlatDateGroups(allThreads);
 
   return (
     <motion.div
@@ -463,17 +495,17 @@ function BundleSliceRow({
             className="overflow-hidden"
           >
             <div className="bg-neutral-200 px-5 pb-5">
-              {flatGroups.map(({ label, messages }) => (
+              {flatGroups.map(({ label, threads }) => (
                 <div key={label}>
                   <p className="text-sm text-neutral-500 pt-4 pb-2 px-1">{label}</p>
                   <div className="flex flex-col gap-2">
-                    {messages.map((m) => (
-                      <BundleMessageCard
-                        key={m.id}
-                        message={m}
+                    {threads.map((t) => (
+                      <BundleThreadCard
+                        key={t.id}
+                        thread={t}
                         accentColor={meta.color}
-                        isOpen={openMessageId === m.id}
-                        onToggle={() => toggleMsg(m.id)}
+                        isOpen={openThreadId === t.id}
+                        onToggle={() => toggleThread(t.id)}
                         onPin={onPin}
                         onDone={onDone}
                         onSnooze={onSnooze}
@@ -490,10 +522,10 @@ function BundleSliceRow({
   );
 }
 
-// ─── BundleMessageCard ─────────────────────────────────────────────────────
+// ─── BundleThreadCard ──────────────────────────────────────────────────────
 
-function BundleMessageCard({
-  message: m,
+function BundleThreadCard({
+  thread: t,
   accentColor,
   isOpen,
   onToggle,
@@ -501,15 +533,15 @@ function BundleMessageCard({
   onDone,
   onSnooze,
 }: {
-  message: RawMessage;
+  thread: Thread;
   accentColor: string;
   isOpen: boolean;
   onToggle: () => void;
 } & Actions) {
   const [hovered, setHovered] = useState(false);
-  const name = senderName(m.author);
-  const color = avatarColor(name);
-  const weight = m.read ? "text-neutral-500" : "font-semibold text-neutral-900";
+  const latest = t.messages[t.messages.length - 1];
+  const color = avatarColor(senderName(latest.author));
+  const weight = t.unreadCount > 0 ? "font-semibold text-neutral-900" : "text-neutral-500";
 
   return (
     <div
@@ -525,17 +557,19 @@ function BundleMessageCard({
           className="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-sm shrink-0"
           style={{ backgroundColor: color }}
         >
-          {senderInitial(m.author)}
+          {senderInitial(latest.author)}
         </div>
         <div className="min-w-0 flex-1 flex items-baseline gap-2">
-          <span className={`text-sm shrink-0 ${weight}`}>{name}</span>
+          <span className={`text-sm shrink-0 ${weight}`}>{t.participantsLabel}</span>
           <span className="text-sm text-neutral-400 truncate">
-            — {m.subject || "(no subject)"}
+            — {t.subject || "(no subject)"}
           </span>
-          <span className="text-xs text-neutral-400 shrink-0 ml-auto">{formatDate(m.date)}</span>
+          <span className="text-xs text-neutral-400 shrink-0 ml-auto">
+            {formatDate(t.latestDate)}
+          </span>
         </div>
-        {hovered && (
-          <ActionStrip message={m} onPin={onPin} onDone={onDone} onSnooze={onSnooze} />
+        {hovered && !isOpen && (
+          <ActionStrip thread={t} onPin={onPin} onDone={onDone} onSnooze={onSnooze} />
         )}
       </div>
 
@@ -549,7 +583,7 @@ function BundleMessageCard({
             transition={{ duration: 0.15, ease: "easeInOut" }}
             className="overflow-hidden border-t border-neutral-100"
           >
-            <MessageBody message={m} accentColor={accentColor} />
+            <ThreadView thread={t} accentColor={accentColor} onDone={onDone} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -557,10 +591,10 @@ function BundleMessageCard({
   );
 }
 
-// ─── MessageRow (main stream) ──────────────────────────────────────────────
+// ─── ThreadRow (main stream) ───────────────────────────────────────────────
 
-function MessageRow({
-  message: m,
+function ThreadRow({
+  thread: t,
   isExpanded,
   onToggleExpand,
   expandedRef,
@@ -568,13 +602,13 @@ function MessageRow({
   onDone,
   onSnooze,
 }: {
-  message: RawMessage;
+  thread: Thread;
   isExpanded: boolean;
   onToggleExpand: () => void;
   expandedRef: React.RefObject<HTMLDivElement | null>;
 } & Actions) {
   const [hovered, setHovered] = useState(false);
-  const weight = m.read ? "" : " font-semibold";
+  const weight = t.unreadCount > 0 ? " font-semibold" : "";
 
   return (
     <motion.div
@@ -588,17 +622,133 @@ function MessageRow({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <div
-        className="relative py-2 px-3 flex gap-3 items-baseline text-sm cursor-pointer hover:bg-neutral-50"
-        onClick={onToggleExpand}
-      >
-        <span className="text-xs text-neutral-400 w-20 shrink-0">{formatDate(m.date)}</span>
-        <span className={"w-48 truncate shrink-0" + weight}>{m.author}</span>
-        <span className={"truncate" + weight}>{m.subject || "(no subject)"}</span>
-        {hovered && <ActionStrip message={m} onPin={onPin} onDone={onDone} onSnooze={onSnooze} />}
-      </div>
+      {!isExpanded && (
+        <div
+          className="relative py-2 px-3 flex gap-3 items-baseline text-sm cursor-pointer hover:bg-neutral-50"
+          onClick={onToggleExpand}
+        >
+          <span className="text-xs text-neutral-400 w-20 shrink-0">{formatDate(t.latestDate)}</span>
+          <span className={"w-48 truncate shrink-0" + weight}>{t.participantsLabel}</span>
+          <span className={"truncate" + weight}>{t.subject || "(no subject)"}</span>
+          {hovered && <ActionStrip thread={t} onPin={onPin} onDone={onDone} onSnooze={onSnooze} />}
+        </div>
+      )}
       <AnimatePresence initial={false}>
         {isExpanded && (
+          <motion.div
+            key="body"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: "easeInOut" }}
+          >
+            <ThreadView thread={t} onDone={onDone} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ─── ThreadView (shared expanded thread contents) ──────────────────────────
+
+function ThreadView({
+  thread: t,
+  accentColor,
+  onDone,
+}: {
+  thread: Thread;
+  accentColor?: string;
+  onDone: (t: Thread) => void;
+}) {
+  const latestInbox = useMemo(() => {
+    const inbox = t.messages.filter((m) => m.origin === "inbox");
+    return inbox[inbox.length - 1] ?? t.messages[t.messages.length - 1];
+  }, [t]);
+
+  const [openIds, setOpenIds] = useState<Set<number>>(() => new Set([latestInbox.id]));
+
+  const toggleMsg = (id: number) =>
+    setOpenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  return (
+    <div>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200 bg-white">
+        <h2 className="text-lg font-semibold text-neutral-900 truncate">
+          {t.subject || "(no subject)"}
+        </h2>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDone(t); }}
+          title="Archive thread"
+          className="shrink-0 ml-3 text-sm text-neutral-500 hover:text-neutral-900 px-2 py-0.5 rounded hover:bg-neutral-100"
+        >
+          Done ✓
+        </button>
+      </div>
+
+      <div className="flex flex-col divide-y divide-neutral-100">
+        {t.messages.map((m) => (
+          <InlineMessage
+            key={m.id}
+            message={m}
+            accentColor={accentColor}
+            isOpen={openIds.has(m.id)}
+            onToggle={() => toggleMsg(m.id)}
+          />
+        ))}
+      </div>
+
+      <ReplyFooter latest={latestInbox} />
+    </div>
+  );
+}
+
+// ─── InlineMessage (single message inside a thread) ────────────────────────
+
+function InlineMessage({
+  message: m,
+  accentColor,
+  isOpen,
+  onToggle,
+}: {
+  message: RawMessage;
+  accentColor?: string;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  const name = senderName(m.author);
+  const color = avatarColor(name);
+  const weight = m.read ? "text-neutral-600" : "font-semibold text-neutral-900";
+
+  return (
+    <div className="bg-white">
+      <div
+        className="flex items-center gap-4 px-5 py-3 cursor-pointer hover:bg-neutral-50"
+        onClick={(e) => { e.stopPropagation(); onToggle(); }}
+      >
+        <div
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-sm shrink-0"
+          style={{ backgroundColor: color }}
+        >
+          {senderInitial(m.author)}
+        </div>
+        <div className="min-w-0 flex-1 flex items-baseline gap-2">
+          <span className={`text-sm shrink-0 ${weight}`}>
+            {m.origin === "sent" ? `${name} → ` : name}
+          </span>
+          <span className="text-xs text-neutral-400 shrink-0 ml-auto">
+            {formatDate(m.date)}
+          </span>
+        </div>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {isOpen && (
           <motion.div
             key="body"
             initial={{ height: 0, opacity: 0 }}
@@ -607,11 +757,41 @@ function MessageRow({
             transition={{ duration: 0.15, ease: "easeInOut" }}
             className="overflow-hidden"
           >
-            <MessageBody message={m} />
+            <MessageBody message={m} accentColor={accentColor} />
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
+  );
+}
+
+// ─── ReplyFooter ───────────────────────────────────────────────────────────
+
+function ReplyFooter({ latest }: { latest: RawMessage }) {
+  const onReply = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    void messenger.compose.beginReply(latest.id, "replyToAll");
+  };
+  const onForward = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    void messenger.compose.beginForward(latest.id);
+  };
+
+  return (
+    <div className="flex gap-2 px-5 py-3 border-t border-neutral-200 bg-neutral-50">
+      <button
+        onClick={onReply}
+        className="px-4 py-1.5 rounded border border-neutral-300 bg-white hover:bg-neutral-100 text-sm text-neutral-700"
+      >
+        Reply
+      </button>
+      <button
+        onClick={onForward}
+        className="px-4 py-1.5 rounded border border-neutral-300 bg-white hover:bg-neutral-100 text-sm text-neutral-700"
+      >
+        Forward
+      </button>
+    </div>
   );
 }
 
@@ -658,13 +838,13 @@ function MessageBody({ message: m, accentColor }: { message: RawMessage; accentC
         <span>{m.author} &mdash; {new Date(m.date).toLocaleString()}</span>
         <div className="flex gap-2">
           {!showImages && !isPlainText && (
-            <button onClick={() => setShowImages(true)}
+            <button onClick={(e) => { e.stopPropagation(); setShowImages(true); }}
               className="px-2 py-0.5 rounded border border-neutral-300 bg-white hover:bg-neutral-100 text-neutral-700">
               Load images
             </button>
           )}
           <button
-            onClick={() => void messenger.messageDisplay.open({ messageId: m.id, location: "tab" })}
+            onClick={(e) => { e.stopPropagation(); void messenger.messageDisplay.open({ messageId: m.id, location: "tab" }); }}
             className="px-2 py-0.5 rounded border border-neutral-300 bg-white hover:bg-neutral-100 text-neutral-700">
             Open in Thunderbird ↗
           </button>
@@ -683,7 +863,7 @@ function MessageBody({ message: m, accentColor }: { message: RawMessage; accentC
 
 // ─── ActionStrip ───────────────────────────────────────────────────────────
 
-function ActionStrip({ message: m, onPin, onDone, onSnooze }: { message: RawMessage } & Actions) {
+function ActionStrip({ thread: t, onPin, onDone, onSnooze }: { thread: Thread } & Actions) {
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -700,8 +880,8 @@ function ActionStrip({ message: m, onPin, onDone, onSnooze }: { message: RawMess
     <div ref={ref}
       className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white shadow rounded px-1 py-0.5"
       onClick={(e) => e.stopPropagation()}>
-      <ActionBtn title={m.pinned ? "Unpin" : "Pin"} onClick={() => onPin(m)}>
-        {m.pinned ? "📌" : "📍"}
+      <ActionBtn title={t.pinned ? "Unpin" : "Pin"} onClick={() => onPin(t)}>
+        {t.pinned ? "📌" : "📍"}
       </ActionBtn>
       <div className="relative">
         <ActionBtn title="Snooze" onClick={() => setSnoozeOpen((o) => !o)}>🕐</ActionBtn>
@@ -710,14 +890,14 @@ function ActionStrip({ message: m, onPin, onDone, onSnooze }: { message: RawMess
             {snoozePresets().map(({ label, wakeAt }) => (
               <button key={label}
                 className="w-full text-left text-sm px-3 py-1.5 hover:bg-neutral-50"
-                onClick={() => { setSnoozeOpen(false); onSnooze(m, wakeAt); }}>
+                onClick={() => { setSnoozeOpen(false); onSnooze(t, wakeAt); }}>
                 {label}
               </button>
             ))}
           </div>
         )}
       </div>
-      <ActionBtn title="Done (archive)" onClick={() => onDone(m)}>✓</ActionBtn>
+      <ActionBtn title="Done (archive)" onClick={() => onDone(t)}>✓</ActionBtn>
     </div>
   );
 }
