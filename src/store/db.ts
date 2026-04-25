@@ -1,12 +1,26 @@
 import Dexie, { type Table } from "dexie";
-import type { SnoozeRecord } from "../shared/types";
+import type {
+  FolderCursorRecord,
+  OverrideRecord,
+  RawMessage,
+  SnoozeRecord,
+} from "../shared/types";
 
 class NeoInboxDb extends Dexie {
+  messages!: Table<RawMessage, number>;
   snoozes!: Table<SnoozeRecord, number>;
+  overrides!: Table<OverrideRecord, string>;
+  folderCursors!: Table<FolderCursorRecord, string>;
 
   constructor() {
     super("neoinbox");
     this.version(1).stores({ snoozes: "messageId, wakeAt" });
+    this.version(2).stores({
+      messages: "id, date, accountId, folderId",
+      snoozes: "messageId, wakeAt",
+      overrides: "senderDomain",
+      folderCursors: "folderId",
+    });
   }
 }
 

@@ -68,11 +68,13 @@ export const CATEGORIES: Record<Category, CategoryMeta> = {
 };
 
 export const PINNED_KEY = "neoinbox-pinned";
+export const SNOOZED_KEY = "neoinbox-snoozed";
 
 export const NEO_TAG_KEYS: ReadonlySet<string> = new Set(
   [
     ...Object.values(CATEGORIES).map((m) => m.key).filter(Boolean),
     PINNED_KEY,
+    SNOOZED_KEY,
   ],
 );
 

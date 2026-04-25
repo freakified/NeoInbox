@@ -21,6 +21,7 @@
     "messagesUpdate",
     "messagesTags",
     "messagesMove",
+    "messagesDelete",
     "accountsRead",
     "storage",
     "alarms",

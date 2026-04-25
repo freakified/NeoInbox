@@ -24,26 +24,38 @@ export interface RawMessage {
 }
 
 export interface Thread {
-  id: string;                 // `${accountId}:${normalizedSubject}`
-  subject: string;            // latest message's subject (original, with Re:/Fwd:)
-  messages: RawMessage[];     // sorted by date ascending (oldest first)
-  participantsLabel: string;  // e.g. "Steve, me"
+  id: string;
+  subject: string;
+  messages: RawMessage[];
+  participantsLabel: string;
   latestDate: number;
   unreadCount: number;
   pinned: boolean;
   category: Category | null;
   accountId: string;
-  hasMe: boolean;             // true if any message was sent by me
+  hasMe: boolean;
 }
 
 export interface SnoozeRecord {
   messageId: number;
   wakeAt: number;
+  originFolderId: string;
+  originAccountId: string;
 }
 
-export interface Bundle {
-  id: string;
+export interface OverrideRecord {
+  senderDomain: string;
   category: Category;
-  messageIds: number[];
-  tripLabel?: string;
+}
+
+export interface FolderCursorRecord {
+  folderId: string;
+  lastMessageId: number;
+  done: boolean;
+}
+
+export interface Delta {
+  added?: RawMessage[];
+  updated?: RawMessage[];
+  removedIds?: number[];
 }

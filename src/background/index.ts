@@ -1,9 +1,27 @@
 import { ensureTagsRegistered } from "./tags";
-import { backfillInbox, wireNewMailHandler, pinMessage, doneMessage, trashMessage } from "./ingest";
-import { snoozeMessage, handleSnoozeAlarm } from "./snooze";
-import type { Request } from "../shared/messaging";
+import {
+  classifyAndTag,
+  doneMessage,
+  pinMessage,
+  trashMessage,
+} from "./ingest";
+import { headerToRawMessage } from "./messageMap";
+import { handleSnoozeAlarm, snoozeMessage } from "./snooze";
+import { runBackfill, reclassifyAll } from "./backfill";
+import { pushMyEmails, wireSyncEngine } from "./sync";
+import { broadcast, onCommand, startPortServer } from "./port";
+import { setOverride } from "../classifier/overrides";
+import { db } from "../store/db";
+import { categoryFromTags } from "../shared/categories";
 
 const INBOX_URL = "inbox.html";
+
+function extractDomain(author: string): string {
+  const m = author.match(/<([^>]+)>/);
+  const email = (m?.[1] ?? author).toLowerCase();
+  const at = email.lastIndexOf("@");
+  return at >= 0 ? email.slice(at + 1) : "";
+}
 
 async function openOrFocusInbox(): Promise<void> {
   const tabs = await messenger.tabs.query({});
@@ -26,50 +44,96 @@ void ensureTagsRegistered()
 messenger.runtime.onInstalled.addListener(async (details) => {
   console.info("[NeoInbox] onInstalled", details.reason);
   await ensureTagsRegistered();
-  void backfillInbox().catch((e) =>
-    console.warn("[NeoInbox] backfill failed", e),
-  );
+  void runBackfill().catch((e) => console.warn("[NeoInbox] backfill failed", e));
 });
 
 messenger.runtime.onStartup.addListener(() => {
   void ensureTagsRegistered().catch(() => {});
+  void runBackfill().catch((e) => console.warn("[NeoInbox] backfill failed", e));
 });
 
-messenger.alarms.onAlarm.addListener((alarm) => {
-  void handleSnoozeAlarm(alarm.name);
+messenger.alarms.onAlarm.addListener(async (alarm) => {
+  const result = await handleSnoozeAlarm(alarm.name);
+  if (!result) return;
+  if (result.restoredHeader) {
+    const raw = headerToRawMessage(result.restoredHeader, "inbox");
+    await db.messages.put(raw);
+    broadcast({ type: "delta", added: [raw] });
+  } else {
+    await db.messages.delete(result.originalId);
+    broadcast({ type: "delta", removedIds: [result.originalId] });
+  }
 });
 
-wireNewMailHandler();
+wireSyncEngine();
+startPortServer();
 
-messenger.runtime.onMessage.addListener(async (msg: unknown) => {
-  if (!msg || typeof msg !== "object") return;
-  const req = msg as Request;
-  try {
-    switch (req.type) {
-      case "ping":
-        return { type: "pong", ts: Date.now() };
-      case "backfill": {
-        const result = await backfillInbox();
-        return { type: "backfilled", ...result };
-      }
-      case "pin":
-        await pinMessage(req.messageId, req.pinned);
-        return { type: "ok" };
-      case "done":
-        await doneMessage(req.messageId, req.accountId);
-        return { type: "ok" };
-      case "trash":
-        await trashMessage(req.messageId);
-        return { type: "ok" };
-      case "snooze":
-        await snoozeMessage(req.messageId, req.wakeAt);
-        return { type: "ok" };
-      default:
-        return;
+onCommand(async (msg) => {
+  switch (msg.type) {
+    case "hello":
+      await pushMyEmails();
+      return;
+    case "pin": {
+      await pinMessage(msg.messageId, msg.pinned);
+      const header = await messenger.messages.get(msg.messageId);
+      const cached = await db.messages.get(msg.messageId);
+      const raw = headerToRawMessage(header, cached?.origin ?? "inbox");
+      await db.messages.put(raw);
+      broadcast({ type: "delta", updated: [raw] });
+      return;
     }
-  } catch (e) {
-    console.warn("[NeoInbox] message handler error", req, e);
-    return { type: "error", message: String(e) };
+    case "done": {
+      await doneMessage(msg.messageId);
+      await db.messages.delete(msg.messageId);
+      broadcast({ type: "delta", removedIds: [msg.messageId] });
+      return;
+    }
+    case "trash": {
+      await trashMessage(msg.messageId);
+      await db.messages.delete(msg.messageId);
+      broadcast({ type: "delta", removedIds: [msg.messageId] });
+      return;
+    }
+    case "snooze": {
+      const { removedId } = await snoozeMessage(msg.messageId, msg.wakeAt);
+      await db.messages.delete(removedId);
+      broadcast({ type: "delta", removedIds: [removedId] });
+      return;
+    }
+    case "reclassify": {
+      void reclassifyAll().catch((e) =>
+        console.warn("[NeoInbox] reclassify failed", e),
+      );
+      return;
+    }
+    case "override": {
+      await setOverride(msg.senderDomain, msg.category);
+      const wantedDomain = msg.senderDomain.toLowerCase();
+      const cached = (await db.messages.toArray()).filter(
+        (m) => m.origin === "inbox" && extractDomain(m.author) === wantedDomain,
+      );
+      const updated = [];
+      for (const cmsg of cached) {
+        try {
+          const header = await messenger.messages.get(cmsg.id);
+          const stripped: messenger.messages.MessageHeader = {
+            ...header,
+            tags: (header.tags ?? []).filter(
+              (t) => categoryFromTags([t]) === null,
+            ),
+          };
+          const cat = await classifyAndTag(stripped);
+          const fresh = await messenger.messages.get(cmsg.id);
+          const raw = headerToRawMessage(fresh, "inbox", cat);
+          await db.messages.put(raw);
+          updated.push(raw);
+        } catch (e) {
+          console.warn("[NeoInbox] override retag failed", cmsg.id, e);
+        }
+      }
+      if (updated.length) broadcast({ type: "delta", updated });
+      return;
+    }
   }
 });
 

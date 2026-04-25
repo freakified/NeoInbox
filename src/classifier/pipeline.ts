@@ -1,5 +1,6 @@
 import type { Category } from "../shared/types";
 import type { Features } from "./features";
+import { lookupOverride } from "./overrides";
 import { matchesForums } from "./rules/forums";
 import { matchesTravel } from "./rules/travel";
 import { matchesPurchases } from "./rules/purchases";
@@ -8,7 +9,7 @@ import { matchesSocial } from "./rules/social";
 import { matchesPromos } from "./rules/promos";
 import { matchesUpdates } from "./rules/updates";
 
-export function classify(f: Features): Category | null {
+export function classifyByRules(f: Features): Category | null {
   if (matchesForums(f)) return "forums";
   if (matchesTravel(f)) return "travel";
   if (matchesPurchases(f)) return "purchases";
@@ -17,4 +18,10 @@ export function classify(f: Features): Category | null {
   if (matchesPromos(f)) return "promos";
   if (matchesUpdates(f)) return "updates";
   return null;
+}
+
+export async function classify(f: Features): Promise<Category | null> {
+  const override = await lookupOverride(f.senderDomain);
+  if (override) return override;
+  return classifyByRules(f);
 }

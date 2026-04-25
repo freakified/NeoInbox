@@ -7,11 +7,6 @@ import {
   categoryFromTags,
 } from "../shared/categories";
 import type { Category } from "../shared/types";
-import { collectInboxFolders } from "../shared/folders";
-import { ensureTagsRegistered } from "./tags";
-
-const BACKFILL_LIMIT = 500;
-const PROGRESS_EVERY = 50;
 
 export async function classifyAndTag(
   header: messenger.messages.MessageHeader,
@@ -28,7 +23,7 @@ export async function classifyAndTag(
   }
 
   const features = extractFeatures(header, headers);
-  const category = classify(features);
+  const category = await classify(features);
   if (!category) return null;
 
   const meta = CATEGORIES[category];
@@ -53,56 +48,10 @@ export async function pinMessage(id: number, pinned: boolean): Promise<void> {
   await messenger.messages.update(id, { tags: next });
 }
 
-export async function doneMessage(
-  id: number,
-  _accountId: string,
-): Promise<void> {
+export async function doneMessage(id: number): Promise<void> {
   await messenger.messages.archive([id]);
 }
 
 export async function trashMessage(id: number): Promise<void> {
   await messenger.messages.delete([id], false);
-}
-
-export function wireNewMailHandler(): void {
-  messenger.messages.onNewMailReceived.addListener(async (_folder, list) => {
-    for (const m of list.messages) {
-      await classifyAndTag(m);
-    }
-  });
-}
-
-export async function backfillInbox(): Promise<{
-  scanned: number;
-  tagged: number;
-}> {
-  await ensureTagsRegistered();
-  const inboxes = await collectInboxFolders();
-  console.info(
-    `[NeoInbox] backfill start — ${inboxes.length} inbox folder(s), limit=${BACKFILL_LIMIT}`,
-  );
-
-  let scanned = 0;
-  let tagged = 0;
-  outer: for (const folder of inboxes) {
-    let page = await messenger.messages.list(folder.id);
-    while (true) {
-      for (const m of page.messages) {
-        if (scanned >= BACKFILL_LIMIT) break outer;
-        scanned++;
-        const before = categoryFromTags(m.tags);
-        const cat = await classifyAndTag(m);
-        if (cat && !before) tagged++;
-        if (scanned % PROGRESS_EVERY === 0) {
-          console.info(
-            `[NeoInbox] backfill progress: ${tagged}/${scanned} tagged`,
-          );
-        }
-      }
-      if (!page.id) break;
-      page = await messenger.messages.continueList(page.id);
-    }
-  }
-  console.info(`[NeoInbox] backfill done: ${tagged}/${scanned} tagged`);
-  return { scanned, tagged };
 }
