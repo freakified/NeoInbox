@@ -55,40 +55,13 @@ export async function pinMessage(id: number, pinned: boolean): Promise<void> {
 
 export async function doneMessage(
   id: number,
-  accountId: string,
+  _accountId: string,
 ): Promise<void> {
-  const archiveId = await findArchiveFolder(accountId);
-  if (!archiveId) {
-    console.warn("[NeoInbox] no archive folder for account", accountId);
-    return;
-  }
-  await messenger.messages.move([id], archiveId);
+  await messenger.messages.archive([id]);
 }
 
-async function findArchiveFolder(accountId: string): Promise<string | null> {
-  try {
-    const account = await messenger.accounts.get(accountId);
-    if (!account) return null;
-    let found: string | null = null;
-    const walk = (folders: messenger.folders.MailFolder[]) => {
-      for (const f of folders) {
-        if (found) return;
-        if (
-          f.specialUse?.includes("archive") ||
-          (f as unknown as { type?: string }).type === "archive"
-        ) {
-          found = f.id ?? null;
-          return;
-        }
-        if (f.subFolders) walk(f.subFolders);
-      }
-    };
-    walk(account.folders ?? []);
-    return found;
-  } catch (e) {
-    console.warn("[NeoInbox] findArchiveFolder failed", e);
-    return null;
-  }
+export async function trashMessage(id: number): Promise<void> {
+  await messenger.messages.delete([id], false);
 }
 
 export function wireNewMailHandler(): void {

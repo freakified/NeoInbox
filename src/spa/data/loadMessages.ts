@@ -51,6 +51,10 @@ export async function sendSnooze(messageId: number, wakeAt: number): Promise<voi
   await send({ type: "snooze", messageId, wakeAt });
 }
 
+export async function sendTrash(messageId: number): Promise<void> {
+  await send({ type: "trash", messageId });
+}
+
 function send(req: Request): Promise<unknown> {
   return messenger.runtime.sendMessage(req);
 }

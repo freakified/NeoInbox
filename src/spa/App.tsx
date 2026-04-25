@@ -8,6 +8,7 @@ import {
   sendDone,
   sendPin,
   sendSnooze,
+  sendTrash,
   triggerBackfill,
 } from "./data/loadMessages";
 
@@ -54,37 +55,43 @@ interface DateGroup {
 }
 
 function buildDateGroups(threads: Thread[]): DateGroup[] {
-  const bucketById = new Map(threads.map((t) => [t.id, dateBucket(t.latestDate)]));
+  // Bundles appear once in the bucket of their most-recent thread;
+  // personal threads bucket by their own date.
+  const byCategory = new Map<Category, Thread[]>();
+  const personal: Thread[] = [];
+  for (const t of threads) {
+    if (t.category) {
+      const arr = byCategory.get(t.category) ?? [];
+      arr.push(t);
+      byCategory.set(t.category, arr);
+    } else {
+      personal.push(t);
+    }
+  }
+
+  const items: StreamItem[] = [
+    ...Array.from(byCategory.entries()).map(([category, ts]) => {
+      const sorted = [...ts].sort((a, b) => b.latestDate - a.latestDate);
+      return {
+        type: "bundle" as const,
+        date: sorted[0].latestDate,
+        category,
+        sliceThreads: sorted,
+      };
+    }),
+    ...personal.map((t) => ({ type: "thread" as const, date: t.latestDate, thread: t })),
+  ].sort((a, b) => b.date - a.date);
+
   const bucketOrder: string[] = [];
   const seen = new Set<string>();
-  for (const t of threads) {
-    const b = bucketById.get(t.id)!;
+  for (const it of items) {
+    const b = dateBucket(it.date);
     if (!seen.has(b)) { bucketOrder.push(b); seen.add(b); }
   }
-  return bucketOrder.map((label) => {
-    const inBucket = threads.filter((t) => bucketById.get(t.id) === label);
-    const byCategory = new Map<Category, Thread[]>();
-    const personal: Thread[] = [];
-    for (const t of inBucket) {
-      if (t.category) {
-        const arr = byCategory.get(t.category) ?? [];
-        arr.push(t);
-        byCategory.set(t.category, arr);
-      } else {
-        personal.push(t);
-      }
-    }
-    const items: StreamItem[] = [
-      ...Array.from(byCategory.entries()).map(([category, ts]) => ({
-        type: "bundle" as const,
-        date: ts[0].latestDate,
-        category,
-        sliceThreads: ts,
-      })),
-      ...personal.map((t) => ({ type: "thread" as const, date: t.latestDate, thread: t })),
-    ].sort((a, b) => b.date - a.date);
-    return { label, items };
-  });
+  return bucketOrder.map((label) => ({
+    label,
+    items: items.filter((it) => dateBucket(it.date) === label),
+  }));
 }
 
 // Flat date grouping — no bundle splitting, used inside expanded bundles
@@ -188,6 +195,7 @@ type Actions = {
   onPin: (t: Thread) => void;
   onDone: (t: Thread) => void;
   onSnooze: (t: Thread, wakeAt: number) => void;
+  onTrash: (t: Thread) => void;
 };
 
 // ─── App ───────────────────────────────────────────────────────────────────
@@ -251,8 +259,13 @@ export function App() {
     optimisticRemoveIds(ids);
     await Promise.all(ids.map((id) => sendSnooze(id, wakeAt)));
   };
+  const onTrash = async (t: Thread) => {
+    const ids = t.messages.map((m) => m.id);
+    optimisticRemoveIds(ids);
+    await Promise.all(ids.map((id) => sendTrash(id)));
+  };
 
-  const actions: Actions = { onPin, onDone, onSnooze };
+  const actions: Actions = { onPin, onDone, onSnooze, onTrash };
 
   const threads = useMemo(
     () => (messages ? buildThreads(messages, myEmails) : []),
@@ -260,18 +273,6 @@ export function App() {
   );
   const pinned = threads.filter((t) => t.pinned);
   const unpinned = threads.filter((t) => !t.pinned);
-
-  const allByCategory = useMemo(() => {
-    const map = new Map<Category, Thread[]>();
-    for (const t of unpinned) {
-      if (t.category) {
-        const arr = map.get(t.category) ?? [];
-        arr.push(t);
-        map.set(t.category, arr);
-      }
-    }
-    return map;
-  }, [unpinned]);
 
   const toggleKey = (key: string) =>
     setExpandedKey((prev) => (prev === key ? null : key));
@@ -342,12 +343,11 @@ export function App() {
                         />
                       ) : (
                         <BundleSliceRow
-                          key={`${group.label}|${item.category}`}
-                          bundleKey={`bundle:${group.label}|${item.category}`}
+                          key={item.category}
+                          bundleKey={`bundle:${item.category}`}
                           category={item.category}
-                          allThreads={allByCategory.get(item.category) ?? item.sliceThreads}
-                          previewThreads={item.sliceThreads}
-                          isOpen={expandedKey === `bundle:${group.label}|${item.category}`}
+                          threads={item.sliceThreads}
+                          isOpen={expandedKey === `bundle:${item.category}`}
                           onToggle={toggleKey}
                           expandedRef={expandedRef}
                           {...actions}
@@ -372,26 +372,25 @@ export function App() {
 function BundleSliceRow({
   bundleKey,
   category,
-  allThreads,
-  previewThreads,
+  threads,
   isOpen,
   onToggle,
   expandedRef,
   onPin,
   onDone,
   onSnooze,
+  onTrash,
 }: {
   bundleKey: string;
   category: Category;
-  allThreads: Thread[];
-  previewThreads: Thread[];
+  threads: Thread[];
   isOpen: boolean;
   onToggle: (key: string) => void;
   expandedRef: React.RefObject<HTMLDivElement | null>;
 } & Actions) {
   const meta = CATEGORIES[category];
-  const unread = allThreads.reduce((n, t) => n + t.unreadCount, 0);
-  const preview = previewThreads
+  const unread = threads.reduce((n, t) => n + t.unreadCount, 0);
+  const preview = threads
     .slice(0, 3)
     .map((t) => {
       const latest = t.messages[t.messages.length - 1];
@@ -407,10 +406,10 @@ function BundleSliceRow({
 
   const handleDoneAll = (e: React.MouseEvent) => {
     e.stopPropagation();
-    allThreads.forEach((t) => void onDone(t));
+    threads.forEach((t) => void onDone(t));
   };
 
-  const flatGroups = buildFlatDateGroups(allThreads);
+  const flatGroups = buildFlatDateGroups(threads);
 
   return (
     <motion.div
@@ -509,6 +508,7 @@ function BundleSliceRow({
                         onPin={onPin}
                         onDone={onDone}
                         onSnooze={onSnooze}
+                        onTrash={onTrash}
                       />
                     ))}
                   </div>
@@ -532,6 +532,7 @@ function BundleThreadCard({
   onPin,
   onDone,
   onSnooze,
+  onTrash,
 }: {
   thread: Thread;
   accentColor: string;
@@ -569,7 +570,7 @@ function BundleThreadCard({
           </span>
         </div>
         {hovered && !isOpen && (
-          <ActionStrip thread={t} onPin={onPin} onDone={onDone} onSnooze={onSnooze} />
+          <ActionStrip thread={t} onPin={onPin} onDone={onDone} onSnooze={onSnooze} onTrash={onTrash} />
         )}
       </div>
 
@@ -583,7 +584,7 @@ function BundleThreadCard({
             transition={{ duration: 0.15, ease: "easeInOut" }}
             className="overflow-hidden border-t border-neutral-100"
           >
-            <ThreadView thread={t} accentColor={accentColor} onDone={onDone} />
+            <ThreadView thread={t} accentColor={accentColor} onDone={onDone} onTrash={onTrash} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -601,6 +602,7 @@ function ThreadRow({
   onPin,
   onDone,
   onSnooze,
+  onTrash,
 }: {
   thread: Thread;
   isExpanded: boolean;
@@ -630,7 +632,7 @@ function ThreadRow({
           <span className="text-xs text-neutral-400 w-20 shrink-0">{formatDate(t.latestDate)}</span>
           <span className={"w-48 truncate shrink-0" + weight}>{t.participantsLabel}</span>
           <span className={"truncate" + weight}>{t.subject || "(no subject)"}</span>
-          {hovered && <ActionStrip thread={t} onPin={onPin} onDone={onDone} onSnooze={onSnooze} />}
+          {hovered && <ActionStrip thread={t} onPin={onPin} onDone={onDone} onSnooze={onSnooze} onTrash={onTrash} />}
         </div>
       )}
       <AnimatePresence initial={false}>
@@ -642,7 +644,7 @@ function ThreadRow({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15, ease: "easeInOut" }}
           >
-            <ThreadView thread={t} onDone={onDone} />
+            <ThreadView thread={t} onDone={onDone} onTrash={onTrash} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -656,10 +658,12 @@ function ThreadView({
   thread: t,
   accentColor,
   onDone,
+  onTrash,
 }: {
   thread: Thread;
   accentColor?: string;
   onDone: (t: Thread) => void;
+  onTrash: (t: Thread) => void;
 }) {
   const latestInbox = useMemo(() => {
     const inbox = t.messages.filter((m) => m.origin === "inbox");
@@ -682,13 +686,22 @@ function ThreadView({
         <h2 className="text-lg font-semibold text-neutral-900 truncate">
           {t.subject || "(no subject)"}
         </h2>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDone(t); }}
-          title="Archive thread"
-          className="shrink-0 ml-3 text-sm text-neutral-500 hover:text-neutral-900 px-2 py-0.5 rounded hover:bg-neutral-100"
-        >
-          Done ✓
-        </button>
+        <div className="shrink-0 ml-3 flex items-center gap-1">
+          <button
+            onClick={(e) => { e.stopPropagation(); onDone(t); }}
+            title="Archive thread"
+            className="text-sm text-neutral-500 hover:text-neutral-900 px-2 py-0.5 rounded hover:bg-neutral-100"
+          >
+            Done ✓
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onTrash(t); }}
+            title="Move thread to trash"
+            className="text-sm text-neutral-500 hover:text-neutral-900 px-2 py-0.5 rounded hover:bg-neutral-100"
+          >
+            Trash 🗑
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col divide-y divide-neutral-100">
@@ -863,7 +876,7 @@ function MessageBody({ message: m, accentColor }: { message: RawMessage; accentC
 
 // ─── ActionStrip ───────────────────────────────────────────────────────────
 
-function ActionStrip({ thread: t, onPin, onDone, onSnooze }: { thread: Thread } & Actions) {
+function ActionStrip({ thread: t, onPin, onDone, onSnooze, onTrash }: { thread: Thread } & Actions) {
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -898,6 +911,7 @@ function ActionStrip({ thread: t, onPin, onDone, onSnooze }: { thread: Thread } 
         )}
       </div>
       <ActionBtn title="Done (archive)" onClick={() => onDone(t)}>✓</ActionBtn>
+      <ActionBtn title="Trash" onClick={() => onTrash(t)}>🗑</ActionBtn>
     </div>
   );
 }

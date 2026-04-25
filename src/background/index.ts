@@ -1,5 +1,5 @@
 import { ensureTagsRegistered } from "./tags";
-import { backfillInbox, wireNewMailHandler, pinMessage, doneMessage } from "./ingest";
+import { backfillInbox, wireNewMailHandler, pinMessage, doneMessage, trashMessage } from "./ingest";
 import { snoozeMessage, handleSnoozeAlarm } from "./snooze";
 import type { Request } from "../shared/messaging";
 
@@ -57,6 +57,9 @@ messenger.runtime.onMessage.addListener(async (msg: unknown) => {
         return { type: "ok" };
       case "done":
         await doneMessage(req.messageId, req.accountId);
+        return { type: "ok" };
+      case "trash":
+        await trashMessage(req.messageId);
         return { type: "ok" };
       case "snooze":
         await snoozeMessage(req.messageId, req.wakeAt);
