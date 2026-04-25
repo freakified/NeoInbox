@@ -5,6 +5,7 @@ import {
   useMailStore,
   useStream,
   useSyncProgress,
+  type StreamItem,
 } from "../store/mailStore";
 import { BundleSliceRow } from "./components/BundleSliceRow";
 import { Icon } from "./components/Icon";
@@ -14,10 +15,21 @@ import { ThreadRow } from "./components/ThreadRow";
 
 export const App = () => {
   const init = useMailStore((s) => s.init);
-  const reclassify = useMailStore((s) => s.reclassify);
   const hydrated = useHydrated();
   const sync = useSyncProgress();
   const stream = useStream();
+
+  const doneThread = useMailStore((s) => s.doneThread);
+
+  const sectionDoneAll = (items: StreamItem[]) => {
+    const ids = items.flatMap((item) => {
+      const threads = item.type === "thread" ? [item.thread] : item.threads;
+      return threads.flatMap((t) =>
+        t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
+      );
+    });
+    doneThread(ids);
+  };
 
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const expandedRef = useRef<HTMLDivElement | null>(null);
@@ -62,12 +74,6 @@ export const App = () => {
             </span>
           )}
           <button
-            onClick={reclassify}
-            className="text-sm px-3 py-1 rounded text-white/90 border border-white/30 hover:bg-white/10"
-          >
-            Re-classify
-          </button>
-          <button
             onClick={() => setSettingsOpen(true)}
             title="Bundle settings"
             className="text-white/80 hover:text-white"
@@ -109,8 +115,15 @@ export const App = () => {
 
         {stream.sections.map((group) => (
           <section key={group.label} className="mb-6">
-            <div className="max-w-3xl mx-auto">
+            <div className="max-w-3xl mx-auto flex items-center justify-between pr-1">
               <SectionLabel>{group.label}</SectionLabel>
+              <button
+                onClick={() => sectionDoneAll(group.items)}
+                title="Done all"
+                className="text-md-secondary-text hover:text-md-on-surface -mt-2"
+              >
+                <Icon name="done_all" className="text-xl" />
+              </button>
             </div>
             <LayoutGroup>
               <div className="flex flex-col">

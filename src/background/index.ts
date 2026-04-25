@@ -100,12 +100,6 @@ onCommand(async (msg) => {
       broadcast({ type: "delta", removedIds: [removedId] });
       return;
     }
-    case "reclassify": {
-      void reclassifyAll().catch((e) =>
-        console.warn("[NeoInbox] reclassify failed", e),
-      );
-      return;
-    }
     case "override": {
       await setOverride(msg.senderDomain, msg.category);
       const wantedDomain = msg.senderDomain.toLowerCase();

@@ -8,7 +8,6 @@ export type ClientMsg =
   | { type: "done"; messageId: number }
   | { type: "snooze"; messageId: number; wakeAt: number }
   | { type: "trash"; messageId: number }
-  | { type: "reclassify" }
   | { type: "override"; senderDomain: string; category: BuiltinCategory | null }
   | { type: "set-custom-bundle"; bundle: CustomBundleRecord }
   | { type: "delete-custom-bundle"; id: string };

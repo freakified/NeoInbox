@@ -43,7 +43,6 @@ interface MailStore {
   doneThread: (messageIds: number[]) => void;
   snoozeThread: (messageIds: number[], wakeAt: number) => void;
   trashThread: (messageIds: number[]) => void;
-  reclassify: () => void;
   setOverride: (senderDomain: string, category: BuiltinCategory | null) => void;
   setCustomBundle: (bundle: CustomBundleRecord) => void;
   deleteCustomBundle: (id: string) => void;
@@ -129,8 +128,6 @@ export const useMailStore = create<MailStore>((set, get) => ({
     set({ messagesById: map });
     for (const id of messageIds) send({ type: "trash", messageId: id });
   },
-
-  reclassify: () => send({ type: "reclassify" }),
 
   setOverride: (senderDomain, category) => {
     const key = senderDomain.toLowerCase();

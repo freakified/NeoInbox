@@ -26,6 +26,7 @@ export const BundleSliceRow = ({
   const customBundles = useCustomBundles();
   const meta = getCategoryMeta(category, customBundles);
   const doneThread = useMailStore((s) => s.doneThread);
+  const trashThread = useMailStore((s) => s.trashThread);
 
   const unread = threads.reduce((n, t) => n + t.unreadCount, 0);
   const preview = threads
@@ -47,11 +48,16 @@ export const BundleSliceRow = ({
 
   const handleDoneAll = (e: React.MouseEvent) => {
     e.stopPropagation();
-    for (const t of threads) {
-      doneThread(
-        t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
-      );
-    }
+    const ids = threads.flatMap((t) =>
+      t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
+    );
+    doneThread(ids);
+  };
+
+  const handleTrashAll = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const ids = threads.flatMap((t) => t.messages.map((m) => m.id));
+    trashThread(ids);
   };
 
   return (
@@ -92,21 +98,6 @@ export const BundleSliceRow = ({
               {preview}
             </span>
           </button>
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              onClick={handleDoneAll}
-              title="Archive all"
-              className="flex items-center gap-1 text-xs text-md-secondary-text hover:text-md-on-surface px-1.5 py-0.5 rounded hover:bg-neutral-100"
-            >
-              <Icon name="done_all" className="text-base" />
-            </button>
-            <button
-              onClick={() => onToggle(bundleKey)}
-              className="text-md-secondary-text hover:text-md-on-surface"
-            >
-              <Icon name="chevron_right" className="text-xl" />
-            </button>
-          </div>
         </div>
       )}
 
@@ -119,21 +110,20 @@ export const BundleSliceRow = ({
           >
             {meta.name}
           </button>
-          <div className="flex items-center gap-2 text-md-secondary-text">
+          <div className="flex items-center gap-1 text-md-secondary-text">
+            <button
+              onClick={handleTrashAll}
+              title="Delete all"
+              className="hover:text-md-on-surface p-1 rounded hover:bg-neutral-100"
+            >
+              <Icon name="delete" className="text-xl" />
+            </button>
             <button
               onClick={handleDoneAll}
               title="Archive all"
-              className="flex items-center gap-1 text-sm hover:text-md-on-surface px-2 py-0.5 rounded hover:bg-neutral-100"
+              className="hover:text-md-on-surface p-1 rounded hover:bg-neutral-100"
             >
-              <Icon name="done_all" className="text-base" />
-              Done all
-            </button>
-            <button
-              onClick={() => onToggle(bundleKey)}
-              className="hover:text-md-on-surface"
-              title="Collapse"
-            >
-              <Icon name="expand_less" className="text-xl" />
+              <Icon name="check" className="text-xl" />
             </button>
           </div>
         </div>
