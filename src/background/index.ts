@@ -134,6 +134,38 @@ onCommand(async (msg) => {
       if (updated.length) broadcast({ type: "delta", updated });
       return;
     }
+    case "set-custom-bundle": {
+      await db.customBundles.put(msg.bundle);
+      void reclassifyAll().catch((e) =>
+        console.warn("[NeoInbox] reclassify after set-custom-bundle failed", e),
+      );
+      return;
+    }
+    case "delete-custom-bundle": {
+      await db.customBundles.delete(msg.id);
+      const affected = (await db.messages.toArray()).filter(
+        (m) => m.origin === "inbox" && m.category === msg.id,
+      );
+      const updated = [];
+      for (const cachedMsg of affected) {
+        try {
+          const header = await messenger.messages.get(cachedMsg.id);
+          const stripped: messenger.messages.MessageHeader = {
+            ...header,
+            tags: (header.tags ?? []).filter((t) => categoryFromTags([t]) === null),
+          };
+          const cat = await classifyAndTag(stripped);
+          const fresh = await messenger.messages.get(cachedMsg.id);
+          const raw = headerToRawMessage(fresh, "inbox", cat);
+          await db.messages.put(raw);
+          updated.push(raw);
+        } catch (e) {
+          console.warn("[NeoInbox] delete-custom-bundle retag failed", cachedMsg.id, e);
+        }
+      }
+      if (updated.length) broadcast({ type: "delta", updated });
+      return;
+    }
   }
 });
 

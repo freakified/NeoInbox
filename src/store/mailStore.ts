@@ -11,7 +11,7 @@ import {
   type ServerMsg,
 } from "../shared/messaging";
 import { buildThreads } from "../shared/threading";
-import type { Category, RawMessage, Thread } from "../shared/types";
+import type { BuiltinCategory, Category, CustomBundleRecord, OverrideRecord, RawMessage, Thread } from "../shared/types";
 import { dateBucket } from "../spa/lib/dateBucket";
 
 interface BackgroundPort {
@@ -35,6 +35,8 @@ interface MailStore {
   myEmails: ReadonlySet<string>;
   hydrated: boolean;
   syncProgress: SyncProgress | null;
+  customBundles: CustomBundleRecord[];
+  overrides: OverrideRecord[];
 
   init: () => Promise<void>;
   pin: (messageId: number, pinned: boolean) => void;
@@ -42,7 +44,9 @@ interface MailStore {
   snoozeThread: (messageIds: number[], wakeAt: number) => void;
   trashThread: (messageIds: number[]) => void;
   reclassify: () => void;
-  setOverride: (senderDomain: string, category: Category | null) => void;
+  setOverride: (senderDomain: string, category: BuiltinCategory | null) => void;
+  setCustomBundle: (bundle: CustomBundleRecord) => void;
+  deleteCustomBundle: (id: string) => void;
 }
 
 let port: BackgroundPort | null = null;
@@ -61,13 +65,20 @@ export const useMailStore = create<MailStore>((set, get) => ({
   myEmails: new Set(),
   hydrated: false,
   syncProgress: null,
+  customBundles: [],
+  overrides: [],
 
   init: async () => {
     if (get().hydrated) return;
-    const all = await db.messages.toArray();
+    const [all, rawBundles, overrides] = await Promise.all([
+      db.messages.toArray(),
+      db.customBundles.toArray(),
+      db.overrides.toArray(),
+    ]);
+    const customBundles = rawBundles.sort((a, b) => a.order - b.order);
     const byId: Record<number, RawMessage> = {};
     for (const m of all) byId[m.id] = m;
-    set({ messagesById: byId, hydrated: true });
+    set({ messagesById: byId, hydrated: true, customBundles, overrides });
 
     const runtime = messenger.runtime as unknown as RuntimeWithConnect;
     if (!runtime.connect) {
@@ -121,8 +132,26 @@ export const useMailStore = create<MailStore>((set, get) => ({
 
   reclassify: () => send({ type: "reclassify" }),
 
-  setOverride: (senderDomain, category) =>
-    send({ type: "override", senderDomain, category }),
+  setOverride: (senderDomain, category) => {
+    const key = senderDomain.toLowerCase();
+    const filtered = get().overrides.filter((o) => o.senderDomain !== key);
+    const overrides = category ? [...filtered, { senderDomain: key, category }] : filtered;
+    set({ overrides });
+    send({ type: "override", senderDomain, category });
+  },
+
+  setCustomBundle: (bundle) => {
+    const bundles = get().customBundles.filter((b) => b.id !== bundle.id);
+    bundles.push(bundle);
+    bundles.sort((a, b) => a.order - b.order);
+    set({ customBundles: bundles });
+    send({ type: "set-custom-bundle", bundle });
+  },
+
+  deleteCustomBundle: (id) => {
+    set({ customBundles: get().customBundles.filter((b) => b.id !== id) });
+    send({ type: "delete-custom-bundle", id });
+  },
 }));
 
 const applyServerMsg = (
@@ -281,4 +310,12 @@ export const useHydrated = (): boolean => {
 
 export const useSyncProgress = (): SyncProgress | null => {
   return useMailStore((s) => s.syncProgress);
+}
+
+export const useCustomBundles = (): CustomBundleRecord[] => {
+  return useMailStore((s) => s.customBundles);
+}
+
+export const useOverrides = (): OverrideRecord[] => {
+  return useMailStore((s) => s.overrides);
 }

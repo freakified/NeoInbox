@@ -3,6 +3,7 @@ import {
   NEO_TAG_KEYS,
   PINNED_KEY,
   categoryFromTags,
+  type CategoryMeta,
 } from "../shared/categories";
 import type { Category, RawMessage } from "../shared/types";
 
@@ -18,12 +19,22 @@ export const headerToRawMessage = (
 ): RawMessage => {
   const folder = (header as HeaderWithFolder).folder;
   const baseTags = header.tags ?? [];
-  const tags = appliedCategory
-    ? [
-        ...baseTags.filter((t) => !NEO_TAG_KEYS.has(t)),
-        CATEGORIES[appliedCategory].key,
-      ]
-    : baseTags;
+
+  let tags = baseTags;
+  let category: Category | null;
+
+  if (appliedCategory !== undefined) {
+    category = appliedCategory;
+    const meta = appliedCategory
+      ? (CATEGORIES as Record<string, CategoryMeta | undefined>)[appliedCategory]
+      : undefined;
+    if (meta?.key) {
+      tags = [...baseTags.filter((t) => !NEO_TAG_KEYS.has(t)), meta.key];
+    }
+  } else {
+    category = categoryFromTags(tags);
+  }
+
   return {
     id: header.id,
     subject: header.subject ?? "",
@@ -34,7 +45,7 @@ export const headerToRawMessage = (
     folderId: folder?.id ?? "",
     accountId: folder?.accountId ?? "",
     tags,
-    category: categoryFromTags(tags),
+    category,
     pinned: tags.includes(PINNED_KEY),
     origin,
   };

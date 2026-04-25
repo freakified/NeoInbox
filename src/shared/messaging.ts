@@ -1,4 +1,4 @@
-import type { Category, Delta } from "./types";
+import type { BuiltinCategory, CustomBundleRecord, Delta } from "./types";
 
 export const PORT_NAME = "neoinbox";
 
@@ -9,7 +9,9 @@ export type ClientMsg =
   | { type: "snooze"; messageId: number; wakeAt: number }
   | { type: "trash"; messageId: number }
   | { type: "reclassify" }
-  | { type: "override"; senderDomain: string; category: Category | null };
+  | { type: "override"; senderDomain: string; category: BuiltinCategory | null }
+  | { type: "set-custom-bundle"; bundle: CustomBundleRecord }
+  | { type: "delete-custom-bundle"; id: string };
 
 export type ServerMsg =
   | ({ type: "delta" } & Delta)

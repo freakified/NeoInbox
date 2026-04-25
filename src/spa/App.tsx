@@ -7,7 +7,9 @@ import {
   useSyncProgress,
 } from "../store/mailStore";
 import { BundleSliceRow } from "./components/BundleSliceRow";
+import { Icon } from "./components/Icon";
 import { SectionLabel } from "./components/SectionLabel";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { ThreadRow } from "./components/ThreadRow";
 
 export const App = () => {
@@ -19,6 +21,7 @@ export const App = () => {
 
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const expandedRef = useRef<HTMLDivElement | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     void init();
@@ -48,6 +51,8 @@ export const App = () => {
         }
       }}
     >
+      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+
       <header className="sticky top-0 z-20 bg-md-primary shadow-elevation-2 px-4 py-3 flex items-center justify-between">
         <h1 className="text-xl font-medium text-white tracking-wide">NeoInbox</h1>
         <div className="flex items-center gap-3">
@@ -61,6 +66,13 @@ export const App = () => {
             className="text-sm px-3 py-1 rounded text-white/90 border border-white/30 hover:bg-white/10"
           >
             Re-classify
+          </button>
+          <button
+            onClick={() => setSettingsOpen(true)}
+            title="Bundle settings"
+            className="text-white/80 hover:text-white"
+          >
+            <Icon name="settings" className="text-xl" />
           </button>
         </div>
       </header>

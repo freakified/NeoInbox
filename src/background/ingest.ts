@@ -26,8 +26,8 @@ export const classifyAndTag = async (
   const category = await classify(features);
   if (!category) return null;
 
-  const meta = CATEGORIES[category];
-  if (!meta.key) return category;
+  const meta = (CATEGORIES as Record<string, typeof CATEGORIES[keyof typeof CATEGORIES] | undefined>)[category];
+  if (!meta?.key) return category;
 
   try {
     await messenger.messages.update(header.id, {

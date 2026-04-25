@@ -1,5 +1,6 @@
 import Dexie, { type Table } from "dexie";
 import type {
+  CustomBundleRecord,
   FolderCursorRecord,
   OverrideRecord,
   RawMessage,
@@ -11,6 +12,7 @@ class NeoInboxDb extends Dexie {
   snoozes!: Table<SnoozeRecord, number>;
   overrides!: Table<OverrideRecord, string>;
   folderCursors!: Table<FolderCursorRecord, string>;
+  customBundles!: Table<CustomBundleRecord, string>;
 
   constructor() {
     super("neoinbox");
@@ -20,6 +22,9 @@ class NeoInboxDb extends Dexie {
       snoozes: "messageId, wakeAt",
       overrides: "senderDomain",
       folderCursors: "folderId",
+    });
+    this.version(3).stores({
+      customBundles: "id",
     });
   }
 }

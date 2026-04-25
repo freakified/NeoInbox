@@ -1,9 +1,9 @@
 import { db } from "../store/db";
-import type { Category } from "../shared/types";
+import type { BuiltinCategory } from "../shared/types";
 
-let cache: Map<string, Category> | null = null;
+let cache: Map<string, BuiltinCategory> | null = null;
 
-const loadCache = async (): Promise<Map<string, Category>> => {
+const loadCache = async (): Promise<Map<string, BuiltinCategory>> => {
   if (cache) return cache;
   const rows = await db.overrides.toArray();
   cache = new Map(rows.map((r) => [r.senderDomain.toLowerCase(), r.category]));
@@ -12,7 +12,7 @@ const loadCache = async (): Promise<Map<string, Category>> => {
 
 export const lookupOverride = async (
   senderDomain: string,
-): Promise<Category | null> => {
+): Promise<BuiltinCategory | null> => {
   if (!senderDomain) return null;
   const c = await loadCache();
   return c.get(senderDomain.toLowerCase()) ?? null;
@@ -20,7 +20,7 @@ export const lookupOverride = async (
 
 export const setOverride = async (
   senderDomain: string,
-  category: Category | null,
+  category: BuiltinCategory | null,
 ): Promise<void> => {
   const key = senderDomain.toLowerCase();
   const c = await loadCache();

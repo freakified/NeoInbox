@@ -31,11 +31,11 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
         />
       </ActionBtn>
       <SnoozeMenu onChoose={onSnooze} />
-      <ActionBtn title="Done (archive)" onClick={onDone}>
-        <Icon name="archive" className="text-lg text-neutral-400" />
-      </ActionBtn>
       <ActionBtn title="Trash" onClick={onTrash}>
         <Icon name="delete" className="text-lg text-neutral-400" />
+      </ActionBtn>
+      <ActionBtn title="Done" onClick={onDone}>
+        <Icon name="check" className="text-lg text-neutral-400" />
       </ActionBtn>
     </div>
   );

@@ -1,4 +1,4 @@
-import type { Category } from "./types";
+import type { BuiltinCategory, Category, CustomBundleRecord } from "./types";
 
 export interface CategoryMeta {
   key: string;
@@ -8,7 +8,7 @@ export interface CategoryMeta {
   order: number;
 }
 
-export const CATEGORIES: Record<Category, CategoryMeta> = {
+export const CATEGORIES: Record<BuiltinCategory, CategoryMeta> = {
   travel: {
     key: "neoinbox-travel",
     name: "Travel",
@@ -84,10 +84,23 @@ const TAG_TO_CATEGORY: ReadonlyMap<string, Category> = new Map(
     .map(([cat, m]) => [m.key, cat as Category]),
 );
 
-export const categoryFromTags = (tags: readonly string[]): Category | null => {
+export const categoryFromTags = (tags: readonly string[]): BuiltinCategory | null => {
   for (const t of tags) {
     const cat = TAG_TO_CATEGORY.get(t);
     if (cat) return cat;
   }
   return null;
+}
+
+export const getCategoryMeta = (
+  category: Category,
+  customBundles: readonly CustomBundleRecord[],
+): CategoryMeta => {
+  const builtin = (CATEGORIES as Record<string, CategoryMeta | undefined>)[category];
+  if (builtin) return builtin;
+  const custom = customBundles.find((b) => b.id === category);
+  if (custom) {
+    return { key: "", name: custom.name, color: custom.color, icon: custom.icon, order: custom.order };
+  }
+  return { key: "", name: category, color: "#9AA0A6", icon: "label", order: 99 };
 }

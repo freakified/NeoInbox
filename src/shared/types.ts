@@ -1,4 +1,4 @@
-export type Category =
+export type BuiltinCategory =
   | "travel"
   | "finance"
   | "purchases"
@@ -7,6 +7,22 @@ export type Category =
   | "promos"
   | "forums"
   | "personal";
+
+export type Category = string;
+
+export interface CustomBundleRule {
+  type: "domain" | "email" | "subject_keyword";
+  value: string;
+}
+
+export interface CustomBundleRecord {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+  order: number;
+  rules: CustomBundleRule[];
+}
 
 export interface RawMessage {
   id: number;
@@ -45,7 +61,7 @@ export interface SnoozeRecord {
 
 export interface OverrideRecord {
   senderDomain: string;
-  category: Category;
+  category: BuiltinCategory;
 }
 
 export interface FolderCursorRecord {

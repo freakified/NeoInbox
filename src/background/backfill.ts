@@ -103,7 +103,7 @@ export const reclassifyAll = async (): Promise<{ scanned: number; updated: numbe
     const cat = await classifyAndTag({ ...header, tags: header.tags ?? [] });
     if (cat && cat !== before) updated++;
     const fresh = await messenger.messages.get(cachedMsg.id);
-    batch.push(headerToRawMessage(fresh, "inbox"));
+    batch.push(headerToRawMessage(fresh, "inbox", cat));
     if (batch.length >= BATCH_FLUSH) {
       await db.messages.bulkPut(batch);
       broadcast({ type: "delta", updated: batch });

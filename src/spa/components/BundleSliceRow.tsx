@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Category, Thread } from "../../shared/types";
-import { CATEGORIES } from "../../shared/categories";
-import { useMailStore } from "../../store/mailStore";
+import { getCategoryMeta } from "../../shared/categories";
+import { useMailStore, useCustomBundles } from "../../store/mailStore";
 import { senderName } from "../lib/avatar";
 import { groupByBucket } from "../lib/dateBucket";
 import { BundleThreadCard } from "./BundleThreadCard";
@@ -23,7 +23,8 @@ export const BundleSliceRow = ({
   onToggle: (key: string) => void;
   expandedRef: React.RefObject<HTMLDivElement | null>;
 }) => {
-  const meta = CATEGORIES[category];
+  const customBundles = useCustomBundles();
+  const meta = getCategoryMeta(category, customBundles);
   const doneThread = useMailStore((s) => s.doneThread);
 
   const unread = threads.reduce((n, t) => n + t.unreadCount, 0);

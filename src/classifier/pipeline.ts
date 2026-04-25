@@ -1,6 +1,7 @@
 import type { Category } from "../shared/types";
 import type { Features } from "./features";
 import { lookupOverride } from "./overrides";
+import { matchesCustomBundles } from "./customBundles";
 import { matchesForums } from "./rules/forums";
 import { matchesTravel } from "./rules/travel";
 import { matchesPurchases } from "./rules/purchases";
@@ -23,5 +24,7 @@ export const classifyByRules = (f: Features): Category | null => {
 export const classify = async (f: Features): Promise<Category | null> => {
   const override = await lookupOverride(f.senderDomain);
   if (override) return override;
+  const custom = await matchesCustomBundles(f);
+  if (custom) return custom;
   return classifyByRules(f);
 }
