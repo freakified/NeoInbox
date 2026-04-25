@@ -84,7 +84,7 @@ const TAG_TO_CATEGORY: ReadonlyMap<string, Category> = new Map(
     .map(([cat, m]) => [m.key, cat as Category]),
 );
 
-export function categoryFromTags(tags: readonly string[]): Category | null {
+export const categoryFromTags = (tags: readonly string[]): Category | null => {
   for (const t of tags) {
     const cat = TAG_TO_CATEGORY.get(t);
     if (cat) return cat;

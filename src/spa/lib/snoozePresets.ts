@@ -3,7 +3,7 @@ export interface SnoozePreset {
   wakeAt: number;
 }
 
-export function snoozePresets(): SnoozePreset[] {
+export const snoozePresets = (): SnoozePreset[] => {
   const now = Date.now();
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);

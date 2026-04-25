@@ -16,14 +16,14 @@ import { categoryFromTags } from "../shared/categories";
 
 const INBOX_URL = "inbox.html";
 
-function extractDomain(author: string): string {
+const extractDomain = (author: string): string => {
   const m = author.match(/<([^>]+)>/);
   const email = (m?.[1] ?? author).toLowerCase();
   const at = email.lastIndexOf("@");
   return at >= 0 ? email.slice(at + 1) : "";
 }
 
-async function openOrFocusInbox(): Promise<void> {
+const openOrFocusInbox = async (): Promise<void> => {
   const tabs = await messenger.tabs.query({});
   const existing = tabs.find((t) => t.url?.endsWith(`/${INBOX_URL}`));
   if (existing?.id !== undefined) {

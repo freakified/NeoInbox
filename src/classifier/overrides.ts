@@ -3,25 +3,25 @@ import type { Category } from "../shared/types";
 
 let cache: Map<string, Category> | null = null;
 
-async function loadCache(): Promise<Map<string, Category>> {
+const loadCache = async (): Promise<Map<string, Category>> => {
   if (cache) return cache;
   const rows = await db.overrides.toArray();
   cache = new Map(rows.map((r) => [r.senderDomain.toLowerCase(), r.category]));
   return cache;
 }
 
-export async function lookupOverride(
+export const lookupOverride = async (
   senderDomain: string,
-): Promise<Category | null> {
+): Promise<Category | null> => {
   if (!senderDomain) return null;
   const c = await loadCache();
   return c.get(senderDomain.toLowerCase()) ?? null;
 }
 
-export async function setOverride(
+export const setOverride = async (
   senderDomain: string,
   category: Category | null,
-): Promise<void> {
+): Promise<void> => {
   const key = senderDomain.toLowerCase();
   const c = await loadCache();
   if (category === null) {

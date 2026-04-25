@@ -7,7 +7,7 @@ import { senderName } from "../lib/avatar";
 import { groupByBucket } from "../lib/dateBucket";
 import { BundleThreadCard } from "./BundleThreadCard";
 
-export function BundleSliceRow({
+export const BundleSliceRow = ({
   bundleKey,
   category,
   threads,
@@ -21,7 +21,7 @@ export function BundleSliceRow({
   isOpen: boolean;
   onToggle: (key: string) => void;
   expandedRef: React.RefObject<HTMLDivElement | null>;
-}) {
+}) => {
   const meta = CATEGORIES[category];
   const doneThread = useMailStore((s) => s.doneThread);
 

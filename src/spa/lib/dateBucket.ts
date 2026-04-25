@@ -1,4 +1,4 @@
-export function isSameDay(a: Date, b: Date): boolean {
+export const isSameDay = (a: Date, b: Date): boolean => {
   return (
     a.getFullYear() === b.getFullYear() &&
     a.getMonth() === b.getMonth() &&
@@ -6,7 +6,7 @@ export function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
-export function dateBucket(epochMs: number): string {
+export const dateBucket = (epochMs: number): string => {
   const d = new Date(epochMs);
   const now = new Date();
   if (isSameDay(d, now)) return "Today";
@@ -27,10 +27,10 @@ export function dateBucket(epochMs: number): string {
   return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
-export function groupByBucket<T>(
+export const groupByBucket = <T>(
   items: readonly T[],
   getDate: (item: T) => number,
-): { label: string; items: T[] }[] {
+): { label: string; items: T[] }[] => {
   const groups: { label: string; items: T[] }[] = [];
   for (const item of items) {
     const label = dateBucket(getDate(item));
@@ -41,7 +41,7 @@ export function groupByBucket<T>(
   return groups;
 }
 
-export function formatDate(epochMs: number): string {
+export const formatDate = (epochMs: number): string => {
   if (!epochMs) return "";
   const d = new Date(epochMs);
   const now = new Date();

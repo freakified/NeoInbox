@@ -9,7 +9,7 @@ import { matchesSocial } from "./rules/social";
 import { matchesPromos } from "./rules/promos";
 import { matchesUpdates } from "./rules/updates";
 
-export function classifyByRules(f: Features): Category | null {
+export const classifyByRules = (f: Features): Category | null => {
   if (matchesForums(f)) return "forums";
   if (matchesTravel(f)) return "travel";
   if (matchesPurchases(f)) return "purchases";
@@ -20,7 +20,7 @@ export function classifyByRules(f: Features): Category | null {
   return null;
 }
 
-export async function classify(f: Features): Promise<Category | null> {
+export const classify = async (f: Features): Promise<Category | null> => {
   const override = await lookupOverride(f.senderDomain);
   if (override) return override;
   return classifyByRules(f);

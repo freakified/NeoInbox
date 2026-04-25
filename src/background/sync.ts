@@ -13,7 +13,7 @@ type OnUpdatedApi = {
   ) => void;
 };
 
-export function wireSyncEngine(): void {
+export const wireSyncEngine = (): void => {
   messenger.messages.onNewMailReceived.addListener(async (_folder, list) => {
     const added = [];
     for (const header of list.messages) {
@@ -43,7 +43,7 @@ export function wireSyncEngine(): void {
   }
 }
 
-export async function pushMyEmails(): Promise<void> {
+export const pushMyEmails = async (): Promise<void> => {
   const accounts = await messenger.accounts.list();
   const emails: string[] = [];
   for (const acc of accounts) {

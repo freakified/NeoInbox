@@ -6,7 +6,7 @@ import { formatDate } from "../lib/dateBucket";
 import { ActionStrip } from "./ActionStrip";
 import { ThreadView } from "./ThreadView";
 
-export function BundleThreadCard({
+export const BundleThreadCard = ({
   thread: t,
   accentColor,
   isOpen,
@@ -16,7 +16,7 @@ export function BundleThreadCard({
   accentColor: string;
   isOpen: boolean;
   onToggle: () => void;
-}) {
+}) => {
   const [hovered, setHovered] = useState(false);
   const latest = t.messages[t.messages.length - 1];
   if (!latest) return null;

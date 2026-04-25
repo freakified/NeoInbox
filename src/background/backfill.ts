@@ -12,10 +12,10 @@ const BATCH_FLUSH = 100;
 
 let running = false;
 
-export async function runBackfill(): Promise<{
+export const runBackfill = async (): Promise<{
   scanned: number;
   tagged: number;
-}> {
+}> => {
   if (running) return { scanned: 0, tagged: 0 };
   running = true;
   try {
@@ -83,7 +83,7 @@ export async function runBackfill(): Promise<{
   }
 }
 
-export async function reclassifyAll(): Promise<{ scanned: number; updated: number }> {
+export const reclassifyAll = async (): Promise<{ scanned: number; updated: number }> => {
   await ensureTagsRegistered();
   const cached = await db.messages.toArray();
   let scanned = 0;

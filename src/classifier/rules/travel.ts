@@ -24,7 +24,7 @@ const TRAVEL_SUBJECT_RE =
 const PROMO_TRAVEL_RE =
   /(offer|deal|sale|%\s*off|earn\s+miles|earn\s+points|bonus|member\s+exclusive)/i;
 
-export function matchesTravel(f: Features): boolean {
+export const matchesTravel = (f: Features): boolean => {
   if (domainMatches(f.senderDomain, TRAVEL_DOMAINS)) {
     if (TRAVEL_SUBJECT_RE.test(f.subject)) return true;
     if (!PROMO_TRAVEL_RE.test(f.subject)) return true;

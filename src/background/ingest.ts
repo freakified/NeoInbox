@@ -8,9 +8,9 @@ import {
 } from "../shared/categories";
 import type { Category } from "../shared/types";
 
-export async function classifyAndTag(
+export const classifyAndTag = async (
   header: messenger.messages.MessageHeader,
-): Promise<Category | null> {
+): Promise<Category | null> => {
   const existing = categoryFromTags(header.tags);
   if (existing) return existing;
 
@@ -39,7 +39,7 @@ export async function classifyAndTag(
   return category;
 }
 
-export async function pinMessage(id: number, pinned: boolean): Promise<void> {
+export const pinMessage = async (id: number, pinned: boolean): Promise<void> => {
   const msg = await messenger.messages.get(id);
   const tags = msg.tags ?? [];
   const next = pinned
@@ -48,10 +48,10 @@ export async function pinMessage(id: number, pinned: boolean): Promise<void> {
   await messenger.messages.update(id, { tags: next });
 }
 
-export async function doneMessage(id: number): Promise<void> {
+export const doneMessage = async (id: number): Promise<void> => {
   await messenger.messages.archive([id]);
 }
 
-export async function trashMessage(id: number): Promise<void> {
+export const trashMessage = async (id: number): Promise<void> => {
   await messenger.messages.delete([id], false);
 }

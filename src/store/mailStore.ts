@@ -47,7 +47,7 @@ interface MailStore {
 
 let port: BackgroundPort | null = null;
 
-function send(msg: ClientMsg): void {
+const send = (msg: ClientMsg): void => {
   if (!port) return;
   try {
     port.postMessage(msg);
@@ -125,11 +125,11 @@ export const useMailStore = create<MailStore>((set, get) => ({
     send({ type: "override", senderDomain, category }),
 }));
 
-function applyServerMsg(
+const applyServerMsg = (
   set: (partial: Partial<MailStore>) => void,
   get: () => MailStore,
   msg: ServerMsg,
-): void {
+): void => {
   switch (msg.type) {
     case "delta": {
       const map = { ...get().messagesById };
@@ -187,7 +187,7 @@ const SECTION_ORDER = [
   "This month",
 ];
 
-function compareSection(a: string, b: string): number {
+const compareSection = (a: string, b: string): number => {
   const ia = SECTION_ORDER.indexOf(a);
   const ib = SECTION_ORDER.indexOf(b);
   if (ia >= 0 && ib >= 0) return ia - ib;
@@ -196,10 +196,10 @@ function compareSection(a: string, b: string): number {
   return 0;
 }
 
-function deriveStream(
+const deriveStream = (
   messagesById: Record<number, RawMessage>,
   myEmails: ReadonlySet<string>,
-): Stream {
+): Stream => {
   const visible = Object.values(messagesById).filter(
     (m) => !m.tags.includes(SNOOZED_KEY),
   );
@@ -266,7 +266,7 @@ function deriveStream(
   return { pinned, sections, threadCount: threads.length };
 }
 
-export function useStream(): Stream {
+export const useStream = (): Stream => {
   const messagesById = useMailStore((s) => s.messagesById);
   const myEmails = useMailStore((s) => s.myEmails);
   return useMemo(
@@ -275,10 +275,10 @@ export function useStream(): Stream {
   );
 }
 
-export function useHydrated(): boolean {
+export const useHydrated = (): boolean => {
   return useMailStore((s) => s.hydrated);
 }
 
-export function useSyncProgress(): SyncProgress | null {
+export const useSyncProgress = (): SyncProgress | null => {
   return useMailStore((s) => s.syncProgress);
 }

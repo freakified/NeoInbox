@@ -5,7 +5,7 @@ import { formatDate } from "../lib/dateBucket";
 import { ActionStrip } from "./ActionStrip";
 import { ThreadView } from "./ThreadView";
 
-export function ThreadRow({
+export const ThreadRow = ({
   thread: t,
   isExpanded,
   onToggleExpand,
@@ -15,7 +15,7 @@ export function ThreadRow({
   isExpanded: boolean;
   onToggleExpand: () => void;
   expandedRef: React.RefObject<HTMLDivElement | null>;
-}) {
+}) => {
   const [hovered, setHovered] = useState(false);
   const weight = t.unreadCount > 0 ? " font-semibold" : "";
 

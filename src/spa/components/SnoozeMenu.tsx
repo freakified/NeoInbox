@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { snoozePresets } from "../lib/snoozePresets";
 
-export function SnoozeMenu({
+export const SnoozeMenu = ({
   onChoose,
 }: {
   onChoose: (wakeAt: number) => void;
-}) {
+}) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 

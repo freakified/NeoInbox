@@ -4,13 +4,13 @@ import { useMailStore } from "../../store/mailStore";
 import { InlineMessage } from "./InlineMessage";
 import { ReplyFooter } from "./ReplyFooter";
 
-export function ThreadView({
+export const ThreadView = ({
   thread: t,
   accentColor,
 }: {
   thread: Thread;
   accentColor?: string;
-}) {
+}) => {
   const doneThread = useMailStore((s) => s.doneThread);
   const trashThread = useMailStore((s) => s.trashThread);
 

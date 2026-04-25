@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RawMessage } from "../../shared/types";
 import { buildSrcdoc, extractHtmlBody, extractTextBody } from "../lib/srcdoc";
 
-export function MessageBody({
+export const MessageBody = ({
   message: m,
   accentColor,
 }: {
   message: RawMessage;
   accentColor?: string;
-}) {
+}) => {
   const [rawHtml, setRawHtml] = useState<string | null>(null);
   const [isPlainText, setIsPlainText] = useState(false);
   const [showImages, setShowImages] = useState(false);

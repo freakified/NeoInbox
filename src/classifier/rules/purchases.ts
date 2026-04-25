@@ -21,7 +21,7 @@ const CARRIER_DOMAINS = [
 const PURCHASE_SUBJECT_RE =
   /\b(receipt|order|invoice|purchase|shipped|delivered|delivery|tracking|confirmation|shipment|has\s+arrived|out\s+for\s+delivery)\b/i;
 
-export function matchesPurchases(f: Features): boolean {
+export const matchesPurchases = (f: Features): boolean => {
   if (domainMatches(f.senderDomain, CARRIER_DOMAINS)) return true;
   if (domainMatches(f.senderDomain, RETAIL_DOMAINS)) {
     if (PURCHASE_SUBJECT_RE.test(f.subject)) return true;

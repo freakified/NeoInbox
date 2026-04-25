@@ -2,7 +2,7 @@ import type { Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
 import { SnoozeMenu } from "./SnoozeMenu";
 
-export function ActionStrip({ thread }: { thread: Thread }) {
+export const ActionStrip = ({ thread }: { thread: Thread }) => {
   const pin = useMailStore((s) => s.pin);
   const doneThread = useMailStore((s) => s.doneThread);
   const snoozeThread = useMailStore((s) => s.snoozeThread);
@@ -37,7 +37,7 @@ export function ActionStrip({ thread }: { thread: Thread }) {
   );
 }
 
-function ActionBtn({
+const ActionBtn = ({
   title,
   onClick,
   children,
@@ -45,7 +45,7 @@ function ActionBtn({
   title: string;
   onClick: () => void;
   children: React.ReactNode;
-}) {
+}) => {
   return (
     <button
       title={title}

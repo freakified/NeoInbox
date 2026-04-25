@@ -1,6 +1,6 @@
 import type { RawMessage } from "../../shared/types";
 
-export function ReplyFooter({ latest }: { latest: RawMessage }) {
+export const ReplyFooter = ({ latest }: { latest: RawMessage }) => {
   const onReply = (e: React.MouseEvent) => {
     e.stopPropagation();
     void messenger.compose.beginReply(latest.id, "replyToAll");

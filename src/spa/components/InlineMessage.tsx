@@ -4,7 +4,7 @@ import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate } from "../lib/dateBucket";
 import { MessageBody } from "./MessageBody";
 
-export function InlineMessage({
+export const InlineMessage = ({
   message: m,
   accentColor,
   isOpen,
@@ -14,7 +14,7 @@ export function InlineMessage({
   accentColor?: string;
   isOpen: boolean;
   onToggle: () => void;
-}) {
+}) => {
   const name = senderName(m.author);
   const color = avatarColor(name);
   const weight = m.read

@@ -18,13 +18,13 @@ type PortApi = {
 const ports = new Set<Port>();
 let handler: ((msg: ClientMsg) => void | Promise<void>) | null = null;
 
-export function onCommand(
+export const onCommand = (
   cb: (msg: ClientMsg) => void | Promise<void>,
-): void {
+): void => {
   handler = cb;
 }
 
-export function broadcast(msg: ServerMsg): void {
+export const broadcast = (msg: ServerMsg): void => {
   for (const port of ports) {
     try {
       port.postMessage(msg);
@@ -34,7 +34,7 @@ export function broadcast(msg: ServerMsg): void {
   }
 }
 
-export function startPortServer(): void {
+export const startPortServer = (): void => {
   const api = (messenger.runtime as unknown as PortApi).onConnect;
   if (!api) {
     console.warn("[NeoInbox] runtime.onConnect unavailable");

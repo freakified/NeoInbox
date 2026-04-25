@@ -15,10 +15,10 @@ type HeaderWithFolder = messenger.messages.MessageHeader & {
   headerMessageId?: string;
 };
 
-export async function snoozeMessage(
+export const snoozeMessage = async (
   messageId: number,
   wakeAt: number,
-): Promise<{ removedId: number }> {
+): Promise<{ removedId: number }> => {
   const msg = (await messenger.messages.get(messageId)) as HeaderWithFolder;
   const originFolderId = msg.folder?.id ?? "";
   const originAccountId = msg.folder?.accountId ?? "";
@@ -55,9 +55,9 @@ export interface SnoozeWakeResult {
   restoredHeader?: messenger.messages.MessageHeader;
 }
 
-export async function handleSnoozeAlarm(
+export const handleSnoozeAlarm = async (
   alarmName: string,
-): Promise<SnoozeWakeResult | null> {
+): Promise<SnoozeWakeResult | null> => {
   if (!alarmName.startsWith(ALARM_PREFIX)) return null;
   const originalId = parseInt(alarmName.slice(ALARM_PREFIX.length), 10);
   if (isNaN(originalId)) return null;
@@ -96,10 +96,10 @@ export async function handleSnoozeAlarm(
   return { originalId, restoredHeader: restored };
 }
 
-async function findByHeaderMessageId(
+const findByHeaderMessageId = async (
   headerMessageId: string,
   accountId: string,
-): Promise<messenger.messages.MessageHeader | undefined> {
+): Promise<messenger.messages.MessageHeader | undefined> => {
   if (!headerMessageId) return undefined;
   const folders = await archiveFolderIdsForAccount(accountId);
   for (const folderId of folders) {
@@ -109,9 +109,9 @@ async function findByHeaderMessageId(
   return undefined;
 }
 
-async function archiveFolderIdsForAccount(
+const archiveFolderIdsForAccount = async (
   accountId: string,
-): Promise<string[]> {
+): Promise<string[]> => {
   const accounts = await messenger.accounts.list();
   const out: string[] = [];
   for (const acc of accounts) {
@@ -129,10 +129,10 @@ async function archiveFolderIdsForAccount(
   return out;
 }
 
-async function scanFolderForHeader(
+const scanFolderForHeader = async (
   folderId: string,
   headerMessageId: string,
-): Promise<messenger.messages.MessageHeader | undefined> {
+): Promise<messenger.messages.MessageHeader | undefined> => {
   let pages = 0;
   let page = await messenger.messages.list(
     folderId as unknown as messenger.folders.MailFolderId,
@@ -147,12 +147,12 @@ async function scanFolderForHeader(
   }
 }
 
-function walk(
+const walk = (
   folders: messenger.folders.MailFolder[],
   visit: (f: messenger.folders.MailFolder) => void,
-): void {
+): void => {
   for (const f of folders) {
     visit(f);
     if (f.subFolders) walk(f.subFolders, visit);
   }
-}
+};

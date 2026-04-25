@@ -10,7 +10,7 @@ import { BundleSliceRow } from "./components/BundleSliceRow";
 import { SectionLabel } from "./components/SectionLabel";
 import { ThreadRow } from "./components/ThreadRow";
 
-export function App() {
+export const App = () => {
   const init = useMailStore((s) => s.init);
   const reclassify = useMailStore((s) => s.reclassify);
   const hydrated = useHydrated();

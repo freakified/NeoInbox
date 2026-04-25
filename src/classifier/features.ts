@@ -13,10 +13,10 @@ export interface Features {
 
 const ADDR_RE = /<([^>]+)>/;
 
-export function extractFeatures(
+export const extractFeatures = (
   header: messenger.messages.MessageHeader,
   headers: Record<string, string[]>,
-): Features {
+): Features => {
   const raw = header.author ?? "";
   const m = raw.match(ADDR_RE);
   const email = (m?.[1] ?? raw).trim().toLowerCase();
@@ -49,6 +49,6 @@ export function extractFeatures(
   };
 }
 
-export function domainMatches(domain: string, list: readonly string[]): boolean {
+export const domainMatches = (domain: string, list: readonly string[]): boolean => {
   return list.some((d) => domain === d || domain.endsWith("." + d));
 }

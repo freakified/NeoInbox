@@ -1,6 +1,6 @@
-export function extractHtmlBody(
+export const extractHtmlBody = (
   part: messenger.messages.MessagePart,
-): string | null {
+): string | null => {
   if (part.contentType === "text/html") return part.body ?? null;
   for (const p of part.parts ?? []) {
     const f = extractHtmlBody(p);
@@ -9,9 +9,9 @@ export function extractHtmlBody(
   return null;
 }
 
-export function extractTextBody(
+export const extractTextBody = (
   part: messenger.messages.MessagePart,
-): string | null {
+): string | null => {
   if (part.contentType === "text/plain") {
     const esc = (part.body ?? "")
       .replace(/&/g, "&amp;")
@@ -34,7 +34,7 @@ const BASE_CSS = `<style>
   table{border-collapse:collapse}
 </style>`;
 
-export function buildSrcdoc(rawHtml: string, showImages: boolean): string {
+export const buildSrcdoc = (rawHtml: string, showImages: boolean): string => {
   const doc = new DOMParser().parseFromString(rawHtml, "text/html");
   doc.querySelectorAll("script, noscript").forEach((el) => el.remove());
   if (!showImages) {

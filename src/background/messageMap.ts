@@ -11,11 +11,11 @@ type HeaderWithFolder = messenger.messages.MessageHeader & {
   folder?: FolderRef;
 };
 
-export function headerToRawMessage(
+export const headerToRawMessage = (
   header: messenger.messages.MessageHeader,
   origin: "inbox" | "sent",
   appliedCategory?: Category | null,
-): RawMessage {
+): RawMessage => {
   const folder = (header as HeaderWithFolder).folder;
   const baseTags = header.tags ?? [];
   const tags = appliedCategory

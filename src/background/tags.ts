@@ -3,7 +3,7 @@ import { CATEGORIES } from "../shared/categories";
 type ListFn = () => Promise<messenger.messages.tags.MessageTag[]>;
 type CreateFn = (key: string, name: string, color: string) => Promise<unknown>;
 
-function resolveTagApi(): { list?: ListFn; create?: CreateFn } {
+const resolveTagApi = (): { list?: ListFn; create?: CreateFn } => {
   const m = messenger.messages as unknown as {
     tags?: { list?: ListFn; create?: CreateFn };
     listTags?: ListFn;
@@ -47,7 +47,7 @@ function resolveTagApi(): { list?: ListFn; create?: CreateFn } {
   return { list, create };
 }
 
-export async function ensureTagsRegistered(): Promise<void> {
+export const ensureTagsRegistered = async (): Promise<void> => {
   const { list, create } = resolveTagApi();
   if (!list || !create) {
     console.warn(

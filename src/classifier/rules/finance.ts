@@ -19,7 +19,7 @@ const FINANCE_SUBJECT_RE =
 const FINANCE_PROMO_RE =
   /(offer|apply|open\s+account|new\s+card|%\s*apr|%\s*rate|upgrade|refer\s+a\s+friend|reward)/i;
 
-export function matchesFinance(f: Features): boolean {
+export const matchesFinance = (f: Features): boolean => {
   if (!domainMatches(f.senderDomain, FINANCE_DOMAINS)) return false;
   if (FINANCE_SUBJECT_RE.test(f.subject)) return true;
   if (FINANCE_PROMO_RE.test(f.subject)) return false;

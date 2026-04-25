@@ -11,22 +11,22 @@ const AVATAR_COLORS = [
   "#E91E63",
 ];
 
-export function avatarColor(name: string): string {
+export const avatarColor = (name: string): string => {
   let h = 0;
   for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) & 0xfffff;
   return AVATAR_COLORS[h % AVATAR_COLORS.length] ?? AVATAR_COLORS[0]!;
 }
 
-export function senderName(author: string): string {
+export const senderName = (author: string): string => {
   const m = author.match(/^"?([^"<]+)"?\s*</);
   return m?.[1]?.trim() ?? (author.replace(/<[^>]+>/g, "").trim() || author);
 }
 
-export function senderInitial(author: string): string {
+export const senderInitial = (author: string): string => {
   return senderName(author).charAt(0).toUpperCase() || "?";
 }
 
-export function senderDomain(author: string): string {
+export const senderDomain = (author: string): string => {
   const m = author.match(/<([^>]+)>/);
   const email = (m?.[1] ?? author).toLowerCase();
   const at = email.lastIndexOf("@");

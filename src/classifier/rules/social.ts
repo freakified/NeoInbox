@@ -20,6 +20,6 @@ const SOCIAL_DOMAINS = [
   "goodreads.com",
 ];
 
-export function matchesSocial(f: Features): boolean {
+export const matchesSocial = (f: Features): boolean => {
   return domainMatches(f.senderDomain, SOCIAL_DOMAINS);
 }
