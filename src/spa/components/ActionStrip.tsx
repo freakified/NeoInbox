@@ -1,5 +1,6 @@
 import type { Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
+import { Icon } from "./Icon";
 import { SnoozeMenu } from "./SnoozeMenu";
 
 export const ActionStrip = ({ thread }: { thread: Thread }) => {
@@ -20,18 +21,21 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
 
   return (
     <div
-      className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white shadow rounded px-1 py-0.5"
+      className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center bg-white shadow-elevation-1 rounded"
       onClick={(e) => e.stopPropagation()}
     >
       <ActionBtn title={thread.pinned ? "Unpin" : "Pin"} onClick={togglePin}>
-        {thread.pinned ? "📌" : "📍"}
+        <Icon
+          name="push_pin"
+          className={`text-lg ${thread.pinned ? "text-md-primary" : "text-neutral-400"}`}
+        />
       </ActionBtn>
       <SnoozeMenu onChoose={onSnooze} />
       <ActionBtn title="Done (archive)" onClick={onDone}>
-        ✓
+        <Icon name="archive" className="text-lg text-neutral-400" />
       </ActionBtn>
       <ActionBtn title="Trash" onClick={onTrash}>
-        🗑
+        <Icon name="delete" className="text-lg text-neutral-400" />
       </ActionBtn>
     </div>
   );
@@ -53,7 +57,7 @@ const ActionBtn = ({
         e.stopPropagation();
         onClick();
       }}
-      className="p-1 rounded hover:bg-neutral-100 text-sm leading-none"
+      className="p-1.5 rounded-full hover:bg-neutral-100 leading-none"
     >
       {children}
     </button>

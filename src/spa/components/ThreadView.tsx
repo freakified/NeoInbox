@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
+import { Icon } from "./Icon";
 import { InlineMessage } from "./InlineMessage";
 import { ReplyFooter } from "./ReplyFooter";
 
@@ -41,8 +42,8 @@ export const ThreadView = ({
 
   return (
     <div>
-      <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200 bg-white">
-        <h2 className="text-lg font-semibold text-neutral-900 truncate">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-md-divider bg-white">
+        <h2 className="text-lg font-medium text-md-on-surface truncate">
           {t.subject || "(no subject)"}
         </h2>
         <div className="shrink-0 ml-3 flex items-center gap-1">
@@ -52,9 +53,9 @@ export const ThreadView = ({
               onDone();
             }}
             title="Archive thread"
-            className="text-sm text-neutral-500 hover:text-neutral-900 px-2 py-0.5 rounded hover:bg-neutral-100"
+            className="p-1.5 rounded-full text-md-secondary-text hover:text-md-on-surface hover:bg-neutral-100"
           >
-            Done ✓
+            <Icon name="archive" className="text-xl" />
           </button>
           <button
             onClick={(e) => {
@@ -62,14 +63,14 @@ export const ThreadView = ({
               onTrash();
             }}
             title="Move thread to trash"
-            className="text-sm text-neutral-500 hover:text-neutral-900 px-2 py-0.5 rounded hover:bg-neutral-100"
+            className="p-1.5 rounded-full text-md-secondary-text hover:text-md-on-surface hover:bg-neutral-100"
           >
-            Trash 🗑
+            <Icon name="delete" className="text-xl" />
           </button>
         </div>
       </div>
 
-      <div className="flex flex-col divide-y divide-neutral-100">
+      <div className="flex flex-col divide-y divide-md-divider">
         {t.messages.map((m) => (
           <InlineMessage
             key={m.id}

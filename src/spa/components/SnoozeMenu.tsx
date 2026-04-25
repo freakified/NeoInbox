@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { snoozePresets } from "../lib/snoozePresets";
+import { Icon } from "./Icon";
 
 export const SnoozeMenu = ({
   onChoose,
@@ -26,12 +27,12 @@ export const SnoozeMenu = ({
           e.stopPropagation();
           setOpen((o) => !o);
         }}
-        className="p-1 rounded hover:bg-neutral-100 text-sm leading-none"
+        className="p-1.5 rounded-full hover:bg-neutral-100 leading-none"
       >
-        🕐
+        <Icon name="snooze" className="text-lg text-neutral-400" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-10 bg-white shadow-lg rounded border border-neutral-200 py-1 min-w-36">
+        <div className="absolute right-0 top-full mt-1 z-10 bg-white shadow-elevation-2 rounded border border-md-divider py-1 min-w-36">
           {snoozePresets().map(({ label, wakeAt }) => (
             <button
               key={label}

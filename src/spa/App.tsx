@@ -40,7 +40,7 @@ export const App = () => {
 
   return (
     <div
-      className="min-h-screen bg-neutral-100"
+      className="min-h-screen bg-md-background"
       onClick={(e) => {
         if (!expandedKey) return;
         if (!(e.target as HTMLElement).closest("[data-row]")) {
@@ -48,17 +48,17 @@ export const App = () => {
         }
       }}
     >
-      <header className="sticky top-0 z-20 bg-white border-b border-neutral-200 px-4 py-2 flex items-center justify-between">
-        <h1 className="text-lg font-semibold">NeoInbox</h1>
+      <header className="sticky top-0 z-20 bg-md-primary shadow-elevation-2 px-4 py-3 flex items-center justify-between">
+        <h1 className="text-xl font-medium text-white tracking-wide">NeoInbox</h1>
         <div className="flex items-center gap-3">
           {syncing && (
-            <span className="text-xs text-neutral-500">
+            <span className="text-sm text-white/80">
               Syncing… {sync.tagged}/{sync.scanned}
             </span>
           )}
           <button
             onClick={reclassify}
-            className="text-sm px-3 py-1 rounded border border-neutral-300 bg-white hover:bg-neutral-50"
+            className="text-sm px-3 py-1 rounded text-white/90 border border-white/30 hover:bg-white/10"
           >
             Re-classify
           </button>
@@ -67,11 +67,11 @@ export const App = () => {
 
       <div className="max-w-5xl mx-auto py-6 px-8">
         {!hydrated && (
-          <p className="text-neutral-500 text-sm">Loading…</p>
+          <p className="text-md-secondary-text text-sm">Loading…</p>
         )}
 
         {hydrated && stream.threadCount === 0 && !syncing && (
-          <p className="text-neutral-500 text-sm">No messages found.</p>
+          <p className="text-md-secondary-text text-sm">No messages found.</p>
         )}
 
         {stream.pinned.length > 0 && (

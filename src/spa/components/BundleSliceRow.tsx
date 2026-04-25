@@ -6,6 +6,7 @@ import { useMailStore } from "../../store/mailStore";
 import { senderName } from "../lib/avatar";
 import { groupByBucket } from "../lib/dateBucket";
 import { BundleThreadCard } from "./BundleThreadCard";
+import { Icon } from "./Icon";
 
 export const BundleSliceRow = ({
   bundleKey,
@@ -61,7 +62,7 @@ export const BundleSliceRow = ({
       className={
         isOpen
           ? "w-full my-4 bg-neutral-200 rounded-xl overflow-hidden"
-          : "w-full max-w-3xl mx-auto bg-white border-b border-neutral-100 last:border-b-0"
+          : "w-full max-w-3xl mx-auto bg-white border-b border-md-divider last:border-b-0"
       }
     >
       {!isOpen && (
@@ -70,12 +71,11 @@ export const BundleSliceRow = ({
             className="flex items-center gap-3 min-w-0 flex-1 text-left"
             onClick={() => onToggle(bundleKey)}
           >
-            <span
-              className="w-7 h-7 flex items-center justify-center rounded-full text-white text-base shrink-0"
-              style={{ backgroundColor: meta.color }}
-            >
-              {meta.icon}
-            </span>
+            <Icon
+              name={meta.icon}
+              className="text-[22px] shrink-0"
+              style={{ color: meta.color }}
+            />
             <span
               className="font-medium text-sm shrink-0"
               style={{ color: meta.color }}
@@ -83,26 +83,27 @@ export const BundleSliceRow = ({
               {meta.name}
             </span>
             {unread > 0 && (
-              <span className="text-xs font-semibold text-neutral-900 shrink-0">
+              <span className="text-xs font-semibold text-md-on-surface shrink-0">
                 ({unread})
               </span>
             )}
-            <span className="text-sm text-neutral-400 truncate min-w-0">
+            <span className="text-sm text-md-secondary-text truncate min-w-0">
               {preview}
             </span>
           </button>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={handleDoneAll}
-              className="text-xs text-neutral-400 hover:text-neutral-700 px-1.5 py-0.5 rounded hover:bg-neutral-100"
+              title="Archive all"
+              className="flex items-center gap-1 text-xs text-md-secondary-text hover:text-md-on-surface px-1.5 py-0.5 rounded hover:bg-neutral-100"
             >
-              Done all ✓
+              <Icon name="done_all" className="text-base" />
             </button>
             <button
               onClick={() => onToggle(bundleKey)}
-              className="text-neutral-400 text-xs"
+              className="text-md-secondary-text hover:text-md-on-surface"
             >
-              ▸
+              <Icon name="chevron_right" className="text-xl" />
             </button>
           </div>
         </div>
@@ -112,25 +113,26 @@ export const BundleSliceRow = ({
         <div className="flex items-center justify-between px-5 py-4 bg-neutral-200">
           <button
             onClick={() => onToggle(bundleKey)}
-            className="text-2xl font-bold hover:opacity-80"
+            className="text-2xl font-medium hover:opacity-80"
             style={{ color: meta.color }}
           >
             {meta.name}
           </button>
-          <div className="flex items-center gap-3 text-neutral-500">
+          <div className="flex items-center gap-2 text-md-secondary-text">
             <button
               onClick={handleDoneAll}
               title="Archive all"
-              className="text-sm hover:text-neutral-900 px-2 py-0.5 rounded hover:bg-neutral-100"
+              className="flex items-center gap-1 text-sm hover:text-md-on-surface px-2 py-0.5 rounded hover:bg-neutral-100"
             >
-              Done all ✓
+              <Icon name="done_all" className="text-base" />
+              Done all
             </button>
             <button
               onClick={() => onToggle(bundleKey)}
-              className="text-neutral-400 hover:text-neutral-700"
+              className="hover:text-md-on-surface"
               title="Collapse"
             >
-              ▾
+              <Icon name="expand_less" className="text-xl" />
             </button>
           </div>
         </div>
@@ -150,7 +152,7 @@ export const BundleSliceRow = ({
               {groupByBucket(threads, (t) => t.latestDate).map(
                 ({ label, items }) => (
                   <div key={label}>
-                    <p className="text-sm text-neutral-500 pt-4 pb-2 px-1">
+                    <p className="text-sm text-md-secondary-text pt-4 pb-2 px-1">
                       {label}
                     </p>
                     <div className="flex flex-col gap-2">
