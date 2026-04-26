@@ -4,9 +4,11 @@ import type { Category, Thread } from "../../shared/types";
 import { getCategoryMeta } from "../../shared/categories";
 import { useMailStore, useCustomBundles } from "../../store/mailStore";
 import { senderName } from "../lib/avatar";
-import { groupByBucket } from "../lib/dateBucket";
-import { BundleThreadCard } from "./BundleThreadCard";
+import { formatDate, groupByBucket } from "../lib/dateBucket";
 import { Icon } from "./Icon";
+import { RowGroup } from "./RowGroup";
+import { RowHeader } from "./RowHeader";
+import { ThreadRow } from "./ThreadRow";
 
 export const BundleSliceRow = ({
   bundleKey,
@@ -29,6 +31,7 @@ export const BundleSliceRow = ({
   const trashThread = useMailStore((s) => s.trashThread);
 
   const unread = threads.reduce((n, t) => n + t.unreadCount, 0);
+  const latestDate = threads.reduce((max, t) => Math.max(max, t.latestDate), 0);
   const preview = threads
     .slice(0, 3)
     .map((t) => {
@@ -67,38 +70,36 @@ export const BundleSliceRow = ({
       ref={isOpen ? expandedRef : undefined}
       transition={{ type: "spring", stiffness: 500, damping: 40 }}
       className={
-        isOpen
-          ? "w-full my-4 bg-neutral-200 rounded-xl overflow-hidden"
-          : "w-full max-w-3xl mx-auto bg-white border-b border-md-divider last:border-b-0"
+        isOpen ? "w-full bg-neutral-200 overflow-hidden" : "w-full overflow-hidden"
       }
     >
       {!isOpen && (
-        <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-neutral-50">
-          <button
-            className="flex items-center gap-3 min-w-0 flex-1 text-left"
-            onClick={() => onToggle(bundleKey)}
-          >
-            <Icon
-              name={meta.icon}
-              className="text-[22px] shrink-0"
-              style={{ color: meta.color }}
-            />
-            <span
-              className="font-medium text-sm shrink-0"
-              style={{ color: meta.color }}
-            >
-              {meta.name}
-            </span>
-            {unread > 0 && (
-              <span className="text-xs font-semibold text-md-on-surface shrink-0">
-                ({unread})
+        <RowHeader
+          leading={
+            <div className="w-9 h-9 flex items-center justify-center">
+              <Icon
+                name={meta.icon}
+                className="text-[22px]"
+                style={{ color: meta.color }}
+              />
+            </div>
+          }
+          primary={
+            <>
+              <span style={{ color: meta.color }} className="font-medium">
+                {meta.name}
               </span>
-            )}
-            <span className="text-sm text-md-secondary-text truncate min-w-0">
-              {preview}
-            </span>
-          </button>
-        </div>
+              {unread > 0 && (
+                <span className="text-xs font-semibold text-md-on-surface ml-1">
+                  ({unread})
+                </span>
+              )}
+            </>
+          }
+          secondary={preview}
+          date={latestDate ? formatDate(latestDate) : undefined}
+          onClick={() => onToggle(bundleKey)}
+        />
       )}
 
       {isOpen && (
@@ -139,24 +140,23 @@ export const BundleSliceRow = ({
             transition={{ duration: 0.2, ease: "easeInOut" }}
             className="overflow-hidden"
           >
-            <div className="bg-neutral-200 px-5 pb-5">
+            <div className="bg-neutral-200 pb-5">
               {groupByBucket(threads, (t) => t.latestDate).map(
                 ({ label, items }) => (
                   <div key={label}>
-                    <p className="text-sm text-md-secondary-text pt-4 pb-2 px-1">
+                    <p className="text-sm text-md-secondary-text pt-4 pb-2 px-4">
                       {label}
                     </p>
-                    <div className="flex flex-col gap-2">
+                    <RowGroup>
                       {items.map((t) => (
-                        <BundleThreadCard
+                        <ThreadRow
                           key={t.id}
                           thread={t}
-                          accentColor={meta.color}
-                          isOpen={openThreadId === t.id}
+                          isExpanded={openThreadId === t.id}
                           onToggle={() => toggleThread(t.id)}
                         />
                       ))}
-                    </div>
+                    </RowGroup>
                   </div>
                 ),
               )}

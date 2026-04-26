@@ -6,12 +6,10 @@ import { MessageBody } from "./MessageBody";
 
 export const InlineMessage = ({
   message: m,
-  accentColor,
   isOpen,
   onToggle,
 }: {
   message: RawMessage;
-  accentColor?: string;
   isOpen: boolean;
   onToggle: () => void;
 }) => {
@@ -56,7 +54,7 @@ export const InlineMessage = ({
             transition={{ duration: 0.15, ease: "easeInOut" }}
             className="overflow-hidden"
           >
-            <MessageBody message={m} accentColor={accentColor} />
+            <MessageBody message={m} />
           </motion.div>
         )}
       </AnimatePresence>

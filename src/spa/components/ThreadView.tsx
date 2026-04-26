@@ -7,10 +7,8 @@ import { ReplyFooter } from "./ReplyFooter";
 
 export const ThreadView = ({
   thread: t,
-  accentColor,
 }: {
   thread: Thread;
-  accentColor?: string;
 }) => {
   const doneThread = useMailStore((s) => s.doneThread);
   const trashThread = useMailStore((s) => s.trashThread);
@@ -75,7 +73,6 @@ export const ThreadView = ({
           <InlineMessage
             key={m.id}
             message={m}
-            accentColor={accentColor}
             isOpen={openIds.has(m.id)}
             onToggle={() => toggleMsg(m.id)}
           />

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { LayoutGroup } from "framer-motion";
+import { LayoutGroup, motion } from "framer-motion";
 import {
   useHydrated,
   useMailStore,
@@ -9,9 +9,11 @@ import {
 } from "../store/mailStore";
 import { BundleSliceRow } from "./components/BundleSliceRow";
 import { Icon } from "./components/Icon";
+import { RowGroup } from "./components/RowGroup";
 import { SectionLabel } from "./components/SectionLabel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ThreadRow } from "./components/ThreadRow";
+
 
 export const App = () => {
   const init = useMailStore((s) => s.init);
@@ -98,62 +100,101 @@ export const App = () => {
               <SectionLabel>Pinned</SectionLabel>
             </div>
             <LayoutGroup>
-              <div className="flex flex-col">
+              <RowGroup>
                 {stream.pinned.map((t) => (
                   <ThreadRow
                     key={t.id}
                     thread={t}
                     isExpanded={expandedKey === `thread:${t.id}`}
-                    onToggleExpand={() => toggleKey(`thread:${t.id}`)}
+                    onToggle={() => toggleKey(`thread:${t.id}`)}
                     expandedRef={expandedRef}
                   />
                 ))}
-              </div>
+              </RowGroup>
             </LayoutGroup>
           </section>
         )}
 
-        {stream.sections.map((group) => (
-          <section key={group.label} className="mb-6">
-            <div className="max-w-3xl mx-auto flex items-center justify-between pr-1">
-              <SectionLabel>{group.label}</SectionLabel>
-              <button
-                onClick={() => sectionDoneAll(group.items)}
-                title="Done all"
-                className="text-md-secondary-text hover:text-md-on-surface -mt-2"
-              >
-                <Icon name="done_all" className="text-xl" />
-              </button>
-            </div>
-            <LayoutGroup>
-              <div className="flex flex-col">
-                {group.items.map((item) =>
-                  item.type === "thread" ? (
-                    <ThreadRow
-                      key={item.thread.id}
-                      thread={item.thread}
-                      isExpanded={expandedKey === `thread:${item.thread.id}`}
-                      onToggleExpand={() =>
-                        toggleKey(`thread:${item.thread.id}`)
-                      }
-                      expandedRef={expandedRef}
-                    />
-                  ) : (
+        {stream.sections.map((group) => {
+          const spring = { type: "spring", stiffness: 500, damping: 40 } as const;
+          const cardClass = "max-w-3xl mx-auto bg-white shadow-sm divide-y divide-md-divider overflow-hidden";
+
+          const expandedBundleIdx = expandedKey?.startsWith("bundle:")
+            ? group.items.findIndex(
+                (item) => item.type === "bundle" && expandedKey === `bundle:${item.category}`
+              )
+            : -1;
+
+          const renderItems = (items: StreamItem[]) =>
+            items.map((item) =>
+              item.type === "thread" ? (
+                <ThreadRow
+                  key={item.thread.id}
+                  thread={item.thread}
+                  isExpanded={expandedKey === `thread:${item.thread.id}`}
+                  onToggle={() => toggleKey(`thread:${item.thread.id}`)}
+                  expandedRef={expandedRef}
+                />
+              ) : (
+                <BundleSliceRow
+                  key={item.category}
+                  bundleKey={`bundle:${item.category}`}
+                  category={item.category}
+                  threads={item.threads}
+                  isOpen={false}
+                  onToggle={toggleKey}
+                  expandedRef={expandedRef}
+                />
+              )
+            );
+
+          const openBundle = expandedBundleIdx >= 0
+            ? group.items[expandedBundleIdx] as Extract<StreamItem, { type: "bundle" }>
+            : null;
+
+          return (
+            <section key={group.label} className="mb-6">
+              <div className="max-w-3xl mx-auto flex items-center justify-between pr-1">
+                <SectionLabel>{group.label}</SectionLabel>
+                <button
+                  onClick={() => sectionDoneAll(group.items)}
+                  title="Done all"
+                  className="text-md-secondary-text hover:text-md-on-surface -mt-2"
+                >
+                  <Icon name="done_all" className="text-xl" />
+                </button>
+              </div>
+              <LayoutGroup>
+                {openBundle ? (
+                  <>
+                    {expandedBundleIdx > 0 && (
+                      <motion.div layout transition={spring} className={cardClass}>
+                        {renderItems(group.items.slice(0, expandedBundleIdx))}
+                      </motion.div>
+                    )}
                     <BundleSliceRow
-                      key={item.category}
-                      bundleKey={`bundle:${item.category}`}
-                      category={item.category}
-                      threads={item.threads}
-                      isOpen={expandedKey === `bundle:${item.category}`}
+                      bundleKey={`bundle:${openBundle.category}`}
+                      category={openBundle.category}
+                      threads={openBundle.threads}
+                      isOpen={true}
                       onToggle={toggleKey}
                       expandedRef={expandedRef}
                     />
-                  ),
+                    {expandedBundleIdx < group.items.length - 1 && (
+                      <motion.div layout transition={spring} className={cardClass}>
+                        {renderItems(group.items.slice(expandedBundleIdx + 1))}
+                      </motion.div>
+                    )}
+                  </>
+                ) : (
+                  <motion.div layout transition={spring} className={cardClass}>
+                    {renderItems(group.items)}
+                  </motion.div>
                 )}
-              </div>
-            </LayoutGroup>
-          </section>
-        ))}
+              </LayoutGroup>
+            </section>
+          );
+        })}
       </div>
     </div>
   );

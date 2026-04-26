@@ -4,10 +4,8 @@ import { buildSrcdoc, extractHtmlBody, extractTextBody } from "../lib/srcdoc";
 
 export const MessageBody = ({
   message: m,
-  accentColor,
 }: {
   message: RawMessage;
-  accentColor?: string;
 }) => {
   const [rawHtml, setRawHtml] = useState<string | null>(null);
   const [isPlainText, setIsPlainText] = useState(false);
@@ -49,10 +47,7 @@ export const MessageBody = ({
   );
 
   return (
-    <div
-      className={accentColor ? "bg-neutral-50 border-l-4" : "bg-neutral-50"}
-      style={accentColor ? { borderLeftColor: accentColor } : {}}
-    >
+    <div className="bg-neutral-50">
       <div className="flex items-center justify-between gap-2 px-4 py-2 border-b border-neutral-200 text-xs text-neutral-500">
         <span>
           {m.author} &mdash; {new Date(m.date).toLocaleString()}

@@ -1,25 +1,22 @@
-import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Thread } from "../../shared/types";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate } from "../lib/dateBucket";
 import { ActionStrip } from "./ActionStrip";
+import { RowHeader } from "./RowHeader";
 import { ThreadView } from "./ThreadView";
 
 export const ThreadRow = ({
   thread: t,
   isExpanded,
-  onToggleExpand,
+  onToggle,
   expandedRef,
 }: {
   thread: Thread;
   isExpanded: boolean;
-  onToggleExpand: () => void;
-  expandedRef: React.RefObject<HTMLDivElement | null>;
+  onToggle: () => void;
+  expandedRef?: React.RefObject<HTMLDivElement | null>;
 }) => {
-  const [hovered, setHovered] = useState(false);
-  const bold = t.unreadCount > 0;
-
   const firstSender = t.messages[0];
   const name = firstSender ? senderName(firstSender.author) : "";
   const avatarBg = avatarColor(name);
@@ -31,36 +28,25 @@ export const ThreadRow = ({
       data-row
       ref={isExpanded ? expandedRef : undefined}
       transition={{ type: "spring", stiffness: 500, damping: 40 }}
-      className={
-        isExpanded
-          ? "w-full my-4 bg-white rounded-xl shadow-elevation-3 overflow-hidden"
-          : "w-full max-w-3xl mx-auto bg-white border-b border-md-divider last:border-b-0"
-      }
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      className="w-full"
     >
       {!isExpanded && (
-        <div
-          className="relative py-2 px-3 flex gap-3 items-center text-sm cursor-pointer hover:bg-neutral-50"
-          onClick={onToggleExpand}
-        >
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center text-white font-medium text-sm shrink-0"
-            style={{ backgroundColor: avatarBg }}
-          >
-            {initial}
-          </div>
-          <span className={`w-44 truncate shrink-0 ${bold ? "font-semibold text-md-on-surface" : "text-md-on-surface"}`}>
-            {t.participantsLabel}
-          </span>
-          <span className={`truncate flex-1 ${bold ? "font-semibold text-md-on-surface" : "text-md-secondary-text"}`}>
-            {t.subject || "(no subject)"}
-          </span>
-          <span className="text-xs text-md-secondary-text shrink-0 ml-2">
-            {formatDate(t.latestDate)}
-          </span>
-          {hovered && <ActionStrip thread={t} />}
-        </div>
+        <RowHeader
+          leading={
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white font-medium text-sm"
+              style={{ backgroundColor: avatarBg }}
+            >
+              {initial}
+            </div>
+          }
+          primary={t.participantsLabel}
+          secondary={t.subject || "(no subject)"}
+          date={formatDate(t.latestDate)}
+          bold={t.unreadCount > 0}
+          onClick={onToggle}
+          actionStrip={<ActionStrip thread={t} />}
+        />
       )}
       <AnimatePresence initial={false}>
         {isExpanded && (
