@@ -13,11 +13,7 @@ export const extractTextBody = (
   part: messenger.messages.MessagePart,
 ): string | null => {
   if (part.contentType === "text/plain") {
-    const esc = (part.body ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-    return `<pre style="white-space:pre-wrap;font-family:inherit;margin:0">${esc}</pre>`;
+    return renderTextWithQuoteToggle(part.body ?? "");
   }
   for (const p of part.parts ?? []) {
     const f = extractTextBody(p);
@@ -54,12 +50,161 @@ const htmlToText = (html: string): string => {
   return doc.body.textContent ?? "";
 }
 
+const QUOTE_HEADER_RE =
+  /^(On\s[\s\S]{1,240}?\swrote:|Le\s[\s\S]{1,240}?\sa\s+écrit\s*:|Am\s[\s\S]{1,240}?\sschrieb\s|-{2,}\s*Original Message\s*-{2,}|From:\s)/i;
+
+const escapeHtml = (s: string): string =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+const isWhitespaceText = (n: Node): boolean =>
+  n.nodeType === Node.TEXT_NODE && !(n.textContent ?? "").trim();
+
+const isEmptyElement = (n: Node): boolean => {
+  if (!(n instanceof Element)) return false;
+  if (n.tagName === "BR") return true;
+  return !n.textContent?.trim() && !n.querySelector("img");
+};
+
+const isInsignificant = (n: Node): boolean =>
+  isWhitespaceText(n) || isEmptyElement(n);
+
+const isQuoteContainer = (el: Element): boolean => {
+  if (el.tagName === "BLOCKQUOTE") return true;
+  const cls = typeof el.className === "string" ? el.className : "";
+  if (
+    /\b(gmail_quote|gmail_extra|gmail_quote_container|yahoo_quoted|moz-cite-prefix)\b/.test(
+      cls,
+    )
+  ) {
+    return true;
+  }
+  if (el.id === "appendonsend" || el.id === "divRplyFwdMsg") return true;
+  return false;
+};
+
+const findContentRoot = (body: Element): Element => {
+  let root = body;
+  while (
+    root.children.length === 1 &&
+    root.firstElementChild!.tagName === "DIV" &&
+    !isQuoteContainer(root.firstElementChild!)
+  ) {
+    root = root.firstElementChild!;
+  }
+  return root;
+};
+
+const markQuotedHtml = (doc: Document): void => {
+  const body = doc.body;
+  if (!body) return;
+  const root = findContentRoot(body);
+  const children = Array.from(root.childNodes);
+
+  let lastIdx = children.length - 1;
+  while (lastIdx >= 0 && isInsignificant(children[lastIdx]!)) lastIdx--;
+  if (lastIdx < 0) return;
+
+  const last = children[lastIdx]!;
+  if (!(last instanceof Element) || !isQuoteContainer(last)) return;
+
+  let trimStart = lastIdx;
+  for (let i = lastIdx - 1; i >= 0; i--) {
+    const node = children[i]!;
+    if (isInsignificant(node)) continue;
+    if (node instanceof Element) {
+      const text = (node.textContent ?? "").trim();
+      if (text && text.length < 300 && QUOTE_HEADER_RE.test(text)) {
+        trimStart = i;
+      }
+    }
+    break;
+  }
+
+  const toHide: Element[] = [];
+  for (let i = trimStart; i < children.length; i++) {
+    const node = children[i]!;
+    if (node instanceof Element) {
+      node.classList.add("nb-quoted");
+      toHide.push(node);
+    }
+  }
+  const first = toHide[0];
+  if (!first) return;
+  const parent = first.parentElement;
+  if (!parent) return;
+
+  const id = `nb-q-${Math.random().toString(36).slice(2, 8)}`;
+  const checkbox = doc.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.className = "nb-toggle-checkbox";
+  checkbox.id = id;
+  const label = doc.createElement("label");
+  label.className = "nb-toggle-label";
+  label.htmlFor = id;
+  label.title = "Show trimmed content";
+  label.appendChild(doc.createTextNode("···"));
+
+  parent.insertBefore(checkbox, first);
+  parent.insertBefore(label, first);
+};
+
+const renderTextWithQuoteToggle = (raw: string): string => {
+  const preStyle = "white-space:pre-wrap;font-family:inherit;margin:0";
+  const wrap = (s: string, cls = "") =>
+    `<pre${cls ? ` class="${cls}"` : ""} style="${preStyle}">${escapeHtml(s)}</pre>`;
+
+  const lines = raw.split("\n");
+  const isQuoted = (line: string) => /^\s*>/.test(line);
+
+  let i = lines.length - 1;
+  while (i >= 0 && (lines[i] ?? "").trim() === "") i--;
+  const contentEnd = i;
+
+  while (i >= 0) {
+    const line = lines[i] ?? "";
+    if (!isQuoted(line) && line.trim() !== "") break;
+    i--;
+  }
+  let trimStart = i + 1;
+
+  const quotedLineCount = lines
+    .slice(trimStart, contentEnd + 1)
+    .filter(isQuoted).length;
+  if (quotedLineCount < 2) return wrap(raw);
+
+  while (i >= 0 && (lines[i] ?? "").trim() === "") i--;
+  if (i >= 0) {
+    const candidate = (lines[i] ?? "").trim();
+    if (candidate.length < 300 && QUOTE_HEADER_RE.test(candidate)) {
+      trimStart = i;
+    }
+  }
+
+  const before = lines.slice(0, trimStart).join("\n").replace(/\s+$/, "");
+  const after = lines.slice(trimStart).join("\n");
+
+  const id = `nb-q-${Math.random().toString(36).slice(2, 8)}`;
+  return (
+    wrap(before) +
+    `<input type="checkbox" class="nb-toggle-checkbox" id="${id}">` +
+    `<label class="nb-toggle-label" for="${id}" title="Show trimmed content">···</label>` +
+    wrap(after, "nb-quoted")
+  );
+};
+
 const BASE_CSS = `<style>
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
        font-size:14px;margin:0;padding:8px;color:#111;word-break:break-word}
   img{max-width:100%;height:auto}a{color:#1a73e8}
   blockquote{border-left:3px solid #ddd;margin:0 0 0 8px;padding-left:8px;color:#555}
   table{border-collapse:collapse}
+  .nb-toggle-checkbox{position:absolute;opacity:0;pointer-events:none}
+  .nb-toggle-label{display:inline-block;padding:0 8px;margin:6px 0;
+    background:#f1f3f4;border-radius:4px;cursor:pointer;color:#5f6368;
+    font-size:14px;line-height:22px;letter-spacing:1px;user-select:none}
+  .nb-toggle-label:hover{background:#e8eaed}
+  .nb-toggle-checkbox:not(:checked) ~ .nb-quoted{display:none}
+  .nb-toggle-checkbox:checked ~ .nb-toggle-label{display:none}
 </style>`;
 
 export const buildSrcdoc = (rawHtml: string, showImages: boolean): string => {
@@ -80,6 +225,7 @@ export const buildSrcdoc = (rawHtml: string, showImages: boolean): string => {
         el.style.backgroundImage = "none";
       }
     });
+    markQuotedHtml(doc);
   }
   doc.head.insertAdjacentHTML("afterbegin", BASE_CSS);
   return `<!DOCTYPE html>${doc.documentElement.outerHTML}`;

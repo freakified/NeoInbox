@@ -65,16 +65,21 @@ export const InlineMessage = ({
               {preview ?? "Loading message preview..."}
             </div>
           )}
+          <ExpandableRegion
+            isOpen={isOpen}
+            className={s.bodyWrap}
+            innerClassName={s.bodyInner}
+          >
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+            >
+              <MessageBody message={m} />
+            </div>
+          </ExpandableRegion>
         </div>
       </div>
-
-      <ExpandableRegion
-        isOpen={isOpen}
-        className={s.bodyWrap}
-        innerClassName={s.bodyInner}
-      >
-        <MessageBody message={m} />
-      </ExpandableRegion>
     </div>
   );
 };
