@@ -1,8 +1,10 @@
+import { clsx } from "clsx";
 import { useState } from "react";
 import { CATEGORIES, getCategoryMeta } from "../../shared/categories";
 import type { BuiltinCategory, CustomBundleRecord, CustomBundleRule } from "../../shared/types";
 import { useMailStore, useCustomBundles, useOverrides } from "../../store/mailStore";
 import { Icon } from "./Icon";
+import s from "./SettingsPanel.module.css";
 
 const BUNDLE_CATEGORIES = Object.entries(CATEGORIES)
   .filter(([cat]) => cat !== "personal")
@@ -26,7 +28,7 @@ const PRESET_ICONS = [
 const BuiltinBundleRow = ({ cat }: { cat: BuiltinCategory }) => {
   const meta = CATEGORIES[cat];
   const overrides = useOverrides();
-  const setOverride = useMailStore((s) => s.setOverride);
+  const setOverride = useMailStore((st) => st.setOverride);
   const [expanded, setExpanded] = useState(false);
   const [adding, setAdding] = useState("");
 
@@ -44,59 +46,59 @@ const BuiltinBundleRow = ({ cat }: { cat: BuiltinCategory }) => {
   };
 
   return (
-    <div className="border border-md-divider rounded-lg overflow-hidden">
+    <div className={s.bundleCard}>
       <button
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 text-left"
+        className={s.bundleCardTrigger}
         onClick={() => setExpanded((v) => !v)}
       >
-        <Icon name={meta.icon} className="text-xl" style={{ color: meta.color }} />
-        <span className="font-medium text-sm flex-1" style={{ color: meta.color }}>
+        <Icon name={meta.icon} className={s.bundleCardIcon} style={{ color: meta.color }} />
+        <span className={s.bundleCardName} style={{ color: meta.color }}>
           {meta.name}
         </span>
         {added.length > 0 && (
-          <span className="text-xs text-md-secondary-text">{added.length} added</span>
+          <span className={s.bundleCardCount}>{added.length} added</span>
         )}
-        <Icon name={expanded ? "expand_less" : "expand_more"} className="text-lg text-md-secondary-text" />
+        <Icon
+          name={expanded ? "expand_less" : "expand_more"}
+          className={s.bundleCardExpandIcon}
+        />
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 border-t border-md-divider bg-neutral-50">
-          <p className="text-xs text-md-secondary-text mt-3 mb-2">
+        <div className={s.expandedSection}>
+          <p className={s.expandedDesc}>
             Emails from these domains are always routed to {meta.name}.
           </p>
 
           {added.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-3">
+            <div className={s.chipList}>
               {added.map((domain) => (
-                <span
-                  key={domain}
-                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-white border border-md-divider"
-                >
+                <span key={domain} className={s.chip}>
                   {domain}
                   <button
                     onClick={() => handleRemove(domain)}
-                    className="text-md-secondary-text hover:text-md-on-surface"
+                    className={s.chipRemove}
                   >
-                    <Icon name="close" className="text-sm" />
+                    <Icon name="close" className={s.chipRemoveIcon} />
                   </button>
                 </span>
               ))}
             </div>
           )}
 
-          <div className="flex gap-2">
+          <div className={s.inputRow}>
             <input
               type="text"
               placeholder="example.com"
               value={adding}
               onChange={(e) => setAdding(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-              className="flex-1 text-sm px-3 py-1.5 border border-md-divider rounded bg-white focus:outline-none focus:ring-1 focus:ring-md-primary"
+              className={s.textInput}
             />
             <button
               onClick={handleAdd}
               disabled={!adding.trim()}
-              className="text-sm px-3 py-1.5 rounded bg-md-primary text-white hover:opacity-90 disabled:opacity-40"
+              className={s.primaryBtn}
             >
               Add
             </button>
@@ -156,29 +158,27 @@ const CustomBundleEditor = ({
   };
 
   return (
-    <div className="border border-md-divider rounded-lg p-4 bg-neutral-50 space-y-4">
-      {/* Name */}
+    <div className={s.editorCard}>
       <div>
-        <label className="text-xs font-medium text-md-secondary-text block mb-1">Bundle name</label>
+        <label className={s.fieldLabel}>Bundle name</label>
         <input
           type="text"
           placeholder="My Bundle"
           value={form.name}
           onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          className="w-full text-sm px-3 py-1.5 border border-md-divider rounded bg-white focus:outline-none focus:ring-1 focus:ring-md-primary"
+          className={s.textInput}
         />
       </div>
 
-      {/* Color + Icon */}
-      <div className="flex gap-6">
+      <div className={s.colorIconRow}>
         <div>
-          <label className="text-xs font-medium text-md-secondary-text block mb-1">Color</label>
-          <div className="flex flex-wrap gap-1.5">
+          <label className={s.fieldLabel}>Color</label>
+          <div className={s.colorGrid}>
             {PRESET_COLORS.map((c) => (
               <button
                 key={c}
                 onClick={() => setForm((f) => ({ ...f, color: c }))}
-                className="w-6 h-6 rounded-full border-2 transition-all"
+                className={s.colorSwatch}
                 style={{
                   backgroundColor: c,
                   borderColor: form.color === c ? "#111" : "transparent",
@@ -188,18 +188,18 @@ const CustomBundleEditor = ({
           </div>
         </div>
         <div>
-          <label className="text-xs font-medium text-md-secondary-text block mb-1">Icon</label>
-          <div className="flex flex-wrap gap-1 max-w-[200px]">
+          <label className={s.fieldLabel}>Icon</label>
+          <div className={s.iconGrid}>
             {PRESET_ICONS.map((name) => (
               <button
                 key={name}
                 onClick={() => setForm((f) => ({ ...f, icon: name }))}
-                className={`p-1 rounded hover:bg-white ${form.icon === name ? "bg-white ring-1 ring-md-primary" : ""}`}
+                className={clsx(s.iconOption, form.icon === name && s.iconOptionActive)}
                 title={name}
               >
                 <Icon
                   name={name}
-                  className="text-lg"
+                  className={s.iconOptionIcon}
                   style={{ color: form.icon === name ? form.color : "#666" }}
                 />
               </button>
@@ -208,32 +208,26 @@ const CustomBundleEditor = ({
         </div>
       </div>
 
-      {/* Rules */}
       <div>
-        <label className="text-xs font-medium text-md-secondary-text block mb-1">Rules</label>
+        <label className={s.fieldLabel}>Rules</label>
         {form.rules.length > 0 && (
-          <div className="space-y-1 mb-2">
+          <div className={s.ruleList}>
             {form.rules.map((rule, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm bg-white px-3 py-1.5 rounded border border-md-divider">
-                <span className="text-xs text-md-secondary-text capitalize shrink-0">
-                  {rule.type.replace("_", " ")}
-                </span>
-                <span className="flex-1 truncate">{rule.value}</span>
-                <button
-                  onClick={() => removeRule(i)}
-                  className="text-md-secondary-text hover:text-md-on-surface shrink-0"
-                >
-                  <Icon name="close" className="text-sm" />
+              <div key={i} className={s.ruleRow}>
+                <span className={s.ruleType}>{rule.type.replace("_", " ")}</span>
+                <span className={s.ruleValue}>{rule.value}</span>
+                <button onClick={() => removeRule(i)} className={s.ruleRemove}>
+                  <Icon name="close" className={s.ruleRemoveIcon} />
                 </button>
               </div>
             ))}
           </div>
         )}
-        <div className="flex gap-2">
+        <div className={s.ruleInputRow}>
           <select
             value={ruleType}
             onChange={(e) => setRuleType(e.target.value as CustomBundleRule["type"])}
-            className="text-sm px-2 py-1.5 border border-md-divider rounded bg-white focus:outline-none"
+            className={s.ruleTypeSelect}
           >
             <option value="domain">Domain</option>
             <option value="email">Email address</option>
@@ -249,30 +243,24 @@ const CustomBundleEditor = ({
             value={ruleValue}
             onChange={(e) => setRuleValue(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addRule()}
-            className="flex-1 text-sm px-3 py-1.5 border border-md-divider rounded bg-white focus:outline-none focus:ring-1 focus:ring-md-primary"
+            className={s.ruleValueInput}
           />
           <button
             onClick={addRule}
             disabled={!ruleValue.trim()}
-            className="text-sm px-3 py-1.5 rounded border border-md-divider bg-white hover:bg-neutral-100 disabled:opacity-40"
+            className={s.addRuleBtn}
           >
-            <Icon name="add" className="text-base" />
+            <Icon name="add" className={s.addRuleBtnIcon} />
           </button>
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex justify-end gap-2 pt-1">
-        <button
-          onClick={onCancel}
-          className="text-sm px-4 py-1.5 rounded border border-md-divider hover:bg-neutral-100"
-        >
-          Cancel
-        </button>
+      <div className={s.editorActions}>
+        <button onClick={onCancel} className={s.cancelBtn}>Cancel</button>
         <button
           onClick={handleSave}
           disabled={!form.name.trim()}
-          className="text-sm px-4 py-1.5 rounded bg-md-primary text-white hover:opacity-90 disabled:opacity-40"
+          className={s.saveBtn}
         >
           Save
         </button>
@@ -290,8 +278,8 @@ const CustomBundleRow = ({
   bundle: CustomBundleRecord;
   existingCount: number;
 }) => {
-  const setCustomBundle = useMailStore((s) => s.setCustomBundle);
-  const deleteCustomBundle = useMailStore((s) => s.deleteCustomBundle);
+  const setCustomBundle = useMailStore((st) => st.setCustomBundle);
+  const deleteCustomBundle = useMailStore((st) => st.deleteCustomBundle);
   const customBundles = useCustomBundles();
   const [editing, setEditing] = useState(false);
   const meta = getCategoryMeta(bundle.id, customBundles);
@@ -308,28 +296,28 @@ const CustomBundleRow = ({
   }
 
   return (
-    <div className="border border-md-divider rounded-lg overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-3">
-        <Icon name={meta.icon} className="text-xl" style={{ color: meta.color }} />
-        <span className="font-medium text-sm flex-1" style={{ color: meta.color }}>
+    <div className={s.customCard}>
+      <div className={s.customCardRow}>
+        <Icon name={meta.icon} className={s.customCardIcon} style={{ color: meta.color }} />
+        <span className={s.customCardName} style={{ color: meta.color }}>
           {meta.name}
         </span>
-        <span className="text-xs text-md-secondary-text">
+        <span className={s.customCardMeta}>
           {bundle.rules.length} {bundle.rules.length === 1 ? "rule" : "rules"}
         </span>
         <button
           onClick={() => setEditing(true)}
-          className="text-md-secondary-text hover:text-md-on-surface p-1"
+          className={s.customCardBtn}
           title="Edit"
         >
-          <Icon name="edit" className="text-base" />
+          <Icon name="edit" className={s.customCardActionIcon} />
         </button>
         <button
           onClick={() => deleteCustomBundle(bundle.id)}
-          className="text-md-secondary-text hover:text-red-500 p-1"
+          className={s.customCardDeleteBtn}
           title="Delete"
         >
-          <Icon name="delete" className="text-base" />
+          <Icon name="delete" className={s.customCardActionIcon} />
         </button>
       </div>
     </div>
@@ -340,56 +328,48 @@ const CustomBundleRow = ({
 
 export const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
   const customBundles = useCustomBundles();
-  const setCustomBundle = useMailStore((s) => s.setCustomBundle);
+  const setCustomBundle = useMailStore((st) => st.setCustomBundle);
   const [creatingNew, setCreatingNew] = useState(false);
 
   return (
-    <div className="fixed inset-0 z-50 flex">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+    <div className={s.overlay}>
+      <div className={s.backdrop} onClick={onClose} />
 
-      {/* Panel */}
-      <div className="relative ml-auto w-full max-w-lg h-full bg-white shadow-xl flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-md-divider bg-md-primary">
-          <h2 className="text-lg font-medium text-white">Bundle Settings</h2>
-          <button onClick={onClose} className="text-white/80 hover:text-white">
-            <Icon name="close" className="text-2xl" />
+      <div className={s.panel}>
+        <div className={s.panelHead}>
+          <h2 className={s.panelTitle}>Bundle Settings</h2>
+          <button onClick={onClose} className={s.closeBtn}>
+            <Icon name="close" className={s.closeIcon} />
           </button>
         </div>
 
-        <div className="overflow-y-auto flex-1 px-6 py-6 space-y-8">
-          {/* Built-in bundles */}
+        <div className={s.panelBody}>
           <section>
-            <h3 className="text-sm font-semibold text-md-secondary-text uppercase tracking-wide mb-3">
-              Built-in Bundles
-            </h3>
-            <p className="text-xs text-md-secondary-text mb-4">
+            <h3 className={s.sectionHead}>Built-in Bundles</h3>
+            <p className={s.sectionDesc}>
               Add domains to route matching emails into a built-in bundle.
             </p>
-            <div className="space-y-2">
+            <div className={s.sectionRows}>
               {BUNDLE_CATEGORIES.map(({ cat }) => (
                 <BuiltinBundleRow key={cat} cat={cat} />
               ))}
             </div>
           </section>
 
-          {/* Custom bundles */}
           <section>
-            <h3 className="text-sm font-semibold text-md-secondary-text uppercase tracking-wide mb-3">
-              Custom Bundles
-            </h3>
-            <p className="text-xs text-md-secondary-text mb-4">
+            <h3 className={s.sectionHead}>Custom Bundles</h3>
+            <p className={s.sectionDesc}>
               Create your own bundles with custom rules. Rules are checked before built-in ones.
             </p>
 
-            <div className="space-y-2">
+            <div className={s.sectionRows}>
               {customBundles.map((b) => (
                 <CustomBundleRow key={b.id} bundle={b} existingCount={customBundles.length} />
               ))}
             </div>
 
             {creatingNew ? (
-              <div className="mt-2">
+              <div className={s.newBundleEditorWrap}>
                 <CustomBundleEditor
                   initial={emptyForm()}
                   existingCount={customBundles.length}
@@ -400,9 +380,9 @@ export const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
             ) : (
               <button
                 onClick={() => setCreatingNew(true)}
-                className="mt-3 w-full flex items-center justify-center gap-2 text-sm px-4 py-2.5 rounded-lg border-2 border-dashed border-md-divider text-md-secondary-text hover:border-md-primary hover:text-md-primary transition-colors"
+                className={s.newBundleBtn}
               >
-                <Icon name="add" className="text-base" />
+                <Icon name="add" className={s.newBundleBtnIcon} />
                 New Bundle
               </button>
             )}

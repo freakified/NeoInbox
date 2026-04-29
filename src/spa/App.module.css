@@ -1,0 +1,108 @@
+.root {
+  min-height: 100vh;
+  background: var(--color-md-background);
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--color-md-primary);
+  box-shadow: var(--shadow-elevation-2);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 500;
+  color: #fff;
+  letter-spacing: 0.025em;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.syncText {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.settingsBtn {
+  color: rgba(255, 255, 255, 0.8);
+  background: none;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.settingsBtn:hover {
+  color: #fff;
+}
+
+.settingsIcon {
+  font-size: 20px;
+}
+
+.content {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 24px 32px;
+}
+
+.emptyText {
+  color: var(--color-md-secondary-text);
+  font-size: 14px;
+}
+
+.section {
+  margin-bottom: 24px;
+}
+
+.sectionLabelWrap {
+  max-width: 48rem;
+  margin: 0 auto;
+}
+
+.sectionHeader {
+  max-width: 48rem;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 4px;
+}
+
+.doneAllBtn {
+  color: var(--color-md-secondary-text);
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-top: -8px;
+  line-height: 1;
+}
+
+.doneAllBtn:hover {
+  color: var(--color-md-on-surface);
+}
+
+.doneAllIcon {
+  font-size: 20px;
+}
+
+.card {
+  max-width: 48rem;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  overflow: hidden;
+}
+
+.card > * + * {
+  border-top: 1px solid var(--color-md-divider);
+}

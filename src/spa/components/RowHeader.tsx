@@ -1,4 +1,6 @@
+import { clsx } from "clsx";
 import { useState } from "react";
+import s from "./RowHeader.module.css";
 
 export const RowHeader = ({
   leading,
@@ -21,27 +23,15 @@ export const RowHeader = ({
 
   return (
     <div
-      className="relative py-2 px-3 flex gap-3 items-center text-sm cursor-pointer hover:bg-neutral-50"
+      className={s.row}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <div className="shrink-0">{leading}</div>
-      <span
-        className={`w-44 truncate shrink-0 text-md-on-surface ${bold ? "font-semibold" : "font-normal"}`}
-      >
-        {primary}
-      </span>
-      <span
-        className={`truncate flex-1 ${bold ? "font-semibold text-md-on-surface" : "text-md-secondary-text"}`}
-      >
-        {secondary}
-      </span>
-      {date && (
-        <span className="text-xs text-md-secondary-text shrink-0 ml-2">
-          {date}
-        </span>
-      )}
+      <div className={s.leading}>{leading}</div>
+      <span className={clsx(s.primary, bold && s.bold)}>{primary}</span>
+      <span className={clsx(s.secondary, bold && s.bold)}>{secondary}</span>
+      {date && <span className={s.date}>{date}</span>}
       {hovered && actionStrip}
     </div>
   );

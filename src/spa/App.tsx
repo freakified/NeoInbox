@@ -13,15 +13,16 @@ import { RowGroup } from "./components/RowGroup";
 import { SectionLabel } from "./components/SectionLabel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ThreadRow } from "./components/ThreadRow";
+import s from "./App.module.css";
 
 
 export const App = () => {
-  const init = useMailStore((s) => s.init);
+  const init = useMailStore((st) => st.init);
   const hydrated = useHydrated();
   const sync = useSyncProgress();
   const stream = useStream();
 
-  const doneThread = useMailStore((s) => s.doneThread);
+  const doneThread = useMailStore((st) => st.doneThread);
 
   const sectionDoneAll = (items: StreamItem[]) => {
     const ids = items.flatMap((item) => {
@@ -57,7 +58,7 @@ export const App = () => {
 
   return (
     <div
-      className="min-h-screen bg-md-background"
+      className={s.root}
       onClick={(e) => {
         if (!expandedKey) return;
         if (!(e.target as HTMLElement).closest("[data-row]")) {
@@ -67,36 +68,36 @@ export const App = () => {
     >
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
 
-      <header className="sticky top-0 z-20 bg-md-primary shadow-elevation-2 px-4 py-3 flex items-center justify-between">
-        <h1 className="text-xl font-medium text-white tracking-wide">NeoInbox</h1>
-        <div className="flex items-center gap-3">
+      <header className={s.header}>
+        <h1 className={s.title}>NeoInbox</h1>
+        <div className={s.headerRight}>
           {syncing && (
-            <span className="text-sm text-white/80">
+            <span className={s.syncText}>
               Syncing… {sync.tagged}/{sync.scanned}
             </span>
           )}
           <button
             onClick={() => setSettingsOpen(true)}
             title="Bundle settings"
-            className="text-white/80 hover:text-white"
+            className={s.settingsBtn}
           >
-            <Icon name="settings" className="text-xl" />
+            <Icon name="settings" className={s.settingsIcon} />
           </button>
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto py-6 px-8">
+      <div className={s.content}>
         {!hydrated && (
-          <p className="text-md-secondary-text text-sm">Loading…</p>
+          <p className={s.emptyText}>Loading…</p>
         )}
 
         {hydrated && stream.threadCount === 0 && !syncing && (
-          <p className="text-md-secondary-text text-sm">No messages found.</p>
+          <p className={s.emptyText}>No messages found.</p>
         )}
 
         {stream.pinned.length > 0 && (
-          <section className="mb-6">
-            <div className="max-w-3xl mx-auto">
+          <section className={s.section}>
+            <div className={s.sectionLabelWrap}>
               <SectionLabel>Pinned</SectionLabel>
             </div>
             <LayoutGroup>
@@ -117,7 +118,6 @@ export const App = () => {
 
         {stream.sections.map((group) => {
           const spring = { type: "spring", stiffness: 500, damping: 40 } as const;
-          const cardClass = "max-w-3xl mx-auto bg-white shadow-sm divide-y divide-md-divider overflow-hidden";
 
           const expandedBundleIdx = expandedKey?.startsWith("bundle:")
             ? group.items.findIndex(
@@ -153,22 +153,22 @@ export const App = () => {
             : null;
 
           return (
-            <section key={group.label} className="mb-6">
-              <div className="max-w-3xl mx-auto flex items-center justify-between pr-1">
+            <section key={group.label} className={s.section}>
+              <div className={s.sectionHeader}>
                 <SectionLabel>{group.label}</SectionLabel>
                 <button
                   onClick={() => sectionDoneAll(group.items)}
                   title="Done all"
-                  className="text-md-secondary-text hover:text-md-on-surface -mt-2"
+                  className={s.doneAllBtn}
                 >
-                  <Icon name="done_all" className="text-xl" />
+                  <Icon name="done_all" className={s.doneAllIcon} />
                 </button>
               </div>
               <LayoutGroup>
                 {openBundle ? (
                   <>
                     {expandedBundleIdx > 0 && (
-                      <motion.div layout transition={spring} className={cardClass}>
+                      <motion.div layout transition={spring} className={s.card}>
                         {renderItems(group.items.slice(0, expandedBundleIdx))}
                       </motion.div>
                     )}
@@ -181,13 +181,13 @@ export const App = () => {
                       expandedRef={expandedRef}
                     />
                     {expandedBundleIdx < group.items.length - 1 && (
-                      <motion.div layout transition={spring} className={cardClass}>
+                      <motion.div layout transition={spring} className={s.card}>
                         {renderItems(group.items.slice(expandedBundleIdx + 1))}
                       </motion.div>
                     )}
                   </>
                 ) : (
-                  <motion.div layout transition={spring} className={cardClass}>
+                  <motion.div layout transition={spring} className={s.card}>
                     {renderItems(group.items)}
                   </motion.div>
                 )}
@@ -198,4 +198,4 @@ export const App = () => {
       </div>
     </div>
   );
-}
+};

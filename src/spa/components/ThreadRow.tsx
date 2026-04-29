@@ -5,6 +5,7 @@ import { formatDate } from "../lib/dateBucket";
 import { ActionStrip } from "./ActionStrip";
 import { RowHeader } from "./RowHeader";
 import { ThreadView } from "./ThreadView";
+import s from "./ThreadRow.module.css";
 
 export const ThreadRow = ({
   thread: t,
@@ -28,15 +29,12 @@ export const ThreadRow = ({
       data-row
       ref={isExpanded ? expandedRef : undefined}
       transition={{ type: "spring", stiffness: 500, damping: 40 }}
-      className="w-full"
+      className={s.row}
     >
       {!isExpanded && (
         <RowHeader
           leading={
-            <div
-              className="w-9 h-9 rounded-full flex items-center justify-center text-white font-medium text-sm"
-              style={{ backgroundColor: avatarBg }}
-            >
+            <div className={s.avatar} style={{ backgroundColor: avatarBg }}>
               {initial}
             </div>
           }
@@ -63,4 +61,4 @@ export const ThreadRow = ({
       </AnimatePresence>
     </motion.div>
   );
-}
+};

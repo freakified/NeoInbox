@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RawMessage } from "../../shared/types";
 import { buildSrcdoc, extractHtmlBody, extractTextBody } from "../lib/srcdoc";
+import s from "./MessageBody.module.css";
 
 export const MessageBody = ({
   message: m,
@@ -47,19 +48,19 @@ export const MessageBody = ({
   );
 
   return (
-    <div className="bg-neutral-50">
-      <div className="flex items-center justify-between gap-2 px-4 py-2 border-b border-neutral-200 text-xs text-neutral-500">
+    <div className={s.body}>
+      <div className={s.toolbar}>
         <span>
           {m.author} &mdash; {new Date(m.date).toLocaleString()}
         </span>
-        <div className="flex gap-2">
+        <div className={s.toolbarActions}>
           {!showImages && !isPlainText && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setShowImages(true);
               }}
-              className="px-2 py-0.5 rounded border border-neutral-300 bg-white hover:bg-neutral-100 text-neutral-700"
+              className={s.toolbarBtn}
             >
               Load images
             </button>
@@ -72,14 +73,14 @@ export const MessageBody = ({
                 location: "tab",
               });
             }}
-            className="px-2 py-0.5 rounded border border-neutral-300 bg-white hover:bg-neutral-100 text-neutral-700"
+            className={s.toolbarBtn}
           >
             Open in Thunderbird ↗
           </button>
         </div>
       </div>
       {rawHtml === null ? (
-        <div className="px-4 py-6 text-sm text-neutral-400">Loading…</div>
+        <div className={s.loading}>Loading…</div>
       ) : (
         <iframe
           ref={iframeRef}
@@ -97,4 +98,4 @@ export const MessageBody = ({
       )}
     </div>
   );
-}
+};

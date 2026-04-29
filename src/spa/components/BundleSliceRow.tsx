@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { clsx } from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Category, Thread } from "../../shared/types";
 import { getCategoryMeta } from "../../shared/categories";
@@ -9,6 +10,7 @@ import { Icon } from "./Icon";
 import { RowGroup } from "./RowGroup";
 import { RowHeader } from "./RowHeader";
 import { ThreadRow } from "./ThreadRow";
+import s from "./BundleSliceRow.module.css";
 
 export const BundleSliceRow = ({
   bundleKey,
@@ -27,8 +29,8 @@ export const BundleSliceRow = ({
 }) => {
   const customBundles = useCustomBundles();
   const meta = getCategoryMeta(category, customBundles);
-  const doneThread = useMailStore((s) => s.doneThread);
-  const trashThread = useMailStore((s) => s.trashThread);
+  const doneThread = useMailStore((st) => st.doneThread);
+  const trashThread = useMailStore((st) => st.trashThread);
 
   const unread = threads.reduce((n, t) => n + t.unreadCount, 0);
   const latestDate = threads.reduce((max, t) => Math.max(max, t.latestDate), 0);
@@ -69,30 +71,22 @@ export const BundleSliceRow = ({
       data-row
       ref={isOpen ? expandedRef : undefined}
       transition={{ type: "spring", stiffness: 500, damping: 40 }}
-      className={
-        isOpen ? "w-full bg-neutral-200 overflow-hidden" : "w-full overflow-hidden"
-      }
+      className={clsx(s.slice, isOpen && s.sliceOpen)}
     >
       {!isOpen && (
         <RowHeader
           leading={
-            <div className="w-9 h-9 flex items-center justify-center">
-              <Icon
-                name={meta.icon}
-                className="text-[22px]"
-                style={{ color: meta.color }}
-              />
+            <div className={s.iconWrap}>
+              <Icon name={meta.icon} className={s.iconSized} style={{ color: meta.color }} />
             </div>
           }
           primary={
             <>
-              <span style={{ color: meta.color }} className="font-medium">
+              <span style={{ color: meta.color }} className={s.bundleName}>
                 {meta.name}
               </span>
               {unread > 0 && (
-                <span className="text-xs font-semibold text-md-on-surface ml-1">
-                  ({unread})
-                </span>
+                <span className={s.unreadCount}>({unread})</span>
               )}
             </>
           }
@@ -103,28 +97,28 @@ export const BundleSliceRow = ({
       )}
 
       {isOpen && (
-        <div className="flex items-center justify-between px-5 py-4 bg-neutral-200">
+        <div className={s.openHeader}>
           <button
             onClick={() => onToggle(bundleKey)}
-            className="text-2xl font-medium hover:opacity-80"
+            className={s.bundleTitle}
             style={{ color: meta.color }}
           >
             {meta.name}
           </button>
-          <div className="flex items-center gap-1 text-md-secondary-text">
+          <div className={s.actions}>
             <button
               onClick={handleTrashAll}
               title="Delete all"
-              className="hover:text-md-on-surface p-1 rounded hover:bg-neutral-100"
+              className={s.actionBtn}
             >
-              <Icon name="delete" className="text-xl" />
+              <Icon name="delete" className={s.actionIcon} />
             </button>
             <button
               onClick={handleDoneAll}
               title="Archive all"
-              className="hover:text-md-on-surface p-1 rounded hover:bg-neutral-100"
+              className={s.actionBtn}
             >
-              <Icon name="check" className="text-xl" />
+              <Icon name="check" className={s.actionIcon} />
             </button>
           </div>
         </div>
@@ -138,15 +132,13 @@ export const BundleSliceRow = ({
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2, ease: "easeInOut" }}
-            className="overflow-hidden"
+            className={s.expandBody}
           >
-            <div className="bg-neutral-200 pb-5">
+            <div className={s.expandInner}>
               {groupByBucket(threads, (t) => t.latestDate).map(
                 ({ label, items }) => (
                   <div key={label}>
-                    <p className="text-sm text-md-secondary-text pt-4 pb-2 px-4">
-                      {label}
-                    </p>
+                    <p className={s.bucketLabel}>{label}</p>
                     <RowGroup>
                       {items.map((t) => (
                         <ThreadRow
@@ -166,4 +158,4 @@ export const BundleSliceRow = ({
       </AnimatePresence>
     </motion.div>
   );
-}
+};

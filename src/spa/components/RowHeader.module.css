@@ -1,0 +1,52 @@
+.row {
+  position: relative;
+  padding: 8px 12px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: #fafafa;
+}
+
+.leading {
+  flex-shrink: 0;
+}
+
+.primary {
+  width: 176px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+  color: var(--color-md-on-surface);
+  font-weight: 400;
+}
+
+.primary.bold {
+  font-weight: 600;
+}
+
+.secondary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  color: var(--color-md-secondary-text);
+  font-weight: 400;
+}
+
+.secondary.bold {
+  font-weight: 600;
+  color: var(--color-md-on-surface);
+}
+
+.date {
+  font-size: 12px;
+  color: var(--color-md-secondary-text);
+  flex-shrink: 0;
+  margin-left: 8px;
+}

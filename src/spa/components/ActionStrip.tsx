@@ -1,13 +1,15 @@
+import { clsx } from "clsx";
 import type { Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
 import { Icon } from "./Icon";
 import { SnoozeMenu } from "./SnoozeMenu";
+import s from "./ActionStrip.module.css";
 
 export const ActionStrip = ({ thread }: { thread: Thread }) => {
-  const pin = useMailStore((s) => s.pin);
-  const doneThread = useMailStore((s) => s.doneThread);
-  const snoozeThread = useMailStore((s) => s.snoozeThread);
-  const trashThread = useMailStore((s) => s.trashThread);
+  const pin = useMailStore((st) => st.pin);
+  const doneThread = useMailStore((st) => st.doneThread);
+  const snoozeThread = useMailStore((st) => st.snoozeThread);
+  const trashThread = useMailStore((st) => st.trashThread);
 
   const togglePin = () => {
     const next = !thread.pinned;
@@ -20,26 +22,23 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
   const onTrash = () => trashThread(thread.messages.map((m) => m.id));
 
   return (
-    <div
-      className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center bg-white shadow-elevation-1 rounded"
-      onClick={(e) => e.stopPropagation()}
-    >
+    <div className={s.strip} onClick={(e) => e.stopPropagation()}>
       <ActionBtn title={thread.pinned ? "Unpin" : "Pin"} onClick={togglePin}>
         <Icon
           name="push_pin"
-          className={`text-lg ${thread.pinned ? "text-md-primary" : "text-neutral-400"}`}
+          className={clsx(s.iconBase, thread.pinned ? s.iconPrimary : s.iconMuted)}
         />
       </ActionBtn>
       <SnoozeMenu onChoose={onSnooze} />
       <ActionBtn title="Trash" onClick={onTrash}>
-        <Icon name="delete" className="text-lg text-neutral-400" />
+        <Icon name="delete" className={clsx(s.iconBase, s.iconMuted)} />
       </ActionBtn>
       <ActionBtn title="Done" onClick={onDone}>
-        <Icon name="check" className="text-lg text-neutral-400" />
+        <Icon name="check" className={clsx(s.iconBase, s.iconMuted)} />
       </ActionBtn>
     </div>
   );
-}
+};
 
 const ActionBtn = ({
   title,
@@ -49,17 +48,15 @@ const ActionBtn = ({
   title: string;
   onClick: () => void;
   children: React.ReactNode;
-}) => {
-  return (
-    <button
-      title={title}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      className="p-1.5 rounded-full hover:bg-neutral-100 leading-none"
-    >
-      {children}
-    </button>
-  );
-}
+}) => (
+  <button
+    title={title}
+    onClick={(e) => {
+      e.stopPropagation();
+      onClick();
+    }}
+    className={s.btn}
+  >
+    {children}
+  </button>
+);

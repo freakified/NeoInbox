@@ -1,0 +1,15 @@
+.row {
+  width: 100%;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 500;
+  font-size: 14px;
+}

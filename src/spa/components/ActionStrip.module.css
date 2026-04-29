@@ -1,0 +1,36 @@
+.strip {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  background: #fff;
+  box-shadow: var(--shadow-elevation-1);
+  border-radius: 4px;
+}
+
+.btn {
+  padding: 6px;
+  border-radius: 9999px;
+  line-height: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: #f5f5f5;
+}
+
+.iconBase {
+  font-size: 18px;
+}
+
+.iconMuted {
+  color: #a3a3a3;
+}
+
+.iconPrimary {
+  color: var(--color-md-primary);
+}

@@ -1,0 +1,513 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.panel {
+  position: relative;
+  margin-left: auto;
+  width: 100%;
+  max-width: 32rem;
+  height: 100%;
+  background: #fff;
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--color-md-divider);
+  background: var(--color-md-primary);
+}
+
+.panelTitle {
+  font-size: 18px;
+  font-weight: 500;
+  color: #fff;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1;
+}
+
+.closeBtn:hover {
+  color: #fff;
+}
+
+.closeIcon {
+  font-size: 24px;
+}
+
+.panelBody {
+  overflow-y: auto;
+  flex: 1;
+  padding: 24px;
+}
+
+.panelBody > section + section {
+  margin-top: 32px;
+}
+
+.sectionHead {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-md-secondary-text);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  margin-bottom: 12px;
+}
+
+.sectionDesc {
+  font-size: 12px;
+  color: var(--color-md-secondary-text);
+  margin-bottom: 16px;
+}
+
+.sectionRows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ─── BuiltinBundleRow ─────────────────────────────────────────────── */
+
+.bundleCard {
+  border: 1px solid var(--color-md-divider);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.bundleCardTrigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.bundleCardTrigger:hover {
+  background: #fafafa;
+}
+
+.bundleCardName {
+  font-weight: 500;
+  font-size: 14px;
+  flex: 1;
+}
+
+.bundleCardCount {
+  font-size: 12px;
+  color: var(--color-md-secondary-text);
+}
+
+.bundleCardExpandIcon {
+  font-size: 18px;
+  color: var(--color-md-secondary-text);
+}
+
+.bundleCardIcon {
+  font-size: 20px;
+}
+
+.expandedSection {
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--color-md-divider);
+  background: #fafafa;
+}
+
+.expandedDesc {
+  font-size: 12px;
+  color: var(--color-md-secondary-text);
+  margin: 12px 0 8px;
+}
+
+.chipList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 1px solid var(--color-md-divider);
+}
+
+.chipRemove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: var(--color-md-secondary-text);
+  line-height: 1;
+}
+
+.chipRemove:hover {
+  color: var(--color-md-on-surface);
+}
+
+.chipRemoveIcon {
+  font-size: 14px;
+}
+
+.inputRow {
+  display: flex;
+  gap: 8px;
+}
+
+.textInput {
+  flex: 1;
+  font-size: 14px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-md-divider);
+  border-radius: 4px;
+  background: #fff;
+  outline: none;
+}
+
+.textInput:focus {
+  box-shadow: 0 0 0 1px var(--color-md-primary);
+}
+
+.primaryBtn {
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  background: var(--color-md-primary);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+
+.primaryBtn:hover {
+  opacity: 0.9;
+}
+
+.primaryBtn:disabled {
+  opacity: 0.4;
+}
+
+/* ─── CustomBundleEditor ───────────────────────────────────────────── */
+
+.editorCard {
+  border: 1px solid var(--color-md-divider);
+  border-radius: 8px;
+  padding: 16px;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fieldLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-md-secondary-text);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.colorIconRow {
+  display: flex;
+  gap: 24px;
+}
+
+.colorGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.colorSwatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: border-color 150ms;
+}
+
+.iconGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 200px;
+}
+
+.iconOption {
+  padding: 4px;
+  border-radius: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.iconOption:hover {
+  background: #fff;
+}
+
+.iconOptionActive {
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--color-md-primary);
+}
+
+.iconOptionIcon {
+  font-size: 18px;
+}
+
+.ruleList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.ruleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  background: #fff;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--color-md-divider);
+}
+
+.ruleType {
+  font-size: 12px;
+  color: var(--color-md-secondary-text);
+  text-transform: capitalize;
+  flex-shrink: 0;
+}
+
+.ruleValue {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ruleRemove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: var(--color-md-secondary-text);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.ruleRemove:hover {
+  color: var(--color-md-on-surface);
+}
+
+.ruleRemoveIcon {
+  font-size: 14px;
+}
+
+.ruleInputRow {
+  display: flex;
+  gap: 8px;
+}
+
+.ruleTypeSelect {
+  font-size: 14px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-md-divider);
+  border-radius: 4px;
+  background: #fff;
+  outline: none;
+}
+
+.ruleValueInput {
+  flex: 1;
+  font-size: 14px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-md-divider);
+  border-radius: 4px;
+  background: #fff;
+  outline: none;
+}
+
+.ruleValueInput:focus {
+  box-shadow: 0 0 0 1px var(--color-md-primary);
+}
+
+.addRuleBtn {
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--color-md-divider);
+  background: #fff;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.addRuleBtn:hover {
+  background: #f5f5f5;
+}
+
+.addRuleBtn:disabled {
+  opacity: 0.4;
+}
+
+.addRuleBtnIcon {
+  font-size: 16px;
+}
+
+.editorActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.cancelBtn {
+  font-size: 14px;
+  padding: 6px 16px;
+  border-radius: 4px;
+  border: 1px solid var(--color-md-divider);
+  background: none;
+  cursor: pointer;
+}
+
+.cancelBtn:hover {
+  background: #f5f5f5;
+}
+
+.saveBtn {
+  font-size: 14px;
+  padding: 6px 16px;
+  border-radius: 4px;
+  background: var(--color-md-primary);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+
+.saveBtn:hover {
+  opacity: 0.9;
+}
+
+.saveBtn:disabled {
+  opacity: 0.4;
+}
+
+/* ─── CustomBundleRow ──────────────────────────────────────────────── */
+
+.customCard {
+  border: 1px solid var(--color-md-divider);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.customCardRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.customCardName {
+  font-weight: 500;
+  font-size: 14px;
+  flex: 1;
+}
+
+.customCardMeta {
+  font-size: 12px;
+  color: var(--color-md-secondary-text);
+}
+
+.customCardIcon {
+  font-size: 20px;
+}
+
+.customCardBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--color-md-secondary-text);
+  line-height: 1;
+}
+
+.customCardBtn:hover {
+  color: var(--color-md-on-surface);
+}
+
+.customCardDeleteBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--color-md-secondary-text);
+  line-height: 1;
+}
+
+.customCardDeleteBtn:hover {
+  color: #ef4444;
+}
+
+.customCardActionIcon {
+  font-size: 16px;
+}
+
+/* ─── New bundle button ────────────────────────────────────────────── */
+
+.newBundleBtn {
+  margin-top: 12px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 2px dashed var(--color-md-divider);
+  background: none;
+  color: var(--color-md-secondary-text);
+  cursor: pointer;
+  transition: color 150ms, border-color 150ms;
+}
+
+.newBundleBtn:hover {
+  border-color: var(--color-md-primary);
+  color: var(--color-md-primary);
+}
+
+.newBundleBtnIcon {
+  font-size: 16px;
+}
+
+.newBundleEditorWrap {
+  margin-top: 8px;
+}

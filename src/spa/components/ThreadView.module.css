@@ -1,0 +1,48 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-md-divider);
+  background: #fff;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--color-md-on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headerActions {
+  flex-shrink: 0;
+  margin-left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.iconBtn {
+  padding: 6px;
+  border-radius: 9999px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-md-secondary-text);
+  line-height: 1;
+}
+
+.iconBtn:hover {
+  color: var(--color-md-on-surface);
+  background: #f5f5f5;
+}
+
+.iconBtnIcon {
+  font-size: 20px;
+}
+
+.messages > * + * {
+  border-top: 1px solid var(--color-md-divider);
+}

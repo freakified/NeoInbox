@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { snoozePresets } from "../lib/snoozePresets";
 import { Icon } from "./Icon";
+import s from "./SnoozeMenu.module.css";
 
 export const SnoozeMenu = ({
   onChoose,
@@ -20,23 +21,23 @@ export const SnoozeMenu = ({
   }, [open]);
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className={s.wrapper}>
       <button
         title="Snooze"
         onClick={(e) => {
           e.stopPropagation();
           setOpen((o) => !o);
         }}
-        className="p-1.5 rounded-full hover:bg-neutral-100 leading-none"
+        className={s.trigger}
       >
-        <Icon name="snooze" className="text-lg text-neutral-400" />
+        <Icon name="snooze" className={s.triggerIcon} />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-10 bg-white shadow-elevation-2 rounded border border-md-divider py-1 min-w-36">
+        <div className={s.dropdown}>
           {snoozePresets().map(({ label, wakeAt }) => (
             <button
               key={label}
-              className="w-full text-left text-sm px-3 py-1.5 hover:bg-neutral-50"
+              className={s.option}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpen(false);
@@ -50,4 +51,4 @@ export const SnoozeMenu = ({
       )}
     </div>
   );
-}
+};

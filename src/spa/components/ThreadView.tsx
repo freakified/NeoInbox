@@ -4,14 +4,15 @@ import { useMailStore } from "../../store/mailStore";
 import { Icon } from "./Icon";
 import { InlineMessage } from "./InlineMessage";
 import { ReplyFooter } from "./ReplyFooter";
+import s from "./ThreadView.module.css";
 
 export const ThreadView = ({
   thread: t,
 }: {
   thread: Thread;
 }) => {
-  const doneThread = useMailStore((s) => s.doneThread);
-  const trashThread = useMailStore((s) => s.trashThread);
+  const doneThread = useMailStore((st) => st.doneThread);
+  const trashThread = useMailStore((st) => st.trashThread);
 
   const latestInbox = useMemo(() => {
     const inbox = t.messages.filter((m) => m.origin === "inbox");
@@ -40,20 +41,18 @@ export const ThreadView = ({
 
   return (
     <div>
-      <div className="flex items-center justify-between px-5 py-4 border-b border-md-divider bg-white">
-        <h2 className="text-lg font-medium text-md-on-surface truncate">
-          {t.subject || "(no subject)"}
-        </h2>
-        <div className="shrink-0 ml-3 flex items-center gap-1">
+      <div className={s.header}>
+        <h2 className={s.title}>{t.subject || "(no subject)"}</h2>
+        <div className={s.headerActions}>
           <button
             onClick={(e) => {
               e.stopPropagation();
               onDone();
             }}
             title="Archive thread"
-            className="p-1.5 rounded-full text-md-secondary-text hover:text-md-on-surface hover:bg-neutral-100"
+            className={s.iconBtn}
           >
-            <Icon name="archive" className="text-xl" />
+            <Icon name="archive" className={s.iconBtnIcon} />
           </button>
           <button
             onClick={(e) => {
@@ -61,14 +60,14 @@ export const ThreadView = ({
               onTrash();
             }}
             title="Move thread to trash"
-            className="p-1.5 rounded-full text-md-secondary-text hover:text-md-on-surface hover:bg-neutral-100"
+            className={s.iconBtn}
           >
-            <Icon name="delete" className="text-xl" />
+            <Icon name="delete" className={s.iconBtnIcon} />
           </button>
         </div>
       </div>
 
-      <div className="flex flex-col divide-y divide-md-divider">
+      <div className={s.messages}>
         {t.messages.map((m) => (
           <InlineMessage
             key={m.id}
@@ -82,4 +81,4 @@ export const ThreadView = ({
       <ReplyFooter latest={latestInbox} />
     </div>
   );
-}
+};

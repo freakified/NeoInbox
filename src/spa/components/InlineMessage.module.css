@@ -1,0 +1,58 @@
+.message {
+  background: #fff;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  cursor: pointer;
+}
+
+.header:hover {
+  background: #fafafa;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.meta {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.sender {
+  font-size: 14px;
+  flex-shrink: 0;
+  color: #525252;
+}
+
+.senderUnread {
+  font-weight: 600;
+  color: #171717;
+}
+
+.date {
+  font-size: 12px;
+  color: #a3a3a3;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.bodyWrap {
+  overflow: hidden;
+}

@@ -1,3 +1,6 @@
+import { clsx } from "clsx";
+import s from "./Icon.module.css";
+
 export const Icon = ({
   name,
   className = "",
@@ -7,7 +10,7 @@ export const Icon = ({
   className?: string;
   style?: React.CSSProperties;
 }) => (
-  <span className={`material-icons select-none ${className}`} style={style} aria-hidden="true">
+  <span className={clsx("material-icons", s.icon, className)} style={style} aria-hidden="true">
     {name}
   </span>
 );
