@@ -68,7 +68,11 @@ export const InlineMessage = ({
         </div>
       </div>
 
-      <ExpandableRegion isOpen={isOpen} className={s.bodyWrap}>
+      <ExpandableRegion
+        isOpen={isOpen}
+        className={s.bodyWrap}
+        innerClassName={s.bodyInner}
+      >
         <MessageBody message={m} />
       </ExpandableRegion>
     </div>
