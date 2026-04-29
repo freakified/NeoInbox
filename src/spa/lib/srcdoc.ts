@@ -26,6 +26,34 @@ export const extractTextBody = (
   return null;
 }
 
+export const extractPreviewText = (
+  part: messenger.messages.MessagePart,
+): string => {
+  const textPart = findPart(part, "text/plain");
+  const htmlPart = textPart ? null : findPart(part, "text/html");
+  const raw = textPart?.body ?? htmlToText(htmlPart?.body ?? "");
+  return raw.replace(/\s+/g, " ").trim();
+}
+
+const findPart = (
+  part: messenger.messages.MessagePart,
+  contentType: string,
+): messenger.messages.MessagePart | null => {
+  if (part.contentType === contentType) return part;
+  for (const p of part.parts ?? []) {
+    const found = findPart(p, contentType);
+    if (found) return found;
+  }
+  return null;
+}
+
+const htmlToText = (html: string): string => {
+  if (!html) return "";
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("script, style, noscript").forEach((el) => el.remove());
+  return doc.body.textContent ?? "";
+}
+
 const BASE_CSS = `<style>
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
        font-size:14px;margin:0;padding:8px;color:#111;word-break:break-word}

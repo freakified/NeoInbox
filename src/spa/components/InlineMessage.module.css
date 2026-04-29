@@ -4,7 +4,7 @@
 
 .header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
   padding: 12px 20px;
   cursor: pointer;
@@ -12,6 +12,14 @@
 
 .header:hover {
   background: #fafafa;
+}
+
+.headerLocked {
+  cursor: default;
+}
+
+.headerLocked:hover {
+  background: transparent;
 }
 
 .avatar {
@@ -30,6 +38,10 @@
 .meta {
   min-width: 0;
   flex: 1;
+}
+
+.metaLine {
+  min-width: 0;
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -51,6 +63,16 @@
   color: #a3a3a3;
   flex-shrink: 0;
   margin-left: auto;
+}
+
+.preview {
+  margin-top: 4px;
+  color: #737373;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .bodyWrap {

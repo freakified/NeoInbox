@@ -18,12 +18,12 @@ export const ThreadView = ({
     const inbox = t.messages.filter((m) => m.origin === "inbox");
     return inbox[inbox.length - 1] ?? t.messages[t.messages.length - 1];
   }, [t]);
+  const latestMessage = t.messages[t.messages.length - 1];
 
-  const [openIds, setOpenIds] = useState<Set<number>>(
-    () => new Set(latestInbox ? [latestInbox.id] : []),
-  );
+  const [openIds, setOpenIds] = useState<Set<number>>(() => new Set());
+  const [showMiddle, setShowMiddle] = useState(false);
 
-  if (!latestInbox) return null;
+  if (!latestInbox || !latestMessage) return null;
 
   const toggleMsg = (id: number) =>
     setOpenIds((prev) => {
@@ -68,14 +68,56 @@ export const ThreadView = ({
       </div>
 
       <div className={s.messages}>
-        {t.messages.map((m) => (
-          <InlineMessage
-            key={m.id}
-            message={m}
-            isOpen={openIds.has(m.id)}
-            onToggle={() => toggleMsg(m.id)}
-          />
-        ))}
+        {t.messages.length <= 2 ? (
+          t.messages.map((m) => (
+            <InlineMessage
+              key={m.id}
+              message={m}
+              isOpen={m.id === latestMessage.id || openIds.has(m.id)}
+              canToggle={m.id !== latestMessage.id}
+              onToggle={() => toggleMsg(m.id)}
+            />
+          ))
+        ) : (
+          <>
+            <InlineMessage
+              key={t.messages[0]!.id}
+              message={t.messages[0]!}
+              isOpen={openIds.has(t.messages[0]!.id)}
+              onToggle={() => toggleMsg(t.messages[0]!.id)}
+            />
+            {showMiddle ? (
+              t.messages.slice(1, -1).map((m) => (
+                <InlineMessage
+                  key={m.id}
+                  message={m}
+                  isOpen={openIds.has(m.id)}
+                  onToggle={() => toggleMsg(m.id)}
+                />
+              ))
+            ) : (
+              <button
+                className={s.middleCollapsed}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMiddle(true);
+                }}
+                title={`Show ${t.messages.length - 2} hidden replies`}
+              >
+                <span className={s.middleRail} aria-hidden="true" />
+                <span className={s.middleCount}>{t.messages.length - 2}</span>
+                <span className={s.middleRail} aria-hidden="true" />
+              </button>
+            )}
+            <InlineMessage
+              key={latestMessage.id}
+              message={latestMessage}
+              isOpen
+              canToggle={false}
+              onToggle={() => undefined}
+            />
+          </>
+        )}
       </div>
 
       <ReplyFooter latest={latestInbox} />
