@@ -101,17 +101,67 @@ export const App = () => {
               <SectionLabel>Pinned</SectionLabel>
             </div>
             <LayoutGroup>
-              <RowGroup>
-                {stream.pinned.map((t) => (
-                  <ThreadRow
-                    key={t.id}
-                    thread={t}
-                    isExpanded={expandedKey === `thread:${t.id}`}
-                    onToggle={() => toggleKey(`thread:${t.id}`)}
-                    expandedRef={expandedRef}
-                  />
-                ))}
-              </RowGroup>
+              {(() => {
+                const spring = { type: "spring", stiffness: 500, damping: 40 } as const;
+                const expandedPinnedIdx = expandedKey?.startsWith("thread:")
+                  ? stream.pinned.findIndex((t) => expandedKey === `thread:${t.id}`)
+                  : -1;
+                if (expandedPinnedIdx >= 0) {
+                  const expanded = stream.pinned[expandedPinnedIdx]!;
+                  return (
+                    <>
+                      {expandedPinnedIdx > 0 && (
+                        <RowGroup layoutId="pinned-before">
+                          {stream.pinned.slice(0, expandedPinnedIdx).map((t) => (
+                            <ThreadRow
+                              key={t.id}
+                              thread={t}
+                              isExpanded={false}
+                              onToggle={() => toggleKey(`thread:${t.id}`)}
+                              expandedRef={expandedRef}
+                            />
+                          ))}
+                        </RowGroup>
+                      )}
+                      <motion.div layout transition={spring} className={s.expandedThread}>
+                        <ThreadRow
+                          key={expanded.id}
+                          thread={expanded}
+                          isExpanded={true}
+                          onToggle={() => toggleKey(`thread:${expanded.id}`)}
+                          expandedRef={expandedRef}
+                        />
+                      </motion.div>
+                      {expandedPinnedIdx < stream.pinned.length - 1 && (
+                        <RowGroup layoutId="pinned-after">
+                          {stream.pinned.slice(expandedPinnedIdx + 1).map((t) => (
+                            <ThreadRow
+                              key={t.id}
+                              thread={t}
+                              isExpanded={false}
+                              onToggle={() => toggleKey(`thread:${t.id}`)}
+                              expandedRef={expandedRef}
+                            />
+                          ))}
+                        </RowGroup>
+                      )}
+                    </>
+                  );
+                }
+                return (
+                  <RowGroup>
+                    {stream.pinned.map((t) => (
+                      <ThreadRow
+                        key={t.id}
+                        thread={t}
+                        isExpanded={expandedKey === `thread:${t.id}`}
+                        onToggle={() => toggleKey(`thread:${t.id}`)}
+                        expandedRef={expandedRef}
+                      />
+                    ))}
+                  </RowGroup>
+                );
+              })()}
             </LayoutGroup>
           </section>
         )}
@@ -152,6 +202,12 @@ export const App = () => {
             ? group.items[expandedBundleIdx] as Extract<StreamItem, { type: "bundle" }>
             : null;
 
+          const expandedThreadIdx = !openBundle && expandedKey?.startsWith("thread:")
+            ? group.items.findIndex(
+                (item) => item.type === "thread" && expandedKey === `thread:${item.thread.id}`
+              )
+            : -1;
+
           return (
             <section key={group.label} className={s.section}>
               <div className={s.sectionHeader}>
@@ -183,6 +239,27 @@ export const App = () => {
                     {expandedBundleIdx < group.items.length - 1 && (
                       <motion.div layout transition={spring} className={s.card}>
                         {renderItems(group.items.slice(expandedBundleIdx + 1))}
+                      </motion.div>
+                    )}
+                  </>
+                ) : expandedThreadIdx >= 0 ? (
+                  <>
+                    {expandedThreadIdx > 0 && (
+                      <motion.div layout transition={spring} className={s.card}>
+                        {renderItems(group.items.slice(0, expandedThreadIdx))}
+                      </motion.div>
+                    )}
+                    <motion.div layout transition={spring} className={s.expandedThread}>
+                      <ThreadRow
+                        thread={(group.items[expandedThreadIdx] as Extract<StreamItem, { type: "thread" }>).thread}
+                        isExpanded={true}
+                        onToggle={() => toggleKey(expandedKey!)}
+                        expandedRef={expandedRef}
+                      />
+                    </motion.div>
+                    {expandedThreadIdx < group.items.length - 1 && (
+                      <motion.div layout transition={spring} className={s.card}>
+                        {renderItems(group.items.slice(expandedThreadIdx + 1))}
                       </motion.div>
                     )}
                   </>

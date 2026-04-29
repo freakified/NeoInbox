@@ -45,7 +45,9 @@ export const BundleSliceRow = ({
 
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   useEffect(() => {
-    if (!isOpen) setOpenThreadId(null);
+    if (!isOpen) {
+      setOpenThreadId(null);
+    }
   }, [isOpen]);
 
   const toggleThread = (id: string) =>
@@ -136,21 +138,65 @@ export const BundleSliceRow = ({
           >
             <div className={s.expandInner}>
               {groupByBucket(threads, (t) => t.latestDate).map(
-                ({ label, items }) => (
-                  <div key={label}>
-                    <p className={s.bucketLabel}>{label}</p>
-                    <RowGroup>
-                      {items.map((t) => (
-                        <ThreadRow
-                          key={t.id}
-                          thread={t}
-                          isExpanded={openThreadId === t.id}
-                          onToggle={() => toggleThread(t.id)}
-                        />
-                      ))}
-                    </RowGroup>
-                  </div>
-                ),
+                ({ label, items }) => {
+                  const spring = { type: "spring", stiffness: 500, damping: 40 } as const;
+                  const expandedIdx = openThreadId
+                    ? items.findIndex((t) => t.id === openThreadId)
+                    : -1;
+                  return (
+                    <div key={label}>
+                      <p className={s.bucketLabel}>{label}</p>
+                      {expandedIdx >= 0 ? (
+                        <>
+                          {expandedIdx > 0 && (
+                            <RowGroup layoutId={`${label}-before`}>
+                              {items.slice(0, expandedIdx).map((t) => (
+                                <ThreadRow
+                                  key={t.id}
+                                  thread={t}
+                                  isExpanded={false}
+                                  onToggle={() => toggleThread(t.id)}
+                                />
+                              ))}
+                            </RowGroup>
+                          )}
+                          <motion.div layout transition={spring} className={s.expandedThread}>
+                            <ThreadRow
+                              key={items[expandedIdx]!.id}
+                              thread={items[expandedIdx]!}
+                              isExpanded={true}
+                              onToggle={() => toggleThread(items[expandedIdx]!.id)}
+                              expandedRef={expandedRef}
+                            />
+                          </motion.div>
+                          {expandedIdx < items.length - 1 && (
+                            <RowGroup layoutId={`${label}-after`}>
+                              {items.slice(expandedIdx + 1).map((t) => (
+                                <ThreadRow
+                                  key={t.id}
+                                  thread={t}
+                                  isExpanded={false}
+                                  onToggle={() => toggleThread(t.id)}
+                                />
+                              ))}
+                            </RowGroup>
+                          )}
+                        </>
+                      ) : (
+                        <RowGroup>
+                          {items.map((t) => (
+                            <ThreadRow
+                              key={t.id}
+                              thread={t}
+                              isExpanded={openThreadId === t.id}
+                              onToggle={() => toggleThread(t.id)}
+                            />
+                          ))}
+                        </RowGroup>
+                      )}
+                    </div>
+                  );
+                },
               )}
             </div>
           </motion.div>
