@@ -78,10 +78,10 @@ export const NEO_TAG_KEYS: ReadonlySet<string> = new Set(
   ],
 );
 
-const TAG_TO_CATEGORY: ReadonlyMap<string, Category> = new Map(
+const TAG_TO_CATEGORY: ReadonlyMap<string, BuiltinCategory> = new Map(
   Object.entries(CATEGORIES)
     .filter(([, m]) => m.key)
-    .map(([cat, m]) => [m.key, cat as Category]),
+    .map(([cat, m]) => [m.key, cat as BuiltinCategory]),
 );
 
 export const categoryFromTags = (tags: readonly string[]): BuiltinCategory | null => {

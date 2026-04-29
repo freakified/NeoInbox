@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
-import { AnimatePresence, motion } from "framer-motion";
 import type { Category, Thread } from "../../shared/types";
 import { getCategoryMeta } from "../../shared/categories";
 import { useMailStore, useCustomBundles } from "../../store/mailStore";
 import { senderName } from "../lib/avatar";
 import { formatDate, groupByBucket } from "../lib/dateBucket";
 import { Icon } from "./Icon";
+import { ExpandableRegion, MotionRow, MotionSurface } from "./Motion";
 import { RowGroup } from "./RowGroup";
 import { RowHeader } from "./RowHeader";
 import { ThreadRow } from "./ThreadRow";
@@ -19,6 +19,8 @@ export const BundleSliceRow = ({
   isOpen,
   onToggle,
   expandedRef,
+  openThreadId,
+  onOpenThreadChange,
 }: {
   bundleKey: string;
   category: Category;
@@ -26,6 +28,8 @@ export const BundleSliceRow = ({
   isOpen: boolean;
   onToggle: (key: string) => void;
   expandedRef: React.RefObject<HTMLDivElement | null>;
+  openThreadId?: string | null;
+  onOpenThreadChange?: (id: string | null) => void;
 }) => {
   const customBundles = useCustomBundles();
   const meta = getCategoryMeta(category, customBundles);
@@ -43,15 +47,18 @@ export const BundleSliceRow = ({
     .filter(Boolean)
     .join(" · ");
 
-  const [openThreadId, setOpenThreadId] = useState<string | null>(null);
+  const [localOpenThreadId, setLocalOpenThreadId] = useState<string | null>(null);
+  const activeOpenThreadId = openThreadId !== undefined ? openThreadId : localOpenThreadId;
+  const setOpenThreadId = onOpenThreadChange ?? setLocalOpenThreadId;
+
   useEffect(() => {
     if (!isOpen) {
       setOpenThreadId(null);
     }
-  }, [isOpen]);
+  }, [isOpen, setOpenThreadId]);
 
   const toggleThread = (id: string) =>
-    setOpenThreadId((prev) => (prev === id ? null : id));
+    setOpenThreadId(activeOpenThreadId === id ? null : id);
 
   const handleDoneAll = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -68,12 +75,23 @@ export const BundleSliceRow = ({
   };
 
   return (
-    <motion.div
-      layout
+    <MotionRow
       data-row
       ref={isOpen ? expandedRef : undefined}
-      transition={{ type: "spring", stiffness: 500, damping: 40 }}
       className={clsx(s.slice, isOpen && s.sliceOpen)}
+      onClick={(e) => {
+        if (!isOpen || !activeOpenThreadId) return;
+
+        const target = e.target as HTMLElement;
+        if (
+          target.closest("[data-expanded-thread]") ||
+          target.closest("[data-thread-row]")
+        ) {
+          return;
+        }
+
+        setOpenThreadId(null);
+      }}
     >
       {!isOpen && (
         <RowHeader
@@ -126,82 +144,74 @@ export const BundleSliceRow = ({
         </div>
       )}
 
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            key="body"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: "easeInOut" }}
-            className={s.expandBody}
-          >
-            <div className={s.expandInner}>
-              {groupByBucket(threads, (t) => t.latestDate).map(
-                ({ label, items }) => {
-                  const spring = { type: "spring", stiffness: 500, damping: 40 } as const;
-                  const expandedIdx = openThreadId
-                    ? items.findIndex((t) => t.id === openThreadId)
-                    : -1;
-                  return (
-                    <div key={label}>
-                      <p className={s.bucketLabel}>{label}</p>
-                      {expandedIdx >= 0 ? (
-                        <>
-                          {expandedIdx > 0 && (
-                            <RowGroup layoutId={`${label}-before`}>
-                              {items.slice(0, expandedIdx).map((t) => (
-                                <ThreadRow
-                                  key={t.id}
-                                  thread={t}
-                                  isExpanded={false}
-                                  onToggle={() => toggleThread(t.id)}
-                                />
-                              ))}
-                            </RowGroup>
-                          )}
-                          <motion.div layout transition={spring} className={s.expandedThread}>
-                            <ThreadRow
-                              key={items[expandedIdx]!.id}
-                              thread={items[expandedIdx]!}
-                              isExpanded={true}
-                              onToggle={() => toggleThread(items[expandedIdx]!.id)}
-                              expandedRef={expandedRef}
-                            />
-                          </motion.div>
-                          {expandedIdx < items.length - 1 && (
-                            <RowGroup layoutId={`${label}-after`}>
-                              {items.slice(expandedIdx + 1).map((t) => (
-                                <ThreadRow
-                                  key={t.id}
-                                  thread={t}
-                                  isExpanded={false}
-                                  onToggle={() => toggleThread(t.id)}
-                                />
-                              ))}
-                            </RowGroup>
-                          )}
-                        </>
-                      ) : (
-                        <RowGroup>
-                          {items.map((t) => (
-                            <ThreadRow
-                              key={t.id}
-                              thread={t}
-                              isExpanded={openThreadId === t.id}
-                              onToggle={() => toggleThread(t.id)}
-                            />
-                          ))}
-                        </RowGroup>
-                      )}
-                    </div>
-                  );
-                },
-              )}
-            </div>
-          </motion.div>
+      <ExpandableRegion
+        isOpen={isOpen}
+        className={s.expandBody}
+        innerClassName={s.expandInner}
+      >
+        {groupByBucket(threads, (t) => t.latestDate).map(
+          ({ label, items }) => {
+            const expandedIdx = activeOpenThreadId
+              ? items.findIndex((t) => t.id === activeOpenThreadId)
+              : -1;
+            const bucketKey = `${category}-${label}`;
+
+            return (
+              <div key={label}>
+                <p className={s.bucketLabel}>{label}</p>
+                {expandedIdx >= 0 ? (
+                  <>
+                    {expandedIdx > 0 && (
+                      <RowGroup layoutId={`${bucketKey}-before`}>
+                        {items.slice(0, expandedIdx).map((t) => (
+                          <ThreadRow
+                            key={t.id}
+                            thread={t}
+                            isExpanded={false}
+                            onToggle={() => toggleThread(t.id)}
+                          />
+                        ))}
+                      </RowGroup>
+                    )}
+                    <MotionSurface className={s.expandedThread} data-expanded-thread>
+                      <ThreadRow
+                        key={items[expandedIdx]!.id}
+                        thread={items[expandedIdx]!}
+                        isExpanded={true}
+                        onToggle={() => toggleThread(items[expandedIdx]!.id)}
+                        expandedRef={expandedRef}
+                      />
+                    </MotionSurface>
+                    {expandedIdx < items.length - 1 && (
+                      <RowGroup layoutId={`${bucketKey}-after`}>
+                        {items.slice(expandedIdx + 1).map((t) => (
+                          <ThreadRow
+                            key={t.id}
+                            thread={t}
+                            isExpanded={false}
+                            onToggle={() => toggleThread(t.id)}
+                          />
+                        ))}
+                      </RowGroup>
+                    )}
+                  </>
+                ) : (
+                  <RowGroup>
+                    {items.map((t) => (
+                      <ThreadRow
+                        key={t.id}
+                        thread={t}
+                        isExpanded={activeOpenThreadId === t.id}
+                        onToggle={() => toggleThread(t.id)}
+                      />
+                    ))}
+                  </RowGroup>
+                )}
+              </div>
+            );
+          },
         )}
-      </AnimatePresence>
-    </motion.div>
+      </ExpandableRegion>
+    </MotionRow>
   );
 };

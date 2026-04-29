@@ -4,7 +4,7 @@ import { broadcast } from "./port";
 import { db } from "../store/db";
 import { categoryFromTags } from "../shared/categories";
 import { collectInboxFolders, collectSentFolders } from "../shared/folders";
-import type { RawMessage } from "../shared/types";
+import type { Category, RawMessage } from "../shared/types";
 import { ensureTagsRegistered } from "./tags";
 
 const PROGRESS_EVERY = 50;
@@ -47,7 +47,7 @@ export const runBackfill = async (): Promise<{
         for (const header of page.messages) {
           scanned++;
           const before = categoryFromTags(header.tags);
-          let appliedCategory = before;
+          let appliedCategory: Category | null = before;
           if (origin === "inbox" && !before) {
             const cat = await classifyAndTag(header);
             if (cat) {

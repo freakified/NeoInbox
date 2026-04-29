@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { LayoutGroup, motion } from "framer-motion";
+import { LayoutGroup, useReducedMotion } from "framer-motion";
 import {
   useHydrated,
   useMailStore,
@@ -9,6 +9,7 @@ import {
 } from "../store/mailStore";
 import { BundleSliceRow } from "./components/BundleSliceRow";
 import { Icon } from "./components/Icon";
+import { MotionSurface } from "./components/Motion";
 import { RowGroup } from "./components/RowGroup";
 import { SectionLabel } from "./components/SectionLabel";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -35,8 +36,10 @@ export const App = () => {
   };
 
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [openBundleThreadId, setOpenBundleThreadId] = useState<string | null>(null);
   const expandedRef = useRef<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     void init();
@@ -45,14 +48,16 @@ export const App = () => {
   useEffect(() => {
     if (expandedKey) {
       expandedRef.current?.scrollIntoView({
-        behavior: "smooth",
+        behavior: reducedMotion ? "auto" : "smooth",
         block: "nearest",
       });
     }
-  }, [expandedKey]);
+  }, [expandedKey, reducedMotion]);
 
-  const toggleKey = (key: string) =>
+  const toggleKey = (key: string) => {
+    setOpenBundleThreadId(null);
     setExpandedKey((prev) => (prev === key ? null : key));
+  };
 
   const syncing = sync && !sync.done;
 
@@ -62,6 +67,11 @@ export const App = () => {
       onClick={(e) => {
         if (!expandedKey) return;
         if (!(e.target as HTMLElement).closest("[data-row]")) {
+          if (expandedKey.startsWith("bundle:") && openBundleThreadId) {
+            setOpenBundleThreadId(null);
+            return;
+          }
+
           setExpandedKey(null);
         }
       }}
@@ -102,7 +112,6 @@ export const App = () => {
             </div>
             <LayoutGroup>
               {(() => {
-                const spring = { type: "spring", stiffness: 500, damping: 40 } as const;
                 const expandedPinnedIdx = expandedKey?.startsWith("thread:")
                   ? stream.pinned.findIndex((t) => expandedKey === `thread:${t.id}`)
                   : -1;
@@ -123,7 +132,7 @@ export const App = () => {
                           ))}
                         </RowGroup>
                       )}
-                      <motion.div layout transition={spring} className={s.expandedThread}>
+                      <MotionSurface className={s.expandedThread}>
                         <ThreadRow
                           key={expanded.id}
                           thread={expanded}
@@ -131,7 +140,7 @@ export const App = () => {
                           onToggle={() => toggleKey(`thread:${expanded.id}`)}
                           expandedRef={expandedRef}
                         />
-                      </motion.div>
+                      </MotionSurface>
                       {expandedPinnedIdx < stream.pinned.length - 1 && (
                         <RowGroup layoutId="pinned-after">
                           {stream.pinned.slice(expandedPinnedIdx + 1).map((t) => (
@@ -167,8 +176,6 @@ export const App = () => {
         )}
 
         {stream.sections.map((group) => {
-          const spring = { type: "spring", stiffness: 500, damping: 40 } as const;
-
           const expandedBundleIdx = expandedKey?.startsWith("bundle:")
             ? group.items.findIndex(
                 (item) => item.type === "bundle" && expandedKey === `bundle:${item.category}`
@@ -224,9 +231,9 @@ export const App = () => {
                 {openBundle ? (
                   <>
                     {expandedBundleIdx > 0 && (
-                      <motion.div layout transition={spring} className={s.card}>
+                      <MotionSurface className={s.card}>
                         {renderItems(group.items.slice(0, expandedBundleIdx))}
-                      </motion.div>
+                      </MotionSurface>
                     )}
                     <BundleSliceRow
                       bundleKey={`bundle:${openBundle.category}`}
@@ -235,38 +242,40 @@ export const App = () => {
                       isOpen={true}
                       onToggle={toggleKey}
                       expandedRef={expandedRef}
+                      openThreadId={openBundleThreadId}
+                      onOpenThreadChange={setOpenBundleThreadId}
                     />
                     {expandedBundleIdx < group.items.length - 1 && (
-                      <motion.div layout transition={spring} className={s.card}>
+                      <MotionSurface className={s.card}>
                         {renderItems(group.items.slice(expandedBundleIdx + 1))}
-                      </motion.div>
+                      </MotionSurface>
                     )}
                   </>
                 ) : expandedThreadIdx >= 0 ? (
                   <>
                     {expandedThreadIdx > 0 && (
-                      <motion.div layout transition={spring} className={s.card}>
+                      <MotionSurface className={s.card}>
                         {renderItems(group.items.slice(0, expandedThreadIdx))}
-                      </motion.div>
+                      </MotionSurface>
                     )}
-                    <motion.div layout transition={spring} className={s.expandedThread}>
+                    <MotionSurface className={s.expandedThread}>
                       <ThreadRow
                         thread={(group.items[expandedThreadIdx] as Extract<StreamItem, { type: "thread" }>).thread}
                         isExpanded={true}
                         onToggle={() => toggleKey(expandedKey!)}
                         expandedRef={expandedRef}
                       />
-                    </motion.div>
+                    </MotionSurface>
                     {expandedThreadIdx < group.items.length - 1 && (
-                      <motion.div layout transition={spring} className={s.card}>
+                      <MotionSurface className={s.card}>
                         {renderItems(group.items.slice(expandedThreadIdx + 1))}
-                      </motion.div>
+                      </MotionSurface>
                     )}
                   </>
                 ) : (
-                  <motion.div layout transition={spring} className={s.card}>
+                  <MotionSurface className={s.card}>
                     {renderItems(group.items)}
-                  </motion.div>
+                  </MotionSurface>
                 )}
               </LayoutGroup>
             </section>

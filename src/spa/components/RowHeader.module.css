@@ -50,3 +50,14 @@
   flex-shrink: 0;
   margin-left: 8px;
 }
+
+.actionSlot {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.actionSlotVisible {
+  opacity: 1;
+  pointer-events: auto;
+}

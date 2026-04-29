@@ -32,7 +32,11 @@ export const RowHeader = ({
       <span className={clsx(s.primary, bold && s.bold)}>{primary}</span>
       <span className={clsx(s.secondary, bold && s.bold)}>{secondary}</span>
       {date && <span className={s.date}>{date}</span>}
-      {hovered && actionStrip}
+      {actionStrip && (
+        <div className={clsx(s.actionSlot, hovered && s.actionSlotVisible)}>
+          {actionStrip}
+        </div>
+      )}
     </div>
   );
 };

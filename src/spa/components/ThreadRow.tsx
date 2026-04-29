@@ -1,8 +1,8 @@
-import { AnimatePresence, motion } from "framer-motion";
 import type { Thread } from "../../shared/types";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate } from "../lib/dateBucket";
 import { ActionStrip } from "./ActionStrip";
+import { FadeIn, MotionRow } from "./Motion";
 import { RowHeader } from "./RowHeader";
 import { ThreadView } from "./ThreadView";
 import s from "./ThreadRow.module.css";
@@ -24,11 +24,10 @@ export const ThreadRow = ({
   const initial = firstSender ? senderInitial(firstSender.author) : "?";
 
   return (
-    <motion.div
-      layout
+    <MotionRow
       data-row
+      data-thread-row
       ref={isExpanded ? expandedRef : undefined}
-      transition={{ type: "spring", stiffness: 500, damping: 40 }}
       className={s.row}
     >
       {!isExpanded && (
@@ -46,19 +45,11 @@ export const ThreadRow = ({
           actionStrip={<ActionStrip thread={t} />}
         />
       )}
-      <AnimatePresence initial={false}>
-        {isExpanded && (
-          <motion.div
-            key="body"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15, ease: "easeInOut" }}
-          >
-            <ThreadView thread={t} />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+      {isExpanded && (
+        <FadeIn>
+          <ThreadView thread={t} />
+        </FadeIn>
+      )}
+    </MotionRow>
   );
 };

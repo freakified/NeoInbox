@@ -1,9 +1,9 @@
 import { clsx } from "clsx";
-import { AnimatePresence, motion } from "framer-motion";
 import type { RawMessage } from "../../shared/types";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate } from "../lib/dateBucket";
 import { MessageBody } from "./MessageBody";
+import { ExpandableRegion } from "./Motion";
 import s from "./InlineMessage.module.css";
 
 export const InlineMessage = ({
@@ -38,20 +38,9 @@ export const InlineMessage = ({
         </div>
       </div>
 
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            key="body"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.15, ease: "easeInOut" }}
-            className={s.bodyWrap}
-          >
-            <MessageBody message={m} />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <ExpandableRegion isOpen={isOpen} className={s.bodyWrap}>
+        <MessageBody message={m} />
+      </ExpandableRegion>
     </div>
   );
 };
