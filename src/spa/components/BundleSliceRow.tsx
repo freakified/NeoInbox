@@ -6,6 +6,7 @@ import { useMailStore, useCustomBundles } from "../../store/mailStore";
 import { senderName } from "../lib/avatar";
 import { formatDate, groupByBucket } from "../lib/dateBucket";
 import { Icon } from "./Icon";
+import { MessageAttachments, collectAttachments } from "./MessageAttachments";
 import { ExpandableRegion, MotionRow, MotionSurface } from "./Motion";
 import { RowGroup } from "./RowGroup";
 import { RowHeader } from "./RowHeader";
@@ -46,6 +47,7 @@ export const BundleSliceRow = ({
     })
     .filter(Boolean)
     .join(" · ");
+  const attachmentRefs = collectAttachments(threads.flatMap((t) => t.messages));
 
   const [localOpenThreadId, setLocalOpenThreadId] = useState<string | null>(null);
   const activeOpenThreadId = openThreadId !== undefined ? openThreadId : localOpenThreadId;
@@ -111,6 +113,15 @@ export const BundleSliceRow = ({
             </>
           }
           secondary={preview}
+          trailing={
+            attachmentRefs.length > 0 ? (
+              <MessageAttachments
+                attachments={attachmentRefs}
+                compact
+                limit={3}
+              />
+            ) : undefined
+          }
           date={latestDate ? formatDate(latestDate) : undefined}
           onClick={() => onToggle(bundleKey)}
         />

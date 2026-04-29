@@ -1,12 +1,28 @@
 import { useState } from "react";
 import { clsx } from "clsx";
-import type { AttachmentSummary } from "../../shared/types";
+import type { AttachmentSummary, RawMessage } from "../../shared/types";
 import { Icon } from "./Icon";
 import s from "./MessageAttachments.module.css";
 
 export interface AttachmentRef {
   messageId: number;
   attachment: AttachmentSummary;
+}
+
+export const collectAttachments = (
+  messages: readonly RawMessage[],
+): AttachmentRef[] => {
+  const refs: AttachmentRef[] = [];
+  const seen = new Set<string>();
+  for (const m of messages) {
+    for (const a of m.attachments ?? []) {
+      const key = a.name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      refs.push({ messageId: m.id, attachment: a });
+    }
+  }
+  return refs;
 }
 
 const formatSize = (bytes: number): string => {
