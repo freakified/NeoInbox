@@ -9,6 +9,29 @@ export const extractHtmlBody = (
   return null;
 }
 
+const CID_RE = /cid:([^"'\s>)]+)/gi;
+
+export const scanCidRefs = (
+  part: messenger.messages.MessagePart,
+): Set<string> => {
+  const refs = new Set<string>();
+  const visit = (p: messenger.messages.MessagePart): void => {
+    if (p.contentType === "text/html" && p.body) {
+      let m: RegExpExecArray | null;
+      CID_RE.lastIndex = 0;
+      while ((m = CID_RE.exec(p.body)) !== null) {
+        let token = m[1] ?? "";
+        if (token.startsWith("<")) token = token.slice(1);
+        if (token.endsWith(">")) token = token.slice(0, -1);
+        if (token) refs.add(token.toLowerCase());
+      }
+    }
+    for (const child of p.parts ?? []) visit(child);
+  };
+  visit(part);
+  return refs;
+}
+
 export const extractTextBody = (
   part: messenger.messages.MessagePart,
 ): string | null => {

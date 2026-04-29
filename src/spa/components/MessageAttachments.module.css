@@ -1,0 +1,89 @@
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.stripCompact {
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-top: 0;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  min-width: 0;
+  max-width: 240px;
+  transition: background 120ms, border-color 120ms;
+}
+
+.card:hover:not(:disabled) {
+  background: #fafafa;
+  border-color: #d4d4d4;
+}
+
+.card:disabled {
+  cursor: default;
+}
+
+.cardCompact {
+  gap: 6px;
+  padding: 3px 8px;
+  max-width: 140px;
+  border-radius: 4px;
+}
+
+.cardRemoved {
+  opacity: 0.55;
+}
+
+.icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.iconCompact {
+  font-size: 16px;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  font-size: 13px;
+  color: #171717;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
+.cardCompact .name {
+  font-size: 12px;
+  max-width: 100px;
+}
+
+.size {
+  font-size: 11px;
+  color: #a3a3a3;
+}
+
+.overflow {
+  font-size: 11px;
+  color: #a3a3a3;
+  align-self: center;
+  flex-shrink: 0;
+}

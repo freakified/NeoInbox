@@ -4,6 +4,7 @@ import type { RawMessage } from "../../shared/types";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate } from "../lib/dateBucket";
 import { extractPreviewText } from "../lib/srcdoc";
+import { MessageAttachments } from "./MessageAttachments";
 import { MessageBody } from "./MessageBody";
 import { ExpandableRegion } from "./Motion";
 import s from "./InlineMessage.module.css";
@@ -78,6 +79,14 @@ export const InlineMessage = ({
               <MessageBody message={m} />
             </div>
           </ExpandableRegion>
+          {m.attachments && m.attachments.length > 0 && (
+            <MessageAttachments
+              attachments={m.attachments.map((a) => ({
+                messageId: m.id,
+                attachment: a,
+              }))}
+            />
+          )}
         </div>
       </div>
     </div>

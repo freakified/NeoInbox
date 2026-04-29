@@ -1,4 +1,4 @@
-import { classifyAndTag } from "./ingest";
+import { classifyAndTag, extractAttachments } from "./ingest";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
 import { db } from "../store/db";
@@ -21,6 +21,7 @@ export const wireSyncEngine = (): void => {
       const cat = before ?? (await classifyAndTag(header)) ?? null;
       const fresh = await messenger.messages.get(header.id);
       const raw = headerToRawMessage(fresh, "inbox", cat);
+      raw.attachments = await extractAttachments(header.id);
       added.push(raw);
     }
     if (!added.length) return;
@@ -37,6 +38,7 @@ export const wireSyncEngine = (): void => {
       const cached = await db.messages.get(header.id);
       const origin = cached?.origin ?? "inbox";
       const raw = headerToRawMessage(fresh, origin);
+      raw.attachments = cached?.attachments ?? (await extractAttachments(header.id));
       await db.messages.put(raw);
       broadcast({ type: "delta", updated: [raw] });
     });

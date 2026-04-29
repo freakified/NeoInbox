@@ -1,4 +1,4 @@
-import { classifyAndTag } from "./ingest";
+import { classifyAndTag, extractAttachments } from "./ingest";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
 import { db } from "../store/db";
@@ -55,7 +55,10 @@ export const runBackfill = async (): Promise<{
               appliedCategory = cat;
             }
           }
-          batch.push(headerToRawMessage(header, origin, appliedCategory));
+          const raw = headerToRawMessage(header, origin, appliedCategory);
+          const cached = await db.messages.get(header.id);
+          raw.attachments = cached?.attachments ?? (await extractAttachments(header.id));
+          batch.push(raw);
           if (batch.length >= BATCH_FLUSH) await flush();
           if (scanned % PROGRESS_EVERY === 0) {
             broadcast({
@@ -103,7 +106,9 @@ export const reclassifyAll = async (): Promise<{ scanned: number; updated: numbe
     const cat = await classifyAndTag({ ...header, tags: header.tags ?? [] });
     if (cat && cat !== before) updated++;
     const fresh = await messenger.messages.get(cachedMsg.id);
-    batch.push(headerToRawMessage(fresh, "inbox", cat));
+    const raw = headerToRawMessage(fresh, "inbox", cat);
+    raw.attachments = cachedMsg.attachments ?? (await extractAttachments(cachedMsg.id));
+    batch.push(raw);
     if (batch.length >= BATCH_FLUSH) {
       await db.messages.bulkPut(batch);
       broadcast({ type: "delta", updated: batch });

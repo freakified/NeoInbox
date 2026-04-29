@@ -24,6 +24,13 @@ export interface CustomBundleRecord {
   rules: CustomBundleRule[];
 }
 
+export interface AttachmentSummary {
+  name: string;
+  contentType: string;
+  size: number;
+  partName: string;
+}
+
 export interface RawMessage {
   id: number;
   subject: string;
@@ -37,6 +44,7 @@ export interface RawMessage {
   category: Category | null;
   pinned: boolean;
   origin: "inbox" | "sent";
+  attachments?: AttachmentSummary[];
 }
 
 export interface Thread {

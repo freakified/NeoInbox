@@ -6,6 +6,7 @@ export const RowHeader = ({
   leading,
   primary,
   secondary,
+  trailing,
   date,
   bold = false,
   onClick,
@@ -14,6 +15,7 @@ export const RowHeader = ({
   leading: React.ReactNode;
   primary: React.ReactNode;
   secondary?: React.ReactNode;
+  trailing?: React.ReactNode;
   date?: string;
   bold?: boolean;
   onClick?: () => void;
@@ -30,7 +32,10 @@ export const RowHeader = ({
     >
       <div className={s.leading}>{leading}</div>
       <span className={clsx(s.primary, bold && s.bold)}>{primary}</span>
-      <span className={clsx(s.secondary, bold && s.bold)}>{secondary}</span>
+      <div className={s.body}>
+        <span className={clsx(s.secondary, bold && s.bold)}>{secondary}</span>
+        {trailing && <div className={s.trailing}>{trailing}</div>}
+      </div>
       {date && <span className={s.date}>{date}</span>}
       {actionStrip && (
         <div className={clsx(s.actionSlot, hovered && s.actionSlotVisible)}>

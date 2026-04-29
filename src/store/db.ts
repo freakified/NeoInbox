@@ -26,6 +26,13 @@ class NeoInboxDb extends Dexie {
     this.version(3).stores({
       customBundles: "id",
     });
+    this.version(4).stores({
+      messages: "id, date, accountId, folderId",
+      snoozes: "messageId, wakeAt",
+      overrides: "senderDomain",
+      folderCursors: "folderId",
+      customBundles: "id",
+    });
   }
 }
 

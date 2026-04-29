@@ -6,7 +6,8 @@ import {
   PINNED_KEY,
   categoryFromTags,
 } from "../shared/categories";
-import type { Category } from "../shared/types";
+import { scanCidRefs } from "../spa/lib/srcdoc";
+import type { AttachmentSummary, Category } from "../shared/types";
 
 export const classifyAndTag = async (
   header: messenger.messages.MessageHeader,
@@ -54,4 +55,43 @@ export const doneMessage = async (id: number): Promise<void> => {
 
 export const trashMessage = async (id: number): Promise<void> => {
   await messenger.messages.delete([id], false);
+}
+
+export const extractAttachments = async (
+  messageId: number,
+): Promise<AttachmentSummary[]> => {
+  let list: messenger.messages.MessageAttachment[];
+  try {
+    list = await messenger.messages.listAttachments(messageId);
+  } catch {
+    return [];
+  }
+  if (list.length === 0) return [];
+
+  let cidRefs = new Set<string>();
+  try {
+    const full = await messenger.messages.getFull(messageId);
+    cidRefs = scanCidRefs(full);
+  } catch {
+    /* no body available; render every attachment as a card */
+  }
+
+  return list
+    .filter((a) => !isCidReferenced(cidRefs, a.name))
+    .map((a) => ({
+      name: a.name,
+      contentType: a.contentType,
+      size: a.size,
+      partName: a.partName,
+    }));
+}
+
+const isCidReferenced = (cidRefs: Set<string>, name: string): boolean => {
+  if (cidRefs.size === 0 || !name) return false;
+  const lower = name.toLowerCase();
+  for (const ref of cidRefs) {
+    const localPart = ref.split("@")[0] ?? ref;
+    if (localPart === lower) return true;
+  }
+  return false;
 }
