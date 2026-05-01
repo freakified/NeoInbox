@@ -47,22 +47,22 @@ export const ThreadView = ({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onDone();
-            }}
-            title="Archive thread"
-            className={s.iconBtn}
-          >
-            <Icon name="archive" className={s.iconBtnIcon} />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
               onTrash();
             }}
             title="Move thread to trash"
             className={s.iconBtn}
           >
             <Icon name="delete" className={s.iconBtnIcon} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDone();
+            }}
+            title="Archive thread"
+            className={s.iconBtn}
+          >
+            <Icon name="check" className={s.iconBtnIcon} />
           </button>
         </div>
       </div>

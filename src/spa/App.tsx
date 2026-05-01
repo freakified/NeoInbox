@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LayoutGroup, useReducedMotion } from "framer-motion";
 import {
+  useConnectionState,
   useHydrated,
   useMailStore,
   useStream,
@@ -22,6 +23,8 @@ export const App = () => {
   const hydrated = useHydrated();
   const sync = useSyncProgress();
   const stream = useStream();
+  const connectionState = useConnectionState();
+  const retryBackfill = useMailStore((st) => st.retryBackfill);
 
   const doneThread = useMailStore((st) => st.doneThread);
 
@@ -59,7 +62,9 @@ export const App = () => {
     setExpandedKey((prev) => (prev === key ? null : key));
   };
 
-  const syncing = sync && !sync.done;
+  const syncing = !!sync && !sync.done;
+  const syncFailed = !!sync?.done && !!sync.error;
+  const reconnecting = connectionState === "reconnecting";
 
   return (
     <div
@@ -81,11 +86,22 @@ export const App = () => {
       <header className={s.header}>
         <h1 className={s.title}>NeoInbox</h1>
         <div className={s.headerRight}>
-          {syncing && (
+          {syncing && sync && (
             <span className={s.syncText}>
               Syncing… {sync.tagged}/{sync.scanned}
             </span>
           )}
+          {syncFailed && (
+            <button
+              type="button"
+              className={s.syncErrorPill}
+              onClick={retryBackfill}
+              title={sync?.error ?? "Sync failed"}
+            >
+              Sync failed — retry
+            </button>
+          )}
+          {reconnecting && <span className={s.reconnectText}>Reconnecting…</span>}
           <button
             onClick={() => setSettingsOpen(true)}
             title="Bundle settings"

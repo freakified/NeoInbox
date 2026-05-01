@@ -10,10 +10,17 @@ export type ClientMsg =
   | { type: "trash"; messageId: number }
   | { type: "override"; senderDomain: string; category: BuiltinCategory | null }
   | { type: "set-custom-bundle"; bundle: CustomBundleRecord }
-  | { type: "delete-custom-bundle"; id: string };
+  | { type: "delete-custom-bundle"; id: string }
+  | { type: "retry-backfill" };
 
 export type ServerMsg =
   | ({ type: "delta" } & Delta)
   | { type: "myEmails"; emails: string[] }
-  | { type: "backfill-progress"; scanned: number; tagged: number; done: boolean }
+  | {
+      type: "backfill-progress";
+      scanned: number;
+      tagged: number;
+      done: boolean;
+      error?: string;
+    }
   | { type: "error"; message: string };

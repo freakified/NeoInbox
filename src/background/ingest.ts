@@ -6,6 +6,7 @@ import {
   PINNED_KEY,
   categoryFromTags,
 } from "../shared/categories";
+import { log } from "../shared/log";
 import { scanCidRefs } from "../spa/lib/srcdoc";
 import type { AttachmentSummary, Category } from "../shared/types";
 
@@ -20,7 +21,7 @@ export const classifyAndTag = async (
     const full = await messenger.messages.getFull(header.id);
     headers = full.headers ?? {};
   } catch (e) {
-    console.debug("[NeoInbox] getFull failed", header.id, e);
+    log.debug("ingest", "getFull failed", { id: header.id, e });
   }
 
   const features = extractFeatures(header, headers);
@@ -35,7 +36,7 @@ export const classifyAndTag = async (
       tags: [...header.tags.filter((t) => !NEO_TAG_KEYS.has(t)), meta.key],
     });
   } catch (e) {
-    console.warn("[NeoInbox] tag update failed", header.id, e);
+    log.warn("ingest", "tag update failed", { id: header.id, e });
   }
   return category;
 }

@@ -1,3 +1,4 @@
+import { log } from "../shared/log";
 import {
   PORT_NAME,
   type ClientMsg,
@@ -29,7 +30,7 @@ export const broadcast = (msg: ServerMsg): void => {
     try {
       port.postMessage(msg);
     } catch (e) {
-      console.warn("[NeoInbox] port broadcast failed", e);
+      log.warn("port", "broadcast failed", e);
     }
   }
 }
@@ -37,7 +38,7 @@ export const broadcast = (msg: ServerMsg): void => {
 export const startPortServer = (): void => {
   const api = (messenger.runtime as unknown as PortApi).onConnect;
   if (!api) {
-    console.warn("[NeoInbox] runtime.onConnect unavailable");
+    log.warn("port", "runtime.onConnect unavailable");
     return;
   }
   api.addListener((port) => {
@@ -47,7 +48,7 @@ export const startPortServer = (): void => {
       if (!raw || typeof raw !== "object") return;
       const msg = raw as ClientMsg;
       Promise.resolve(handler?.(msg)).catch((e) => {
-        console.warn("[NeoInbox] command handler error", msg, e);
+        log.warn("port", "command handler error", { msg, e });
         try {
           port.postMessage({ type: "error", message: String(e) });
         } catch {

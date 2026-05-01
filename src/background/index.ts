@@ -8,12 +8,13 @@ import {
 } from "./ingest";
 import { headerToRawMessage } from "./messageMap";
 import { handleSnoozeAlarm, snoozeMessage } from "./snooze";
-import { runBackfill, reclassifyAll } from "./backfill";
+import { getLastProgress, runBackfill, reclassifyAll } from "./backfill";
 import { pushMyEmails, wireSyncEngine } from "./sync";
 import { broadcast, onCommand, startPortServer } from "./port";
 import { setOverride } from "../classifier/overrides";
 import { db } from "../store/db";
 import { categoryFromTags } from "../shared/categories";
+import { log } from "../shared/log";
 
 const INBOX_URL = "inbox.html";
 
@@ -39,18 +40,16 @@ messenger.browserAction.onClicked.addListener(() => {
 });
 
 void ensureTagsRegistered()
-  .then(() => console.info("[NeoInbox] tags registered"))
-  .catch((e) => console.warn("[NeoInbox] tag registration failed", e));
+  .then(() => log.info("tags", "registered"))
+  .catch((e) => log.warn("tags", "registration failed", e));
 
-messenger.runtime.onInstalled.addListener(async (details) => {
-  console.info("[NeoInbox] onInstalled", details.reason);
-  await ensureTagsRegistered();
-  void runBackfill().catch((e) => console.warn("[NeoInbox] backfill failed", e));
+messenger.runtime.onInstalled.addListener((details) => {
+  log.info("background", "onInstalled", details.reason);
+  void runBackfill().catch((e) => log.warn("backfill", "failed", e));
 });
 
 messenger.runtime.onStartup.addListener(() => {
-  void ensureTagsRegistered().catch(() => {});
-  void runBackfill().catch((e) => console.warn("[NeoInbox] backfill failed", e));
+  void runBackfill().catch((e) => log.warn("backfill", "failed", e));
 });
 
 messenger.alarms.onAlarm.addListener(async (alarm) => {
@@ -72,9 +71,16 @@ startPortServer();
 
 onCommand(async (msg) => {
   switch (msg.type) {
-    case "hello":
+    case "hello": {
       await pushMyEmails();
+      const last = getLastProgress();
+      if (last) broadcast(last);
       return;
+    }
+    case "retry-backfill": {
+      void runBackfill().catch((e) => log.warn("backfill", "retry failed", e));
+      return;
+    }
     case "pin": {
       await pinMessage(msg.messageId, msg.pinned);
       const header = await messenger.messages.get(msg.messageId);
@@ -126,7 +132,7 @@ onCommand(async (msg) => {
           await db.messages.put(raw);
           updated.push(raw);
         } catch (e) {
-          console.warn("[NeoInbox] override retag failed", cmsg.id, e);
+          log.warn("override", "retag failed", { id: cmsg.id, e });
         }
       }
       if (updated.length) broadcast({ type: "delta", updated });
@@ -135,7 +141,7 @@ onCommand(async (msg) => {
     case "set-custom-bundle": {
       await db.customBundles.put(msg.bundle);
       void reclassifyAll().catch((e) =>
-        console.warn("[NeoInbox] reclassify after set-custom-bundle failed", e),
+        log.warn("reclassify", "after set-custom-bundle failed", e),
       );
       return;
     }
@@ -159,7 +165,7 @@ onCommand(async (msg) => {
           await db.messages.put(raw);
           updated.push(raw);
         } catch (e) {
-          console.warn("[NeoInbox] delete-custom-bundle retag failed", cachedMsg.id, e);
+          log.warn("delete-custom-bundle", "retag failed", { id: cachedMsg.id, e });
         }
       }
       if (updated.length) broadcast({ type: "delta", updated });
@@ -168,4 +174,4 @@ onCommand(async (msg) => {
   }
 });
 
-console.info("[NeoInbox] background ready");
+log.info("background", "ready");

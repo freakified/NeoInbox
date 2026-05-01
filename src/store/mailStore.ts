@@ -5,6 +5,7 @@ import {
   PINNED_KEY,
   SNOOZED_KEY,
 } from "../shared/categories";
+import { log } from "../shared/log";
 import {
   PORT_NAME,
   type ClientMsg,
@@ -28,7 +29,10 @@ interface SyncProgress {
   scanned: number;
   tagged: number;
   done: boolean;
+  error: string | null;
 }
+
+export type ConnectionState = "connected" | "reconnecting";
 
 interface MailStore {
   messagesById: Record<number, RawMessage>;
@@ -37,6 +41,7 @@ interface MailStore {
   syncProgress: SyncProgress | null;
   customBundles: CustomBundleRecord[];
   overrides: OverrideRecord[];
+  connectionState: ConnectionState;
 
   init: () => Promise<void>;
   pin: (messageId: number, pinned: boolean) => void;
@@ -46,6 +51,7 @@ interface MailStore {
   setOverride: (senderDomain: string, category: BuiltinCategory | null) => void;
   setCustomBundle: (bundle: CustomBundleRecord) => void;
   deleteCustomBundle: (id: string) => void;
+  retryBackfill: () => void;
 }
 
 let port: BackgroundPort | null = null;
@@ -55,7 +61,7 @@ const send = (msg: ClientMsg): void => {
   try {
     port.postMessage(msg);
   } catch (e) {
-    console.warn("[NeoInbox] port send failed", e);
+    log.warn("store", "port send failed", e);
   }
 }
 
@@ -66,6 +72,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   syncProgress: null,
   customBundles: [],
   overrides: [],
+  connectionState: "connected",
 
   init: async () => {
     if (get().hydrated) return;
@@ -81,18 +88,31 @@ export const useMailStore = create<MailStore>((set, get) => ({
 
     const runtime = messenger.runtime as unknown as RuntimeWithConnect;
     if (!runtime.connect) {
-      console.warn("[NeoInbox] runtime.connect unavailable");
+      log.warn("store", "runtime.connect unavailable");
       return;
     }
-    port = runtime.connect({ name: PORT_NAME });
-    port.onMessage.addListener((raw) => {
-      if (!raw || typeof raw !== "object") return;
-      applyServerMsg(set, get, raw as ServerMsg);
-    });
-    port.onDisconnect.addListener(() => {
-      port = null;
-    });
-    send({ type: "hello" });
+
+    let backoff = 500;
+    const connect = (): void => {
+      const next = runtime.connect({ name: PORT_NAME });
+      port = next;
+      next.onMessage.addListener((raw) => {
+        if (!raw || typeof raw !== "object") return;
+        applyServerMsg(set, get, raw as ServerMsg);
+      });
+      next.onDisconnect.addListener(() => {
+        if (port === next) port = null;
+        set({ connectionState: "reconnecting" });
+        setTimeout(() => {
+          backoff = Math.min(backoff * 2, 10_000);
+          connect();
+        }, backoff);
+      });
+      set({ connectionState: "connected" });
+      backoff = 500;
+      send({ type: "hello" });
+    };
+    connect();
   },
 
   pin: (messageId, pinned) => {
@@ -149,6 +169,16 @@ export const useMailStore = create<MailStore>((set, get) => ({
     set({ customBundles: get().customBundles.filter((b) => b.id !== id) });
     send({ type: "delete-custom-bundle", id });
   },
+
+  retryBackfill: () => {
+    const prev = get().syncProgress;
+    set({
+      syncProgress: prev
+        ? { ...prev, done: false, error: null }
+        : { scanned: 0, tagged: 0, done: false, error: null },
+    });
+    send({ type: "retry-backfill" });
+  },
 }));
 
 const applyServerMsg = (
@@ -174,11 +204,12 @@ const applyServerMsg = (
           scanned: msg.scanned,
           tagged: msg.tagged,
           done: msg.done,
+          error: msg.error ?? null,
         },
       });
       return;
     case "error":
-      console.warn("[NeoInbox] server error", msg.message);
+      log.warn("store", "server error", msg.message);
       return;
   }
 }
@@ -307,6 +338,10 @@ export const useHydrated = (): boolean => {
 
 export const useSyncProgress = (): SyncProgress | null => {
   return useMailStore((s) => s.syncProgress);
+}
+
+export const useConnectionState = (): ConnectionState => {
+  return useMailStore((s) => s.connectionState);
 }
 
 export const useCustomBundles = (): CustomBundleRecord[] => {

@@ -1,5 +1,6 @@
 import { db } from "../store/db";
 import { SNOOZED_KEY } from "../shared/categories";
+import { log } from "../shared/log";
 import type { SnoozeRecord } from "../shared/types";
 
 const ALARM_PREFIX = "neoinbox-snooze-";
@@ -42,7 +43,7 @@ export const snoozeMessage = async (
   try {
     await messenger.messages.archive([messageId]);
   } catch (e) {
-    console.warn("[NeoInbox] snooze archive failed", e);
+    log.warn("snooze", "archive failed", e);
   }
 
   await messenger.alarms.create(`${ALARM_PREFIX}${messageId}`, { when: wakeAt });
@@ -78,7 +79,7 @@ export const handleSnoozeAlarm = async (
         tags: (restored.tags ?? []).filter((t) => t !== SNOOZED_KEY),
       });
     } catch (e) {
-      console.warn("[NeoInbox] untag on wake failed", e);
+      log.warn("snooze", "untag on wake failed", e);
     }
     if (record.originFolderId) {
       try {
@@ -87,7 +88,7 @@ export const handleSnoozeAlarm = async (
           record.originFolderId as unknown as messenger.folders.MailFolderId,
         );
       } catch (e) {
-        console.warn("[NeoInbox] move-back on wake failed", e);
+        log.warn("snooze", "move-back on wake failed", e);
       }
     }
   }

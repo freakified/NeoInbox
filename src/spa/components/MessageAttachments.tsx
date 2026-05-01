@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { clsx } from "clsx";
+import { log } from "../../shared/log";
 import type { AttachmentSummary, RawMessage } from "../../shared/types";
 import { Icon } from "./Icon";
 import s from "./MessageAttachments.module.css";
@@ -103,7 +104,7 @@ export const MessageAttachments = ({
       url = URL.createObjectURL(file);
       window.open(url, "_blank");
     } catch (e) {
-      console.warn("[NeoInbox] open attachment failed", e);
+      log.warn("attachments", "open failed", e);
     } finally {
       setBusy(null);
       if (url) setTimeout(() => URL.revokeObjectURL(url!), 60_000);

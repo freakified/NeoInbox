@@ -1,75 +1,73 @@
 import { CATEGORIES } from "../shared/categories";
+import { log } from "../shared/log";
 
 type ListFn = () => Promise<messenger.messages.tags.MessageTag[]>;
 type CreateFn = (key: string, name: string, color: string) => Promise<unknown>;
 
-const resolveTagApi = (): { list?: ListFn; create?: CreateFn } => {
-  const m = messenger.messages as unknown as {
-    tags?: { list?: ListFn; create?: CreateFn };
-    listTags?: ListFn;
-    createTag?: CreateFn;
-  };
-  const top = messenger as unknown as {
-    tags?: { list?: ListFn; create?: CreateFn };
-  };
-  const list =
-    typeof top.tags?.list === "function"
-      ? top.tags.list.bind(top.tags)
-      : typeof m.tags?.list === "function"
-        ? m.tags.list.bind(m.tags)
-        : typeof m.listTags === "function"
-          ? m.listTags.bind(m)
-          : undefined;
-  const create =
-    typeof top.tags?.create === "function"
-      ? top.tags.create.bind(top.tags)
-      : typeof m.tags?.create === "function"
-        ? m.tags.create.bind(m.tags)
-        : typeof m.createTag === "function"
-          ? m.createTag.bind(m)
-          : undefined;
+interface TagApi {
+  list?: ListFn;
+  create?: CreateFn;
+}
 
-  console.info("[NeoInbox] tag API detection", {
-    hasTopTagsNs: !!top.tags,
-    topTagsKeys: top.tags ? Object.keys(top.tags) : null,
-    topTagsListType: typeof top.tags?.list,
-    topTagsCreateType: typeof top.tags?.create,
-    hasMsgsTagsNs: !!m.tags,
-    msgsTagsKeys: m.tags ? Object.keys(m.tags) : null,
-    msgsTagsListType: typeof m.tags?.list,
-    msgsTagsCreateType: typeof m.tags?.create,
-    legacyListType: typeof m.listTags,
-    legacyCreateType: typeof m.createTag,
-    resolvedList: !!list,
-    resolvedCreate: !!create,
+let cachedApi: TagApi | null = null;
+let registered = false;
+
+const resolveTagApi = (): TagApi => {
+  if (cachedApi) return cachedApi;
+
+  const top = (messenger as unknown as { tags?: { list?: ListFn; create?: CreateFn } }).tags;
+  const ns = (messenger.messages as unknown as { tags?: { list?: ListFn; create?: CreateFn } }).tags;
+
+  const listSource = typeof top?.list === "function" ? top : typeof ns?.list === "function" ? ns : undefined;
+  const createSource = typeof top?.create === "function" ? top : typeof ns?.create === "function" ? ns : undefined;
+
+  cachedApi = {
+    list: listSource ? (listSource.list as ListFn).bind(listSource) : undefined,
+    create: createSource ? (createSource.create as CreateFn).bind(createSource) : undefined,
+  };
+
+  log.info("tags", "API resolved", {
+    hasList: !!cachedApi.list,
+    hasCreate: !!cachedApi.create,
   });
 
-  return { list, create };
-}
+  return cachedApi;
+};
 
 export const ensureTagsRegistered = async (): Promise<void> => {
+  if (registered) return;
   const { list, create } = resolveTagApi();
-  if (!list || !create) {
-    console.warn(
-      "[NeoInbox] tag registration skipped — API unavailable; classification will still apply tag keys to messages, but native UI won't show tag names/colors",
+
+  if (!create) {
+    log.warn(
+      "tags",
+      "tag registration skipped — create unavailable; classification will still apply tag keys but native UI won't show names/colors",
     );
+    registered = true;
     return;
   }
-  let existing: messenger.messages.tags.MessageTag[] = [];
-  try {
-    existing = await list();
-  } catch (e) {
-    console.warn("[NeoInbox] listTags failed", e);
-    return;
-  }
-  const byKey = new Set(existing.map((t) => t.key));
-  for (const meta of Object.values(CATEGORIES)) {
-    if (!meta.key || byKey.has(meta.key)) continue;
+
+  let existingKeys: Set<string> | null = null;
+  if (list) {
     try {
-      await create(meta.key, meta.name, meta.color);
-      console.debug("[NeoInbox] created tag", meta.key);
+      const existing = await list();
+      existingKeys = new Set(existing.map((t) => t.key));
     } catch (e) {
-      console.warn("[NeoInbox] failed to create tag", meta.key, e);
+      log.warn("tags", "list failed; will create blindly", e);
     }
   }
-}
+
+  for (const meta of Object.values(CATEGORIES)) {
+    if (!meta.key) continue;
+    if (existingKeys?.has(meta.key)) continue;
+    try {
+      await create(meta.key, meta.name, meta.color);
+      log.debug("tags", "created", meta.key);
+    } catch (e) {
+      // When list() is unavailable we expect "already exists" errors; swallow.
+      if (existingKeys) log.warn("tags", "failed to create", { key: meta.key, e });
+    }
+  }
+
+  registered = true;
+};

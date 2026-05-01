@@ -33,6 +33,27 @@
   color: rgba(255, 255, 255, 0.8);
 }
 
+.syncErrorPill {
+  font-size: 13px;
+  color: #fff;
+  background: rgba(234, 67, 53, 0.85);
+  border: none;
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.syncErrorPill:hover {
+  background: rgba(234, 67, 53, 1);
+}
+
+.reconnectText {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+}
+
 .settingsBtn {
   color: rgba(255, 255, 255, 0.8);
   background: none;
