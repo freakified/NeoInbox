@@ -13,6 +13,8 @@ export type ClientMsg =
   | { type: "delete-custom-bundle"; id: string }
   | { type: "retry-backfill" };
 
+export type FailedCommand = "done" | "snooze" | "trash";
+
 export type ServerMsg =
   | ({ type: "delta" } & Delta)
   | { type: "myEmails"; emails: string[] }
@@ -22,5 +24,11 @@ export type ServerMsg =
       tagged: number;
       done: boolean;
       error?: string;
+    }
+  | {
+      type: "command-failed";
+      command: FailedCommand;
+      messageId: number;
+      reason: string;
     }
   | { type: "error"; message: string };

@@ -15,6 +15,7 @@ import { RowGroup } from "./components/RowGroup";
 import { SectionLabel } from "./components/SectionLabel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ThreadRow } from "./components/ThreadRow";
+import { Toaster } from "./components/Toaster";
 import s from "./App.module.css";
 
 
@@ -298,6 +299,7 @@ export const App = () => {
           );
         })}
       </div>
+      <Toaster />
     </div>
   );
 };

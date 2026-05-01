@@ -92,19 +92,53 @@ onCommand(async (msg) => {
       return;
     }
     case "done": {
-      await doneMessage(msg.messageId);
+      try {
+        await doneMessage(msg.messageId);
+      } catch (e) {
+        log.warn("command", "done failed", { id: msg.messageId, e: String(e) });
+        broadcast({
+          type: "command-failed",
+          command: "done",
+          messageId: msg.messageId,
+          reason: String((e as Error)?.message ?? e),
+        });
+        return;
+      }
       await db.messages.delete(msg.messageId);
       broadcast({ type: "delta", removedIds: [msg.messageId] });
       return;
     }
     case "trash": {
-      await trashMessage(msg.messageId);
+      try {
+        await trashMessage(msg.messageId);
+      } catch (e) {
+        log.warn("command", "trash failed", { id: msg.messageId, e: String(e) });
+        broadcast({
+          type: "command-failed",
+          command: "trash",
+          messageId: msg.messageId,
+          reason: String((e as Error)?.message ?? e),
+        });
+        return;
+      }
       await db.messages.delete(msg.messageId);
       broadcast({ type: "delta", removedIds: [msg.messageId] });
       return;
     }
     case "snooze": {
-      const { removedId } = await snoozeMessage(msg.messageId, msg.wakeAt);
+      let removedId: number;
+      try {
+        ({ removedId } = await snoozeMessage(msg.messageId, msg.wakeAt));
+      } catch (e) {
+        log.warn("command", "snooze failed", { id: msg.messageId, e: String(e) });
+        broadcast({
+          type: "command-failed",
+          command: "snooze",
+          messageId: msg.messageId,
+          reason: String((e as Error)?.message ?? e),
+        });
+        return;
+      }
       await db.messages.delete(removedId);
       broadcast({ type: "delta", removedIds: [removedId] });
       return;

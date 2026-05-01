@@ -9,6 +9,28 @@ import {
 import { log } from "../shared/log";
 import { scanCidRefs } from "../spa/lib/srcdoc";
 import type { AttachmentSummary, Category } from "../shared/types";
+import { messageStillIn, resolveArchiveFolder } from "./archiveFolders";
+
+export class ArchiveFailedError extends Error {
+  constructor(message: string, readonly cause?: unknown) {
+    super(message);
+    this.name = "ArchiveFailedError";
+  }
+}
+
+export class TrashFailedError extends Error {
+  constructor(message: string, readonly cause?: unknown) {
+    super(message);
+    this.name = "TrashFailedError";
+  }
+}
+
+const folderIdOf = async (id: number): Promise<string> => {
+  const msg = (await messenger.messages.get(id)) as messenger.messages.MessageHeader & {
+    folder?: { id?: string };
+  };
+  return msg.folder?.id ?? "";
+}
 
 export const classifyAndTag = async (
   header: messenger.messages.MessageHeader,
@@ -51,11 +73,61 @@ export const pinMessage = async (id: number, pinned: boolean): Promise<void> => 
 }
 
 export const doneMessage = async (id: number): Promise<void> => {
-  await messenger.messages.archive([id]);
+  const sourceFolderId = await folderIdOf(id);
+
+  let archiveError: unknown = null;
+  try {
+    await messenger.messages.archive([id]);
+  } catch (e) {
+    archiveError = e;
+    log.warn("archive", "messages.archive threw", { id, sourceFolderId, e: String(e) });
+  }
+
+  if (!(await messageStillIn(id, sourceFolderId))) return;
+
+  log.warn("archive", "archive() did not move the message; attempting fallback", {
+    id,
+    sourceFolderId,
+  });
+
+  const resolved = await resolveArchiveFolder(id);
+  if (!resolved) {
+    throw new ArchiveFailedError(
+      "No Archives folder configured for this account",
+      archiveError,
+    );
+  }
+
+  try {
+    await messenger.messages.move(
+      [id],
+      resolved.archiveFolderId as unknown as messenger.folders.MailFolderId,
+    );
+  } catch (e) {
+    log.warn("archive", "fallback move failed", {
+      id,
+      sourceFolderId,
+      archiveFolderId: resolved.archiveFolderId,
+      e: String(e),
+    });
+    throw new ArchiveFailedError("Move to Archives failed", e);
+  }
+
+  if (await messageStillIn(id, sourceFolderId)) {
+    throw new ArchiveFailedError(
+      "Move appeared to succeed but message still in source folder",
+      archiveError,
+    );
+  }
 }
 
 export const trashMessage = async (id: number): Promise<void> => {
-  await messenger.messages.delete([id], false);
+  try {
+    await messenger.messages.delete([id], false);
+  } catch (e) {
+    log.warn("trash", "delete threw", { id, e: String(e) });
+    throw new TrashFailedError("Delete failed", e);
+  }
 }
 
 export const extractAttachments = async (

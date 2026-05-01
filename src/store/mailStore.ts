@@ -34,6 +34,17 @@ interface SyncProgress {
 
 export type ConnectionState = "connected" | "reconnecting";
 
+type PendingOp =
+  | { kind: "done"; message: RawMessage }
+  | { kind: "snooze"; message: RawMessage; wakeAt: number }
+  | { kind: "trash"; message: RawMessage };
+
+export interface ToastRecord {
+  id: string;
+  message: string;
+  retry?: { kind: "done" | "snooze" | "trash"; messageId: number; wakeAt?: number };
+}
+
 interface MailStore {
   messagesById: Record<number, RawMessage>;
   myEmails: ReadonlySet<string>;
@@ -42,6 +53,8 @@ interface MailStore {
   customBundles: CustomBundleRecord[];
   overrides: OverrideRecord[];
   connectionState: ConnectionState;
+  pendingOps: Record<number, PendingOp>;
+  toasts: ToastRecord[];
 
   init: () => Promise<void>;
   pin: (messageId: number, pinned: boolean) => void;
@@ -52,7 +65,12 @@ interface MailStore {
   setCustomBundle: (bundle: CustomBundleRecord) => void;
   deleteCustomBundle: (id: string) => void;
   retryBackfill: () => void;
+  retryToast: (toastId: string) => void;
+  dismissToast: (toastId: string) => void;
 }
+
+let toastSeq = 0;
+const nextToastId = (): string => `t${++toastSeq}-${Date.now()}`;
 
 let port: BackgroundPort | null = null;
 
@@ -73,6 +91,8 @@ export const useMailStore = create<MailStore>((set, get) => ({
   customBundles: [],
   overrides: [],
   connectionState: "connected",
+  pendingOps: {},
+  toasts: [],
 
   init: async () => {
     if (get().hydrated) return;
@@ -129,23 +149,41 @@ export const useMailStore = create<MailStore>((set, get) => ({
   },
 
   doneThread: (messageIds) => {
-    const map = { ...get().messagesById };
-    for (const id of messageIds) delete map[id];
-    set({ messagesById: map });
+    const prev = get().messagesById;
+    const map = { ...prev };
+    const pending = { ...get().pendingOps };
+    for (const id of messageIds) {
+      const m = prev[id];
+      if (m) pending[id] = { kind: "done", message: m };
+      delete map[id];
+    }
+    set({ messagesById: map, pendingOps: pending });
     for (const id of messageIds) send({ type: "done", messageId: id });
   },
 
   snoozeThread: (messageIds, wakeAt) => {
-    const map = { ...get().messagesById };
-    for (const id of messageIds) delete map[id];
-    set({ messagesById: map });
+    const prev = get().messagesById;
+    const map = { ...prev };
+    const pending = { ...get().pendingOps };
+    for (const id of messageIds) {
+      const m = prev[id];
+      if (m) pending[id] = { kind: "snooze", message: m, wakeAt };
+      delete map[id];
+    }
+    set({ messagesById: map, pendingOps: pending });
     for (const id of messageIds) send({ type: "snooze", messageId: id, wakeAt });
   },
 
   trashThread: (messageIds) => {
-    const map = { ...get().messagesById };
-    for (const id of messageIds) delete map[id];
-    set({ messagesById: map });
+    const prev = get().messagesById;
+    const map = { ...prev };
+    const pending = { ...get().pendingOps };
+    for (const id of messageIds) {
+      const m = prev[id];
+      if (m) pending[id] = { kind: "trash", message: m };
+      delete map[id];
+    }
+    set({ messagesById: map, pendingOps: pending });
     for (const id of messageIds) send({ type: "trash", messageId: id });
   },
 
@@ -179,7 +217,31 @@ export const useMailStore = create<MailStore>((set, get) => ({
     });
     send({ type: "retry-backfill" });
   },
+
+  retryToast: (toastId) => {
+    const toast = get().toasts.find((t) => t.id === toastId);
+    if (!toast?.retry) return;
+    set({ toasts: get().toasts.filter((t) => t.id !== toastId) });
+    const { kind, messageId, wakeAt } = toast.retry;
+    if (kind === "done") get().doneThread([messageId]);
+    else if (kind === "trash") get().trashThread([messageId]);
+    else if (kind === "snooze" && wakeAt !== undefined) {
+      get().snoozeThread([messageId], wakeAt);
+    }
+  },
+
+  dismissToast: (toastId) => {
+    set({ toasts: get().toasts.filter((t) => t.id !== toastId) });
+  },
 }));
+
+const TOAST_LIMIT = 3;
+
+const failureLabel = (command: "done" | "snooze" | "trash"): string => {
+  if (command === "done") return "Couldn't archive";
+  if (command === "snooze") return "Couldn't snooze";
+  return "Couldn't move to trash";
+}
 
 const applyServerMsg = (
   set: (partial: Partial<MailStore>) => void,
@@ -193,6 +255,17 @@ const applyServerMsg = (
       if (msg.updated) for (const m of msg.updated) map[m.id] = m;
       if (msg.removedIds) for (const id of msg.removedIds) delete map[id];
       set({ messagesById: map });
+      if (msg.removedIds?.length) {
+        const pending = { ...get().pendingOps };
+        let changed = false;
+        for (const id of msg.removedIds) {
+          if (id in pending) {
+            delete pending[id];
+            changed = true;
+          }
+        }
+        if (changed) set({ pendingOps: pending });
+      }
       return;
     }
     case "myEmails":
@@ -208,6 +281,25 @@ const applyServerMsg = (
         },
       });
       return;
+    case "command-failed": {
+      const pending = { ...get().pendingOps };
+      const op = pending[msg.messageId];
+      const map = { ...get().messagesById };
+      if (op) {
+        map[msg.messageId] = op.message;
+        delete pending[msg.messageId];
+      }
+      const wakeAt = op?.kind === "snooze" ? op.wakeAt : undefined;
+      const toast: ToastRecord = {
+        id: nextToastId(),
+        message: `${failureLabel(msg.command)} — ${msg.reason}`,
+        retry: { kind: msg.command, messageId: msg.messageId, wakeAt },
+      };
+      const toasts = [...get().toasts, toast].slice(-TOAST_LIMIT);
+      set({ messagesById: map, pendingOps: pending, toasts });
+      log.warn("store", "command failed", msg);
+      return;
+    }
     case "error":
       log.warn("store", "server error", msg.message);
       return;
@@ -350,4 +442,8 @@ export const useCustomBundles = (): CustomBundleRecord[] => {
 
 export const useOverrides = (): OverrideRecord[] => {
   return useMailStore((s) => s.overrides);
+}
+
+export const useToasts = (): ToastRecord[] => {
+  return useMailStore((s) => s.toasts);
 }

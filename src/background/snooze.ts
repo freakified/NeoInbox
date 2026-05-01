@@ -2,6 +2,8 @@ import { db } from "../store/db";
 import { SNOOZED_KEY } from "../shared/categories";
 import { log } from "../shared/log";
 import type { SnoozeRecord } from "../shared/types";
+import { archiveFolderIdsForAccount } from "./archiveFolders";
+import { doneMessage } from "./ingest";
 
 const ALARM_PREFIX = "neoinbox-snooze-";
 const SEARCH_PAGE_LIMIT = 20;
@@ -41,9 +43,21 @@ export const snoozeMessage = async (
   await messenger.messages.update(messageId, { tags: nextTags });
 
   try {
-    await messenger.messages.archive([messageId]);
+    await doneMessage(messageId);
   } catch (e) {
-    log.warn("snooze", "archive failed", e);
+    log.warn("snooze", "archive failed; rolling back snooze record + tag", {
+      messageId,
+      e: String(e),
+    });
+    try {
+      await messenger.messages.update(messageId, {
+        tags: (msg.tags ?? []).filter((t) => t !== SNOOZED_KEY),
+      });
+    } catch (untagErr) {
+      log.warn("snooze", "rollback untag failed", { messageId, untagErr });
+    }
+    await db.snoozes.delete(messageId);
+    throw e;
   }
 
   await messenger.alarms.create(`${ALARM_PREFIX}${messageId}`, { when: wakeAt });
@@ -110,26 +124,6 @@ const findByHeaderMessageId = async (
   return undefined;
 }
 
-const archiveFolderIdsForAccount = async (
-  accountId: string,
-): Promise<string[]> => {
-  const accounts = await messenger.accounts.list();
-  const out: string[] = [];
-  for (const acc of accounts) {
-    if (accountId && acc.id !== accountId) continue;
-    walk(acc.folders ?? [], (f) => {
-      if (!f.id) return;
-      if (
-        f.specialUse?.includes("archives") ||
-        (f as unknown as { type?: string }).type === "archives"
-      ) {
-        out.push(f.id);
-      }
-    });
-  }
-  return out;
-}
-
 const scanFolderForHeader = async (
   folderId: string,
   headerMessageId: string,
@@ -147,13 +141,3 @@ const scanFolderForHeader = async (
     page = await messenger.messages.continueList(page.id);
   }
 }
-
-const walk = (
-  folders: messenger.folders.MailFolder[],
-  visit: (f: messenger.folders.MailFolder) => void,
-): void => {
-  for (const f of folders) {
-    visit(f);
-    if (f.subFolders) walk(f.subFolders, visit);
-  }
-};
