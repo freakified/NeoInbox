@@ -43,6 +43,7 @@ export interface ToastRecord {
   id: string;
   message: string;
   retry?: { kind: "done" | "snooze" | "trash"; messageId: number; wakeAt?: number };
+  undo?: { messageIds: number[]; kind: "done" | "trash" };
 }
 
 interface MailStore {
@@ -66,11 +67,35 @@ interface MailStore {
   deleteCustomBundle: (id: string) => void;
   retryBackfill: () => void;
   retryToast: (toastId: string) => void;
+  undoToast: (toastId: string) => void;
   dismissToast: (toastId: string) => void;
 }
 
+const UNDO_TIMEOUT_MS = 5000;
+
 let toastSeq = 0;
 const nextToastId = (): string => `t${++toastSeq}-${Date.now()}`;
+
+const undoTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+const commitUndoToast = (
+  get: () => MailStore,
+  set: (partial: Partial<MailStore>) => void,
+  toastId: string,
+): void => {
+  const timer = undoTimers.get(toastId);
+  if (timer !== undefined) {
+    clearTimeout(timer);
+    undoTimers.delete(toastId);
+  }
+  const toast = get().toasts.find((t) => t.id === toastId);
+  if (toast?.undo) {
+    for (const id of toast.undo.messageIds) {
+      send({ type: toast.undo.kind, messageId: id });
+    }
+  }
+  set({ toasts: get().toasts.filter((t) => t.id !== toastId) });
+};
 
 let port: BackgroundPort | null = null;
 
@@ -157,8 +182,20 @@ export const useMailStore = create<MailStore>((set, get) => ({
       if (m) pending[id] = { kind: "done", message: m };
       delete map[id];
     }
-    set({ messagesById: map, pendingOps: pending });
-    for (const id of messageIds) send({ type: "done", messageId: id });
+    const toastId = nextToastId();
+    const toast: ToastRecord = {
+      id: toastId,
+      message: "Archived",
+      undo: { messageIds, kind: "done" },
+    };
+    const allToasts = [...get().toasts, toast];
+    const newToasts = allToasts.slice(-TOAST_LIMIT);
+    for (const dropped of allToasts.slice(0, allToasts.length - TOAST_LIMIT)) {
+      if (dropped.undo) commitUndoToast(get, set, dropped.id);
+    }
+    set({ messagesById: map, pendingOps: pending, toasts: newToasts });
+    const timer = setTimeout(() => commitUndoToast(get, set, toastId), UNDO_TIMEOUT_MS);
+    undoTimers.set(toastId, timer);
   },
 
   snoozeThread: (messageIds, wakeAt) => {
@@ -183,8 +220,20 @@ export const useMailStore = create<MailStore>((set, get) => ({
       if (m) pending[id] = { kind: "trash", message: m };
       delete map[id];
     }
-    set({ messagesById: map, pendingOps: pending });
-    for (const id of messageIds) send({ type: "trash", messageId: id });
+    const toastId = nextToastId();
+    const toast: ToastRecord = {
+      id: toastId,
+      message: "Moved to trash",
+      undo: { messageIds, kind: "trash" },
+    };
+    const allToasts = [...get().toasts, toast];
+    const newToasts = allToasts.slice(-TOAST_LIMIT);
+    for (const dropped of allToasts.slice(0, allToasts.length - TOAST_LIMIT)) {
+      if (dropped.undo) commitUndoToast(get, set, dropped.id);
+    }
+    set({ messagesById: map, pendingOps: pending, toasts: newToasts });
+    const timer = setTimeout(() => commitUndoToast(get, set, toastId), UNDO_TIMEOUT_MS);
+    undoTimers.set(toastId, timer);
   },
 
   setOverride: (senderDomain, category) => {
@@ -230,8 +279,35 @@ export const useMailStore = create<MailStore>((set, get) => ({
     }
   },
 
-  dismissToast: (toastId) => {
+  undoToast: (toastId) => {
+    const timer = undoTimers.get(toastId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      undoTimers.delete(toastId);
+    }
+    const toast = get().toasts.find((t) => t.id === toastId);
+    if (toast?.undo) {
+      const pending = { ...get().pendingOps };
+      const map = { ...get().messagesById };
+      for (const id of toast.undo.messageIds) {
+        const op = pending[id];
+        if (op) {
+          map[id] = op.message;
+          delete pending[id];
+        }
+      }
+      set({ messagesById: map, pendingOps: pending });
+    }
     set({ toasts: get().toasts.filter((t) => t.id !== toastId) });
+  },
+
+  dismissToast: (toastId) => {
+    const toast = get().toasts.find((t) => t.id === toastId);
+    if (toast?.undo) {
+      commitUndoToast(get, set, toastId);
+    } else {
+      set({ toasts: get().toasts.filter((t) => t.id !== toastId) });
+    }
   },
 }));
 

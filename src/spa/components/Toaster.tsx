@@ -8,12 +8,14 @@ export const Toaster = () => {
   const toasts = useToasts();
   const dismissToast = useMailStore((st) => st.dismissToast);
   const retryToast = useMailStore((st) => st.retryToast);
+  const undoToast = useMailStore((st) => st.undoToast);
 
   useEffect(() => {
     if (toasts.length === 0) return;
-    const timers = toasts.map((t) =>
-      window.setTimeout(() => dismissToast(t.id), AUTO_DISMISS_MS),
-    );
+    // Undo toasts are dismissed by the store's commit timer; skip them here.
+    const timers = toasts
+      .filter((t) => !t.undo)
+      .map((t) => window.setTimeout(() => dismissToast(t.id), AUTO_DISMISS_MS));
     return () => {
       for (const id of timers) window.clearTimeout(id);
     };
@@ -26,6 +28,15 @@ export const Toaster = () => {
       {toasts.map((t) => (
         <div key={t.id} className={s.toast} role="status">
           <span className={s.message}>{t.message}</span>
+          {t.undo && (
+            <button
+              type="button"
+              className={s.action}
+              onClick={() => undoToast(t.id)}
+            >
+              Undo
+            </button>
+          )}
           {t.retry && (
             <button
               type="button"

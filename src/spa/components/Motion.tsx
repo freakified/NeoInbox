@@ -113,6 +113,7 @@ export const ExpandableRegion = ({
   const reducedMotion = useReducedMotion();
   const innerRef = useRef<HTMLDivElement | null>(null);
   const [height, setHeight] = useState(0);
+  const openingRef = useRef(false);
 
   useLayoutEffect(() => {
     if (!isOpen || !innerRef.current || reducedMotion) return;
@@ -123,7 +124,11 @@ export const ExpandableRegion = ({
     };
 
     setHeight(0);
-    const frame = requestAnimationFrame(measure);
+    openingRef.current = true;
+    const frame = requestAnimationFrame(() => {
+      openingRef.current = false;
+      measure();
+    });
     const observer = new ResizeObserver(measure);
     observer.observe(innerRef.current);
 
@@ -132,6 +137,13 @@ export const ExpandableRegion = ({
       observer.disconnect();
     };
   }, [isOpen, reducedMotion]);
+
+  // Re-measure after any render while open (e.g. thread expanding/collapsing inside a bundle).
+  // Skipped during the opening phase to avoid overriding the expand-from-0 animation.
+  useLayoutEffect(() => {
+    if (!isOpen || !innerRef.current || reducedMotion || openingRef.current) return;
+    setHeight(innerRef.current.scrollHeight);
+  });
 
   if (reducedMotion) {
     return isOpen ? <div className={className}>{children}</div> : null;
