@@ -134,5 +134,5 @@
   margin: 24px auto;
   background: #fff;
   box-shadow: var(--shadow-elevation-3);
-  overflow: hidden;
+  overflow: clip;
 }
