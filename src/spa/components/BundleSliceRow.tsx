@@ -39,14 +39,22 @@ export const BundleSliceRow = ({
 
   const unread = threads.reduce((n, t) => n + t.unreadCount, 0);
   const latestDate = threads.reduce((max, t) => Math.max(max, t.latestDate), 0);
-  const preview = threads
+  const previewContent = threads
     .slice(0, 3)
-    .map((t) => {
+    .map((t, idx) => {
       const last = t.messages[t.messages.length - 1];
-      return last ? senderName(last.author) : "";
+      const name = last ? senderName(last.author) : "";
+      if (!name) return null;
+      return (
+        <span key={t.id} className={clsx(t.unreadCount > 0 && s.unreadSender)}>
+          {idx > 0 && " · "}
+          {name}
+        </span>
+      );
     })
-    .filter(Boolean)
-    .join(" · ");
+    .filter(Boolean);
+
+  const preview = <span className={s.previewList}>{previewContent}</span>;
   const attachmentRefs = collectAttachments(threads.flatMap((t) => t.messages));
 
   const [localOpenThreadId, setLocalOpenThreadId] = useState<string | null>(null);

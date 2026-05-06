@@ -102,3 +102,11 @@
   box-shadow: var(--shadow-elevation-3);
   overflow: clip;
 }
+
+.previewList {
+  color: var(--color-md-on-surface);
+}
+
+.unreadSender {
+  font-weight: 600;
+}
