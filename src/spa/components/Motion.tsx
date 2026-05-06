@@ -4,13 +4,7 @@ import {
   motion,
   useReducedMotion,
 } from "framer-motion";
-import {
-  forwardRef,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { forwardRef, type ReactNode } from "react";
 
 export const layoutTransition = {
   type: "spring",
@@ -111,39 +105,6 @@ export const ExpandableRegion = ({
   isOpen,
 }: ExpandableRegionProps) => {
   const reducedMotion = useReducedMotion();
-  const innerRef = useRef<HTMLDivElement | null>(null);
-  const [height, setHeight] = useState(0);
-  const openingRef = useRef(false);
-
-  useLayoutEffect(() => {
-    if (!isOpen || !innerRef.current || reducedMotion) return;
-
-    const measure = () => {
-      const nextHeight = innerRef.current?.scrollHeight ?? 0;
-      setHeight(nextHeight);
-    };
-
-    setHeight(0);
-    openingRef.current = true;
-    const frame = requestAnimationFrame(() => {
-      openingRef.current = false;
-      measure();
-    });
-    const observer = new ResizeObserver(measure);
-    observer.observe(innerRef.current);
-
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-    };
-  }, [isOpen, reducedMotion]);
-
-  // Re-measure after any render while open (e.g. thread expanding/collapsing inside a bundle).
-  // Skipped during the opening phase to avoid overriding the expand-from-0 animation.
-  useLayoutEffect(() => {
-    if (!isOpen || !innerRef.current || reducedMotion || openingRef.current) return;
-    setHeight(innerRef.current.scrollHeight);
-  });
 
   if (reducedMotion) {
     return isOpen ? <div className={className}>{children}</div> : null;
@@ -155,14 +116,12 @@ export const ExpandableRegion = ({
         <motion.div
           key="body"
           initial={{ height: 0, opacity: 0 }}
-          animate={{ height, opacity: 1 }}
+          animate={{ height: "auto", opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
           transition={expandTransition}
           className={className}
         >
-          <div ref={innerRef} className={innerClassName}>
-            {children}
-          </div>
+          <div className={innerClassName}>{children}</div>
         </motion.div>
       )}
     </AnimatePresence>

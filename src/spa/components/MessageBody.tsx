@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { RawMessage } from "../../shared/types";
+import { useIframeAutoHeight } from "../lib/useIframeAutoHeight";
 import { buildSrcdoc, extractHtmlBody, extractTextBody } from "../lib/srcdoc";
 import s from "./MessageBody.module.css";
 
@@ -10,9 +11,8 @@ export const MessageBody = ({
 }) => {
   const [rawHtml, setRawHtml] = useState<string | null>(null);
   const [isPlainText, setIsPlainText] = useState(false);
-  const [iframeHeight, setIframeHeight] = useState(200);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const roRef = useRef<ResizeObserver | null>(null);
+  const { height, onLoad } = useIframeAutoHeight(iframeRef);
 
   useEffect(() => {
     messenger.messages.getFull(m.id).then((part) => {
@@ -26,19 +26,6 @@ export const MessageBody = ({
       }
     });
   }, [m.id]);
-
-  useEffect(() => () => roRef.current?.disconnect(), []);
-
-  const measureHeight = useCallback(() => {
-    const doc = iframeRef.current?.contentDocument;
-    if (!doc) return;
-    roRef.current?.disconnect();
-    const measure = () => setIframeHeight(doc.documentElement.scrollHeight + 24);
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(doc.documentElement);
-    roRef.current = ro;
-  }, []);
 
   const srcdoc = useMemo(
     () => (rawHtml !== null ? buildSrcdoc(rawHtml, isPlainText) : ""),
@@ -54,12 +41,13 @@ export const MessageBody = ({
           ref={iframeRef}
           sandbox="allow-same-origin"
           srcDoc={srcdoc}
-          onLoad={measureHeight}
+          onLoad={onLoad}
           style={{
             width: "100%",
-            height: iframeHeight,
+            height,
             border: "none",
             display: "block",
+            boxSizing: "border-box",
           }}
           title={m.subject}
         />
