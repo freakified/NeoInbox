@@ -172,6 +172,20 @@ onCommand(async (msg) => {
       if (updated.length) broadcast({ type: "delta", updated });
       return;
     }
+    case "set-bundle-rule": {
+      await db.bundleRules.put(msg.rule);
+      void reclassifyAll().catch((e) =>
+        log.warn("reclassify", "after set-bundle-rule failed", e),
+      );
+      return;
+    }
+    case "delete-bundle-rule": {
+      await db.bundleRules.delete(msg.id);
+      void reclassifyAll().catch((e) =>
+        log.warn("reclassify", "after delete-bundle-rule failed", e),
+      );
+      return;
+    }
     case "set-custom-bundle": {
       await db.customBundles.put(msg.bundle);
       void reclassifyAll().catch((e) =>

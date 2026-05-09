@@ -1,3 +1,5 @@
+import { parseSender } from "../shared/senders";
+
 export interface Features {
   senderEmail: string;
   senderDomain: string;
@@ -11,24 +13,11 @@ export interface Features {
   hasMailingList: boolean;
 }
 
-const ADDR_RE = /<([^>]+)>/;
-
 export const extractFeatures = (
   header: messenger.messages.MessageHeader,
   headers: Record<string, string[]>,
 ): Features => {
-  const raw = header.author ?? "";
-  const m = raw.match(ADDR_RE);
-  const email = (m?.[1] ?? raw).trim().toLowerCase();
-  const atIdx = email.lastIndexOf("@");
-  const senderLocalPart = atIdx >= 0 ? email.slice(0, atIdx) : "";
-  const senderDomain = atIdx >= 0 ? email.slice(atIdx + 1) : "";
-  const senderName = m
-    ? raw
-        .slice(0, raw.indexOf("<"))
-        .trim()
-        .replace(/^"|"$/g, "")
-    : "";
+  const sender = parseSender(header.author ?? "");
 
   const lower: Record<string, string[]> = {};
   for (const [k, v] of Object.entries(headers)) {
@@ -36,10 +25,10 @@ export const extractFeatures = (
   }
 
   return {
-    senderEmail: email,
-    senderDomain,
-    senderLocalPart,
-    senderName,
+    senderEmail: sender.email,
+    senderDomain: sender.domain,
+    senderLocalPart: sender.localPart,
+    senderName: sender.name,
     subject: header.subject ?? "",
     headers: lower,
     listId: lower["list-id"]?.[0],

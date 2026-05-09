@@ -12,7 +12,7 @@ import {
   type ServerMsg,
 } from "../shared/messaging";
 import { buildThreads } from "../shared/threading";
-import type { BuiltinCategory, Category, CustomBundleRecord, OverrideRecord, RawMessage, Thread } from "../shared/types";
+import type { BuiltinCategory, BundleRuleRecord, Category, CustomBundleRecord, OverrideRecord, RawMessage, Thread } from "../shared/types";
 import { dateBucket } from "../spa/lib/dateBucket";
 
 interface BackgroundPort {
@@ -52,6 +52,7 @@ interface MailStore {
   hydrated: boolean;
   syncProgress: SyncProgress | null;
   customBundles: CustomBundleRecord[];
+  bundleRules: BundleRuleRecord[];
   overrides: OverrideRecord[];
   connectionState: ConnectionState;
   pendingOps: Record<number, PendingOp>;
@@ -63,12 +64,15 @@ interface MailStore {
   snoozeThread: (messageIds: number[], wakeAt: number) => void;
   trashThread: (messageIds: number[]) => void;
   setOverride: (senderDomain: string, category: BuiltinCategory | null) => void;
+  setBundleRule: (rule: BundleRuleRecord) => void;
+  deleteBundleRule: (id: string) => void;
   setCustomBundle: (bundle: CustomBundleRecord) => void;
   deleteCustomBundle: (id: string) => void;
   retryBackfill: () => void;
   retryToast: (toastId: string) => void;
   undoToast: (toastId: string) => void;
   dismissToast: (toastId: string) => void;
+  notify: (message: string) => void;
 }
 
 const UNDO_TIMEOUT_MS = 5000;
@@ -114,6 +118,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   hydrated: false,
   syncProgress: null,
   customBundles: [],
+  bundleRules: [],
   overrides: [],
   connectionState: "connected",
   pendingOps: {},
@@ -121,15 +126,16 @@ export const useMailStore = create<MailStore>((set, get) => ({
 
   init: async () => {
     if (get().hydrated) return;
-    const [all, rawBundles, overrides] = await Promise.all([
+    const [all, rawBundles, bundleRules, overrides] = await Promise.all([
       db.messages.toArray(),
       db.customBundles.toArray(),
+      db.bundleRules.toArray(),
       db.overrides.toArray(),
     ]);
     const customBundles = rawBundles.sort((a, b) => a.order - b.order);
     const byId: Record<number, RawMessage> = {};
     for (const m of all) byId[m.id] = m;
-    set({ messagesById: byId, hydrated: true, customBundles, overrides });
+    set({ messagesById: byId, hydrated: true, customBundles, bundleRules, overrides });
 
     const runtime = messenger.runtime as unknown as RuntimeWithConnect;
     if (!runtime.connect) {
@@ -185,7 +191,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
     const toastId = nextToastId();
     const toast: ToastRecord = {
       id: toastId,
-      message: "Archived",
+      message: "Message marked as done",
       undo: { messageIds, kind: "done" },
     };
     const allToasts = [...get().toasts, toast];
@@ -242,6 +248,18 @@ export const useMailStore = create<MailStore>((set, get) => ({
     const overrides = category ? [...filtered, { senderDomain: key, category }] : filtered;
     set({ overrides });
     send({ type: "override", senderDomain, category });
+  },
+
+  setBundleRule: (rule) => {
+    const rules = get().bundleRules.filter((r) => r.id !== rule.id);
+    rules.push(rule);
+    set({ bundleRules: rules });
+    send({ type: "set-bundle-rule", rule });
+  },
+
+  deleteBundleRule: (id) => {
+    set({ bundleRules: get().bundleRules.filter((r) => r.id !== id) });
+    send({ type: "delete-bundle-rule", id });
   },
 
   setCustomBundle: (bundle) => {
@@ -308,6 +326,11 @@ export const useMailStore = create<MailStore>((set, get) => ({
     } else {
       set({ toasts: get().toasts.filter((t) => t.id !== toastId) });
     }
+  },
+
+  notify: (message) => {
+    const toast: ToastRecord = { id: nextToastId(), message };
+    set({ toasts: [...get().toasts, toast].slice(-TOAST_LIMIT) });
   },
 }));
 
@@ -387,11 +410,11 @@ const applyServerMsg = (
 export type StreamItem =
   | { type: "thread"; date: number; thread: Thread }
   | {
-      type: "bundle";
-      date: number;
-      category: Category;
-      threads: Thread[];
-    };
+    type: "bundle";
+    date: number;
+    category: Category;
+    threads: Thread[];
+  };
 
 export interface StreamSection {
   label: string;
@@ -518,6 +541,10 @@ export const useCustomBundles = (): CustomBundleRecord[] => {
 
 export const useOverrides = (): OverrideRecord[] => {
   return useMailStore((s) => s.overrides);
+}
+
+export const useBundleRules = (): BundleRuleRecord[] => {
+  return useMailStore((s) => s.bundleRules);
 }
 
 export const useToasts = (): ToastRecord[] => {

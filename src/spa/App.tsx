@@ -9,11 +9,11 @@ import {
   type StreamItem,
 } from "../store/mailStore";
 import { BundleSliceRow } from "./components/BundleSliceRow";
+import { BundleManagerModal } from "./components/BundleManagerModal";
 import { Icon } from "./components/Icon";
 import { MotionSurface } from "./components/Motion";
 import { RowGroup } from "./components/RowGroup";
 import { SectionLabel } from "./components/SectionLabel";
-import { SettingsPanel } from "./components/SettingsPanel";
 import { ThreadRow } from "./components/ThreadRow";
 import { Toaster } from "./components/Toaster";
 import s from "./App.module.css";
@@ -82,7 +82,7 @@ export const App = () => {
         }
       }}
     >
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <BundleManagerModal onClose={() => setSettingsOpen(false)} />}
 
       <header className={s.header}>
         <h1 className={s.title}>NeoInbox</h1>

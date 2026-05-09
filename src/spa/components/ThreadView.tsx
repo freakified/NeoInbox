@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
+import { BundleMenu } from "./BundleMenu";
 import { Icon } from "./Icon";
 import { InlineMessage } from "./InlineMessage";
 import { ReplyFooter } from "./ReplyFooter";
@@ -44,6 +45,7 @@ export const ThreadView = ({
       <div className={s.header}>
         <h2 className={s.title}>{t.subject || "(no subject)"}</h2>
         <div className={s.headerActions}>
+          <BundleMenu thread={t} />
           <button
             onClick={(e) => {
               e.stopPropagation();

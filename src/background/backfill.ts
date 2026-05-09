@@ -2,7 +2,7 @@ import { classifyAndTag, extractAttachments } from "./ingest";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
 import { db } from "../store/db";
-import { categoryFromTags } from "../shared/categories";
+import { CATEGORIES, NEO_TAG_KEYS, categoryFromTags } from "../shared/categories";
 import { collectInboxFolders, collectSentFolders } from "../shared/folders";
 import { log } from "../shared/log";
 import type { ServerMsg } from "../shared/messaging";
@@ -150,9 +150,17 @@ export const reclassifyAll = async (): Promise<{ scanned: number; updated: numbe
       } catch {
         continue;
       }
-      const before = categoryFromTags(header.tags);
-      const cat = await classifyAndTag({ ...header, tags: header.tags ?? [] });
-      if (cat && cat !== before) updated++;
+      const tags = header.tags ?? [];
+      const before = categoryFromTags(tags);
+      const strippedTags = tags.filter((t) => !NEO_TAG_KEYS.has(t));
+      const cat = await classifyAndTag({ ...header, tags: strippedTags });
+      const meta = cat
+        ? (CATEGORIES as Record<string, typeof CATEGORIES[keyof typeof CATEGORIES] | undefined>)[cat]
+        : undefined;
+      if (!meta?.key && strippedTags.length !== tags.length) {
+        await messenger.messages.update(cachedMsg.id, { tags: strippedTags });
+      }
+      if (cat !== before) updated++;
       const fresh = await messenger.messages.get(cachedMsg.id);
       const raw = headerToRawMessage(fresh, "inbox", cat);
       raw.attachments = cachedMsg.attachments ?? (await extractAttachments(cachedMsg.id));

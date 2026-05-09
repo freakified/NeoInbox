@@ -76,3 +76,8 @@
   opacity: 1;
   pointer-events: auto;
 }
+
+.row:focus-within .actionSlot {
+  opacity: 1;
+  pointer-events: auto;
+}

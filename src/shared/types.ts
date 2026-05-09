@@ -24,6 +24,13 @@ export interface CustomBundleRecord {
   rules: CustomBundleRule[];
 }
 
+export interface BundleRuleRecord {
+  id: string;
+  category: BuiltinCategory;
+  rule: CustomBundleRule;
+  createdAt: number;
+}
+
 export interface AttachmentSummary {
   name: string;
   contentType: string;
