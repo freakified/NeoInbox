@@ -15,9 +15,10 @@ export const collectAttachments = (
 ): AttachmentRef[] => {
   const refs: AttachmentRef[] = [];
   const seen = new Set<string>();
-  for (const m of messages) {
+  const newestFirst = [...messages].sort((a, b) => b.date - a.date);
+  for (const m of newestFirst) {
     for (const a of m.attachments ?? []) {
-      const key = a.name.toLowerCase();
+      const key = `${m.id}:${a.partName}`;
       if (seen.has(key)) continue;
       seen.add(key);
       refs.push({ messageId: m.id, attachment: a });

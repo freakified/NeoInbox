@@ -40,10 +40,12 @@ export interface AttachmentSummary {
 
 export interface RawMessage {
   id: number;
+  headerMessageId: string;
   subject: string;
   author: string;
   recipients: string[];
   date: number;
+  size: number;
   read: boolean;
   folderId: string;
   accountId: string;
@@ -51,6 +53,8 @@ export interface RawMessage {
   category: Category | null;
   pinned: boolean;
   origin: "inbox" | "sent";
+  references?: string[];
+  inReplyTo?: string[];
   attachments?: AttachmentSummary[];
 }
 

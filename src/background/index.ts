@@ -1,8 +1,8 @@
 import { ensureTagsRegistered } from "./tags";
 import {
+  applyMessageDetails,
   classifyAndTag,
   doneMessage,
-  extractAttachments,
   pinMessage,
   trashMessage,
 } from "./ingest";
@@ -57,7 +57,7 @@ messenger.alarms.onAlarm.addListener(async (alarm) => {
   if (!result) return;
   if (result.restoredHeader) {
     const raw = headerToRawMessage(result.restoredHeader, "inbox");
-    raw.attachments = await extractAttachments(result.restoredHeader.id);
+    await applyMessageDetails(raw);
     await db.messages.put(raw);
     broadcast({ type: "delta", added: [raw] });
   } else {
@@ -86,7 +86,7 @@ onCommand(async (msg) => {
       const header = await messenger.messages.get(msg.messageId);
       const cached = await db.messages.get(msg.messageId);
       const raw = headerToRawMessage(header, cached?.origin ?? "inbox");
-      raw.attachments = cached?.attachments;
+      await applyMessageDetails(raw, cached);
       await db.messages.put(raw);
       broadcast({ type: "delta", updated: [raw] });
       return;
@@ -162,7 +162,7 @@ onCommand(async (msg) => {
           const cat = await classifyAndTag(stripped);
           const fresh = await messenger.messages.get(cmsg.id);
           const raw = headerToRawMessage(fresh, "inbox", cat);
-          raw.attachments = cmsg.attachments;
+          await applyMessageDetails(raw, cmsg);
           await db.messages.put(raw);
           updated.push(raw);
         } catch (e) {
@@ -209,7 +209,7 @@ onCommand(async (msg) => {
           const cat = await classifyAndTag(stripped);
           const fresh = await messenger.messages.get(cachedMsg.id);
           const raw = headerToRawMessage(fresh, "inbox", cat);
-          raw.attachments = cachedMsg.attachments;
+          await applyMessageDetails(raw, cachedMsg);
           await db.messages.put(raw);
           updated.push(raw);
         } catch (e) {

@@ -37,10 +37,12 @@ export const headerToRawMessage = (
 
   return {
     id: header.id,
+    headerMessageId: header.headerMessageId ?? "",
     subject: header.subject ?? "",
     author: header.author ?? "",
     recipients: header.recipients ?? [],
     date: header.date ? new Date(header.date).getTime() : 0,
+    size: header.size ?? 0,
     read: header.read ?? false,
     folderId: folder?.id ?? "",
     accountId: folder?.accountId ?? "",

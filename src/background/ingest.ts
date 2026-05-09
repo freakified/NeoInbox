@@ -8,7 +8,7 @@ import {
 } from "../shared/categories";
 import { log } from "../shared/log";
 import { scanCidRefs } from "../spa/lib/srcdoc";
-import type { AttachmentSummary, Category } from "../shared/types";
+import type { AttachmentSummary, Category, RawMessage } from "../shared/types";
 import { messageStillIn, resolveArchiveFolder } from "./archiveFolders";
 
 export class ArchiveFailedError extends Error {
@@ -133,23 +133,58 @@ export const trashMessage = async (id: number): Promise<void> => {
 export const extractAttachments = async (
   messageId: number,
 ): Promise<AttachmentSummary[]> => {
+  return (await extractMessageDetails(messageId)).attachments;
+}
+
+export interface MessageDetails {
+  attachments: AttachmentSummary[];
+  references: string[];
+  inReplyTo: string[];
+}
+
+const messageIdTokens = (value: string): string[] => {
+  const bracketed = [...value.matchAll(/<([^>]+)>/g)].map((m) => m[1] ?? "");
+  const raw = bracketed.length ? bracketed : value.split(/\s+/);
+  return raw
+    .map((token) => token.replace(/[<>]/g, "").trim().toLowerCase())
+    .filter(Boolean);
+}
+
+const headerValues = (
+  headers: Record<string, string[]> | undefined,
+  name: string,
+): string[] => {
+  if (!headers) return [];
+  const wanted = name.toLowerCase();
+  for (const [key, values] of Object.entries(headers)) {
+    if (key.toLowerCase() === wanted) return values;
+  }
+  return [];
+}
+
+export const extractMessageDetails = async (
+  messageId: number,
+): Promise<MessageDetails> => {
   let list: messenger.messages.MessageAttachment[];
   try {
     list = await messenger.messages.listAttachments(messageId);
   } catch {
-    return [];
+    list = [];
   }
-  if (list.length === 0) return [];
 
   let cidRefs = new Set<string>();
+  let references: string[] = [];
+  let inReplyTo: string[] = [];
   try {
     const full = await messenger.messages.getFull(messageId);
     cidRefs = scanCidRefs(full);
+    references = headerValues(full.headers, "references").flatMap(messageIdTokens);
+    inReplyTo = headerValues(full.headers, "in-reply-to").flatMap(messageIdTokens);
   } catch {
     /* no body available; render every attachment as a card */
   }
 
-  return list
+  const attachments = list
     .filter((a) => !isCidReferenced(cidRefs, a.name))
     .map((a) => ({
       name: a.name,
@@ -157,6 +192,36 @@ export const extractAttachments = async (
       size: a.size,
       partName: a.partName,
     }));
+
+  return { attachments, references, inReplyTo };
+}
+
+export const canReuseMessageDetails = (
+  cached: RawMessage | undefined,
+  raw: RawMessage,
+): cached is RawMessage & Required<Pick<RawMessage, "attachments" | "references" | "inReplyTo">> => {
+  return !!cached
+    && cached.size === raw.size
+    && Array.isArray(cached.attachments)
+    && Array.isArray(cached.references)
+    && Array.isArray(cached.inReplyTo);
+}
+
+export const applyMessageDetails = async (
+  raw: RawMessage,
+  cached?: RawMessage,
+): Promise<void> => {
+  if (canReuseMessageDetails(cached, raw)) {
+    raw.attachments = cached.attachments;
+    raw.references = cached.references;
+    raw.inReplyTo = cached.inReplyTo;
+    return;
+  }
+
+  const details = await extractMessageDetails(raw.id);
+  raw.attachments = details.attachments;
+  raw.references = details.references;
+  raw.inReplyTo = details.inReplyTo;
 }
 
 const isCidReferenced = (cidRefs: Set<string>, name: string): boolean => {
