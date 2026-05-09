@@ -8,3 +8,33 @@
   font-size: 14px;
   color: #a3a3a3;
 }
+
+.imageNotice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 3px;
+  background: #f8fafd;
+  color: #5f6368;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.noticeButton {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #1a73e8;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+}
+
+.noticeButton:hover {
+  text-decoration: underline;
+}

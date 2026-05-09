@@ -228,28 +228,77 @@ const BASE_CSS = `<style>
   .nb-toggle-label:hover{background:#e8eaed}
   .nb-toggle-checkbox:not(:checked) ~ .nb-quoted{display:none}
   .nb-toggle-checkbox:checked ~ .nb-toggle-label{display:none}
+  .nb-blocked-image{display:none!important}
 </style>`;
+
+const isRemoteUrl = (value: string | null): boolean => {
+  const url = value?.trim();
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return !lower.startsWith("data:") && !lower.startsWith("cid:");
+};
+
+const hasRemoteBackground = (backgroundImage: string): boolean => {
+  if (!backgroundImage || backgroundImage === "none") return false;
+  return /url\(\s*(?!['"]?(?:data|cid):)/i.test(backgroundImage);
+};
+
+const blockRemoteImages = (doc: Document): void => {
+  doc.querySelectorAll("img").forEach((img) => {
+    const src = img.getAttribute("src");
+    const srcset = img.getAttribute("srcset");
+    if (isRemoteUrl(src) || isRemoteUrl(srcset)) {
+      img.dataset.src = src ?? "";
+      img.dataset.srcset = srcset ?? "";
+      img.removeAttribute("src");
+      img.removeAttribute("srcset");
+      img.classList.add("nb-blocked-image");
+    }
+  });
+
+  doc.querySelectorAll("source").forEach((source) => {
+    const srcset = source.getAttribute("srcset");
+    if (isRemoteUrl(srcset)) {
+      source.dataset.srcset = srcset ?? "";
+      source.removeAttribute("srcset");
+    }
+  });
+
+  doc.querySelectorAll<HTMLElement>("[style]").forEach((el) => {
+    const backgroundImage = el.style.backgroundImage;
+    if (hasRemoteBackground(backgroundImage)) {
+      el.dataset.bgimg = backgroundImage;
+      el.style.backgroundImage = "none";
+    }
+  });
+};
+
+export const hasBlockedRemoteImages = (rawHtml: string): boolean => {
+  const doc = new DOMParser().parseFromString(rawHtml, "text/html");
+  if (
+    Array.from(doc.querySelectorAll("img")).some(
+      (img) => isRemoteUrl(img.getAttribute("src")) || isRemoteUrl(img.getAttribute("srcset")),
+    )
+  ) {
+    return true;
+  }
+  if (
+    Array.from(doc.querySelectorAll("source")).some((source) =>
+      isRemoteUrl(source.getAttribute("srcset")),
+    )
+  ) {
+    return true;
+  }
+  return Array.from(doc.querySelectorAll<HTMLElement>("[style]")).some((el) =>
+    hasRemoteBackground(el.style.backgroundImage),
+  );
+};
 
 export const buildSrcdoc = (rawHtml: string, showImages: boolean): string => {
   const doc = new DOMParser().parseFromString(rawHtml, "text/html");
   doc.querySelectorAll("script, noscript").forEach((el) => el.remove());
-  if (!showImages) {
-    doc.querySelectorAll("img").forEach((img) => {
-      if (img.src && !img.src.startsWith("data:")) {
-        img.dataset.src = img.src;
-        img.removeAttribute("src");
-        img.removeAttribute("srcset");
-      }
-    });
-    doc.querySelectorAll<HTMLElement>("[style]").forEach((el) => {
-      const s = el.style.backgroundImage;
-      if (s && s !== "none") {
-        el.dataset.bgimg = s;
-        el.style.backgroundImage = "none";
-      }
-    });
-    markQuotedHtml(doc);
-  }
+  if (!showImages) blockRemoteImages(doc);
+  markQuotedHtml(doc);
   doc.head.insertAdjacentHTML("afterbegin", BASE_CSS);
   return `<!DOCTYPE html>${doc.documentElement.outerHTML}`;
 }
