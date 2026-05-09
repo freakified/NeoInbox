@@ -26,10 +26,10 @@
   font-weight: 500;
 }
 
-.unreadCount {
+.threadCount {
   font-size: 12px;
-  font-weight: 600;
-  color: var(--color-md-on-surface);
+  font-weight: 400;
+  color: var(--color-md-secondary-text);
   margin-left: 4px;
 }
 

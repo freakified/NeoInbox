@@ -37,7 +37,7 @@ export const BundleSliceRow = ({
   const doneThread = useMailStore((st) => st.doneThread);
   const trashThread = useMailStore((st) => st.trashThread);
 
-  const unread = threads.reduce((n, t) => n + t.unreadCount, 0);
+  const threadCountLabel = threads.length > 25 ? "(25+)" : `(${threads.length})`;
   const latestDate = threads.reduce((max, t) => Math.max(max, t.latestDate), 0);
   const previewContent = threads
     .slice(0, 3)
@@ -115,9 +115,7 @@ export const BundleSliceRow = ({
               <span style={{ color: meta.color }} className={s.bundleName}>
                 {meta.name}
               </span>
-              {unread > 0 && (
-                <span className={s.unreadCount}>({unread})</span>
-              )}
+              <span className={s.threadCount}>{threadCountLabel}</span>
             </>
           }
           secondary={preview}
