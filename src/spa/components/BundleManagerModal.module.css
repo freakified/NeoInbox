@@ -324,6 +324,19 @@
   gap: 8px;
 }
 
+.ruleHelp {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--color-md-secondary-text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ruleHelp span:first-child {
+  color: var(--color-md-on-surface);
+}
+
 .ruleChoices {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

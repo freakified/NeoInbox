@@ -74,6 +74,10 @@ function makeParticipantsLabel(
   return msgs.length > 1 ? `${label} (${msgs.length})` : label;
 }
 
+function threadCategory(msgs: RawMessage[]): RawMessage["category"] {
+  return msgs.find((m) => m.origin === "inbox" && m.category)?.category ?? null;
+}
+
 export function buildThreads(
   messages: readonly RawMessage[],
   myEmails: ReadonlySet<string>,
@@ -121,7 +125,7 @@ export function buildThreads(
       latestDate: latest.date,
       unreadCount: msgs.filter((m) => !m.read && m.origin === "inbox").length,
       pinned: msgs.some((m) => m.pinned),
-      category: latest.category,
+      category: threadCategory(msgs),
       accountId: latest.accountId,
       hasMe: msgs.some((m) => myEmails.has(extractEmail(m.author))),
     });

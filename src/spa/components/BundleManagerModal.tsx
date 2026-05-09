@@ -48,13 +48,35 @@ const CUSTOM_BUNDLE_ICONS = [
 const ruleTypeLabel: Record<RuleType, string> = {
   domain: "Domain",
   email: "Email",
-  subject_keyword: "Subject",
+  subject_keyword: "Subject contains",
 };
 
 const normalizeRule = (type: RuleType, value: string): string => {
-  const trimmed = value.trim().toLowerCase();
+  let trimmed = value.trim().toLowerCase();
+  if (type === "subject_keyword") {
+    trimmed = trimmed
+      .replace(/^\/\.\*/, "")
+      .replace(/\.\*\/$/, "")
+      .replace(/^\.\*/, "")
+      .replace(/\.\*$/, "")
+      .trim();
+  }
   if (type === "domain") return trimmed.replace(/^@/, "");
   return trimmed;
+};
+
+const ruleDescription = (type: RuleType): string => {
+  if (type === "domain") return "Matches any sender at this domain.";
+  if (type === "email") return "Matches this exact sender address.";
+  return "Matches when the subject includes this text anywhere.";
+};
+
+const rulePreview = (type: RuleType, value: string): string => {
+  const normalized = normalizeRule(type, value);
+  if (!normalized) return ruleDescription(type);
+  if (type === "domain") return `Sender domain is ${normalized}`;
+  if (type === "email") return `Sender is ${normalized}`;
+  return `Subject contains "${normalized}"`;
 };
 
 const emptyForm = (order: number, seedRule?: CustomBundleRule): BundleFormState => ({
@@ -186,11 +208,11 @@ export const BundleManagerModal = ({
       notify(`${currentForm.name || "This bundle"} already has that rule`);
       return;
     }
-    setForm((prev) => ({ ...prev, rules: [...currentForm.rules, rule] }));
+    setForm((prev) => ({ ...prev, rules: [...prev.rules, rule] }));
   };
 
   const removeCustomRule = (idx: number) => {
-    setForm((prev) => ({ ...prev, rules: currentForm.rules.filter((_, i) => i !== idx) }));
+    setForm((prev) => ({ ...prev, rules: prev.rules.filter((_, i) => i !== idx) }));
   };
 
   const addBuiltinRule = (category: BuiltinCategory, rule: CustomBundleRule) => {
@@ -312,6 +334,7 @@ export const BundleManagerModal = ({
                 onRuleTypeChange={setThreadRule}
                 onRuleValueChange={setRuleValue}
                 onAddRule={addRule}
+                saveHint="Built-in bundle rules are saved immediately."
               />
             ) : (
               <CustomBundleEditor
@@ -328,6 +351,7 @@ export const BundleManagerModal = ({
                 onRemoveRule={removeCustomRule}
                 onSave={saveForm}
                 onDelete={selected.kind === "custom" ? removeCustom : undefined}
+                saveHint="Custom bundle rules are added to this draft. Save the bundle to apply them."
               />
             )}
           </main>
@@ -347,6 +371,7 @@ const RuleComposer = ({
   onRuleTypeChange,
   onRuleValueChange,
   onAddRule,
+  saveHint,
 }: {
   ruleType: RuleType;
   ruleValue: string;
@@ -355,15 +380,20 @@ const RuleComposer = ({
   onRuleTypeChange: (type: RuleType) => void;
   onRuleValueChange: (value: string) => void;
   onAddRule: () => void;
+  saveHint: string;
 }) => (
   <div className={s.ruleComposer}>
     {thread && (
       <div className={s.ruleChoices}>
         <RuleChoice active={ruleType === "domain"} disabled={!threadDefaults.domain} label="Sender domain" onClick={() => onRuleTypeChange("domain")} />
         <RuleChoice active={ruleType === "email"} disabled={!threadDefaults.email} label="Sender" onClick={() => onRuleTypeChange("email")} />
-        <RuleChoice active={ruleType === "subject_keyword"} disabled={!threadDefaults.subject_keyword} label="Subject" onClick={() => onRuleTypeChange("subject_keyword")} />
+        <RuleChoice active={ruleType === "subject_keyword"} disabled={!threadDefaults.subject_keyword} label="Subject contains" onClick={() => onRuleTypeChange("subject_keyword")} />
       </div>
     )}
+    <div className={s.ruleHelp}>
+      <span>{rulePreview(ruleType, ruleValue)}</span>
+      <span>{saveHint}</span>
+    </div>
     <div className={s.ruleInputRow}>
       {!thread && (
         <select
@@ -373,14 +403,14 @@ const RuleComposer = ({
         >
           <option value="domain">Domain</option>
           <option value="email">Email address</option>
-          <option value="subject_keyword">Subject keyword</option>
+          <option value="subject_keyword">Subject contains</option>
         </select>
       )}
       <input
         type="text"
         className={s.input}
         value={ruleValue}
-        placeholder={ruleType === "domain" ? "example.com" : ruleType === "email" ? "user@example.com" : "keyword"}
+        placeholder={ruleType === "domain" ? "example.com" : ruleType === "email" ? "user@example.com" : "invoice"}
         onChange={(e) => onRuleValueChange(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && onAddRule()}
       />
@@ -400,6 +430,7 @@ const BuiltinBundleEditor = ({
   onRuleTypeChange,
   onRuleValueChange,
   onAddRule,
+  saveHint,
 }: {
   category: BuiltinCategory;
   ruleType: RuleType;
@@ -409,6 +440,7 @@ const BuiltinBundleEditor = ({
   onRuleTypeChange: (type: RuleType) => void;
   onRuleValueChange: (value: string) => void;
   onAddRule: () => void;
+  saveHint: string;
 }) => {
   const meta = CATEGORIES[category];
   const overrides = useOverrides();
@@ -454,6 +486,7 @@ const BuiltinBundleEditor = ({
           onRuleTypeChange={onRuleTypeChange}
           onRuleValueChange={onRuleValueChange}
           onAddRule={onAddRule}
+          saveHint={saveHint}
         />
       </section>
     </div>
@@ -474,6 +507,7 @@ const CustomBundleEditor = ({
   onRemoveRule,
   onSave,
   onDelete,
+  saveHint,
 }: {
   title: string;
   form: BundleFormState;
@@ -488,6 +522,7 @@ const CustomBundleEditor = ({
   onRemoveRule: (idx: number) => void;
   onSave: () => void;
   onDelete?: () => void;
+  saveHint: string;
 }) => (
   <div className={s.editor}>
     <div className={s.editorHeader}>
@@ -562,6 +597,7 @@ const CustomBundleEditor = ({
         onRuleTypeChange={onRuleTypeChange}
         onRuleValueChange={onRuleValueChange}
         onAddRule={onAddRule}
+        saveHint={saveHint}
       />
     </section>
 
