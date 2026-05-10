@@ -37,17 +37,17 @@ const BUNDLE_CATEGORIES = Object.entries(CATEGORIES)
 
 const PRESET_COLORS = [
   "#4285F4", "#34A853", "#FBBC04", "#EA4335",
-  "#FF6D01", "#9C27B0", "#00BCD4", "#795548",
+  "#FF6D01", "#9C27B0", "#00BCD4", "#795548", "#174EA6",
   "#607D8B", "#E91E63", "#009688", "#673AB7",
 ];
 
 const CUSTOM_BUNDLE_ICONS = [
-  "label", "label_important", "local_offer", "bookmark", "star", "favorite",
+  "label", "label_important", "local_offer", "sell", "flag", "bookmark", "star", "favorite",
   "inbox", "mail", "drafts", "mark_email_unread", "notifications", "campaign",
   "work", "business", "badge", "assignment", "task_alt", "event", "schedule",
-  "account_balance", "credit_card", "savings", "receipt", "payments", "trending_up",
-  "shopping_bag", "shopping_cart", "storefront", "redeem", "sell", "inventory_2",
-  "flight", "hotel", "luggage", "map", "directions_car", "train",
+  "account_balance", "finance_mode", "credit_card", "savings", "receipt", "payments", "trending_up",
+  "shopping_bag", "shopping_cart", "storefront", "redeem", "inventory_2",
+  "flight", "travel", "hotel", "luggage", "map", "directions_car", "train",
   "group", "person", "contacts", "forum", "chat", "alternate_email",
   "school", "local_library", "menu_book", "science", "psychology", "lightbulb",
   "restaurant", "local_cafe", "cake", "fitness_center", "health_and_safety", "spa",

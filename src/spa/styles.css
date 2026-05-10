@@ -2,7 +2,7 @@
 @import "@fontsource/roboto/400.css";
 @import "@fontsource/roboto/500.css";
 @import "@fontsource/roboto/700.css";
-@import "@fontsource/material-icons";
+@import "@fontsource-variable/material-symbols-rounded/fill.css";
 
 :root {
   --font-sans: 'Roboto', sans-serif;
@@ -20,8 +20,8 @@
   --shadow-elevation-3: 0 10px 20px rgba(0,0,0,.19), 0 6px 6px rgba(0,0,0,.23);
 }
 
-.material-icons {
-  font-family: 'Material Icons';
+.material-symbols-rounded {
+  font-family: 'Material Symbols Rounded Variable';
   font-weight: normal;
   font-style: normal;
   font-size: 24px;
@@ -32,6 +32,7 @@
   white-space: nowrap;
   direction: ltr;
   font-feature-settings: 'liga';
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   -webkit-font-smoothing: antialiased;
 }
 

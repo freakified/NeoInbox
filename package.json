@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@fontsource/material-icons": "^5.2.7",
+    "@fontsource-variable/material-symbols-rounded": "^5.2.43",
     "@fontsource/roboto": "^5.2.10",
     "@tanstack/react-virtual": "^3.10.8",
     "clsx": "^2.1.1",
