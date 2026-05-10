@@ -15,21 +15,22 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
-  border: 1px solid #e5e5e5;
-  border-radius: 6px;
-  background: #fff;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 2px;
+  background: #eeeeee;
+  box-shadow: var(--shadow-material-card);
   cursor: pointer;
   font: inherit;
   text-align: left;
   min-width: 0;
   max-width: 240px;
-  transition: background 120ms, border-color 120ms;
+  transition: background 150ms, box-shadow 150ms;
 }
 
 .card:hover:not(:disabled) {
-  background: #fafafa;
-  border-color: #d4d4d4;
+  background: #f5f5f5;
+  box-shadow: var(--shadow-material-card-hover);
 }
 
 .card:disabled {
@@ -38,9 +39,9 @@
 
 .cardCompact {
   gap: 6px;
-  padding: 3px 8px;
+  padding: 4px 8px;
   max-width: 140px;
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
 .cardRemoved {
@@ -64,7 +65,7 @@
 
 .name {
   font-size: 13px;
-  color: #171717;
+  color: var(--color-md-on-surface);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -78,12 +79,12 @@
 
 .size {
   font-size: 11px;
-  color: #a3a3a3;
+  color: var(--color-md-secondary-text);
 }
 
 .overflow {
   font-size: 11px;
-  color: #a3a3a3;
+  color: var(--color-md-secondary-text);
   align-self: center;
   flex-shrink: 0;
 }

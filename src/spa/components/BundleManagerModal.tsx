@@ -582,7 +582,7 @@ const RemoteImagesSettings = () => {
                   onClick={() => removeSender(sender)}
                   title="Remove sender"
                 >
-                  <Icon name="close" className={s.ruleRemoveIcon} />
+                  <Icon name="delete" className={clsx(s.ruleRemoveIcon, s.ruleDeleteIcon)} />
                 </button>
               </div>
             ))}
@@ -909,7 +909,7 @@ const RuleRow = ({ rule, onRemove }: { rule: CustomBundleRule; onRemove: () => v
     <span className={s.ruleType}>{ruleTypeLabel[rule.type]}</span>
     <span className={s.ruleValue}>{rule.value}</span>
     <button type="button" className={s.ruleRemove} onClick={onRemove} title="Remove rule">
-      <Icon name="close" className={s.ruleRemoveIcon} />
+      <Icon name="delete" className={clsx(s.ruleRemoveIcon, s.ruleDeleteIcon)} />
     </button>
   </div>
 );
