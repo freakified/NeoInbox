@@ -9,6 +9,7 @@ import {
   hasBlockedRemoteImages,
 } from "../lib/srcdoc";
 import {
+  getRemoteImagePolicy,
   isTrustedImageSender,
   subscribeTrustedImageSenders,
   trustImageSender,
@@ -23,7 +24,7 @@ export const MessageBody = ({
   const [rawHtml, setRawHtml] = useState<string | null>(null);
   const [isPlainText, setIsPlainText] = useState(false);
   const [showImagesForMessage, setShowImagesForMessage] = useState(false);
-  const [trustedSendersVersion, setTrustedSendersVersion] = useState(0);
+  const [remoteImagePrefsVersion, setRemoteImagePrefsVersion] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { height, onLoad } = useIframeAutoHeight(iframeRef);
   const senderEmail = useMemo(() => {
@@ -56,21 +57,28 @@ export const MessageBody = ({
   useEffect(
     () =>
       subscribeTrustedImageSenders(() => {
-        setTrustedSendersVersion((version) => version + 1);
+        setRemoteImagePrefsVersion((version) => version + 1);
       }),
     [],
   );
 
+  const remoteImagePolicy = useMemo(
+    () => getRemoteImagePolicy(),
+    [remoteImagePrefsVersion],
+  );
   const senderAlwaysAllowed = useMemo(
     () => isTrustedImageSender(senderEmail),
-    [senderEmail, trustedSendersVersion],
+    [senderEmail, remoteImagePrefsVersion],
   );
 
   const hasBlockedImages = useMemo(
     () => rawHtml !== null && !isPlainText && hasBlockedRemoteImages(rawHtml),
     [isPlainText, rawHtml],
   );
-  const showImages = isPlainText || showImagesForMessage || senderAlwaysAllowed;
+  const showImages =
+    isPlainText ||
+    remoteImagePolicy === "always" ||
+    (remoteImagePolicy === "senders" && (showImagesForMessage || senderAlwaysAllowed));
 
   const srcdoc = useMemo(
     () => (rawHtml !== null ? buildSrcdoc(rawHtml, showImages) : ""),
@@ -85,25 +93,33 @@ export const MessageBody = ({
         <>
           {hasBlockedImages && !showImages && (
             <div className={s.imageNotice}>
-              <span>Images are not displayed.</span>
-              <button
-                className={s.noticeButton}
-                type="button"
-                onClick={() => setShowImagesForMessage(true)}
-              >
-                Display images below
-              </button>
-              {senderEmail && (
-                <button
-                  className={s.noticeButton}
-                  type="button"
-                  onClick={() => {
-                    trustImageSender(senderEmail);
-                    setShowImagesForMessage(true);
-                  }}
-                >
-                  Always display images from {senderEmail}
-                </button>
+              <span>
+                {remoteImagePolicy === "never"
+                  ? "Remote images are blocked in Settings."
+                  : "Images are not displayed."}
+              </span>
+              {remoteImagePolicy === "senders" && (
+                <>
+                  <button
+                    className={s.noticeButton}
+                    type="button"
+                    onClick={() => setShowImagesForMessage(true)}
+                  >
+                    Display images below
+                  </button>
+                  {senderEmail && (
+                    <button
+                      className={s.noticeButton}
+                      type="button"
+                      onClick={() => {
+                        trustImageSender(senderEmail);
+                        setShowImagesForMessage(true);
+                      }}
+                    >
+                      Always display images from {senderEmail}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           )}

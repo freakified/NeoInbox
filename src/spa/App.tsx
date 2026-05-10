@@ -105,7 +105,7 @@ export const App = () => {
           {reconnecting && <span className={s.reconnectText}>Reconnecting…</span>}
           <button
             onClick={() => setSettingsOpen(true)}
-            title="Bundle settings"
+            title="Settings"
             className={s.settingsBtn}
           >
             <Icon name="settings" className={s.settingsIcon} />

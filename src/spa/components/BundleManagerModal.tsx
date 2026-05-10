@@ -1,15 +1,25 @@
 import { clsx } from "clsx";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { CATEGORIES, getCategoryMeta } from "../../shared/categories";
 import { parseSender } from "../../shared/senders";
 import type { BuiltinCategory, Category, CustomBundleRule, Thread } from "../../shared/types";
 import { useBundleRules, useCustomBundles, useMailStore, useOverrides } from "../../store/mailStore";
+import {
+  getRemoteImagePolicy,
+  listTrustedImageSenders,
+  type RemoteImagePolicy,
+  setRemoteImagePolicy,
+  subscribeTrustedImageSenders,
+  trustImageSender,
+  untrustImageSender,
+} from "../lib/remoteImagePrefs";
 import { Icon } from "./Icon";
 import s from "./BundleManagerModal.module.css";
 
 type RuleType = CustomBundleRule["type"];
 type SelectedBundle = { kind: "builtin"; id: BuiltinCategory } | { kind: "custom"; id: string } | { kind: "new" };
+type SelectedPane = { kind: "general" } | { kind: "remoteImages" } | SelectedBundle;
 
 interface BundleFormState {
   id: string;
@@ -91,6 +101,9 @@ const emptyForm = (order: number, seedRule?: CustomBundleRule): BundleFormState 
 const bundleKey = (selected: SelectedBundle): string =>
   selected.kind === "new" ? "new" : `${selected.kind}:${selected.id}`;
 
+const paneKey = (selected: SelectedPane): string =>
+  selected.kind === "general" || selected.kind === "remoteImages" ? selected.kind : bundleKey(selected);
+
 const hasRule = (rules: readonly CustomBundleRule[], rule: CustomBundleRule): boolean =>
   rules.some((r) => r.type === rule.type && r.value.toLowerCase() === rule.value.toLowerCase());
 
@@ -135,7 +148,7 @@ export const BundleManagerModal = ({
     return { kind: "builtin", id: "updates" };
   };
 
-  const selectedAtOpen = initialSelected();
+  const selectedAtOpen: SelectedPane = thread || initialCategory ? initialSelected() : { kind: "general" };
   const initialForm = (): BundleFormState => {
     if (selectedAtOpen.kind === "custom") {
       const bundle = customBundles.find((b) => b.id === selectedAtOpen.id);
@@ -153,7 +166,7 @@ export const BundleManagerModal = ({
     return emptyForm(10 + customBundles.length, selectedAtOpen.kind === "new" ? seededRule : undefined);
   };
 
-  const [selected, setSelected] = useState<SelectedBundle>(selectedAtOpen);
+  const [selected, setSelected] = useState<SelectedPane>(selectedAtOpen);
   const [form, setForm] = useState<BundleFormState>(initialForm);
   const [ruleType, setRuleType] = useState<RuleType>(initialRuleType);
   const [ruleValue, setRuleValue] = useState(initialRuleValue);
@@ -163,7 +176,7 @@ export const BundleManagerModal = ({
     : null;
   const currentForm = form;
 
-  const choose = (next: SelectedBundle) => {
+  const choose = (next: SelectedPane) => {
     setSelected(next);
     if (next.kind === "custom") {
       const bundle = customBundles.find((b) => b.id === next.id);
@@ -247,7 +260,7 @@ export const BundleManagerModal = ({
     if (!value) return;
     const rule = { type: ruleType, value };
     if (selected.kind === "builtin") addBuiltinRule(selected.id, rule);
-    else addCustomRule(rule);
+    else if (selected.kind === "custom" || selected.kind === "new") addCustomRule(rule);
     setRuleValue(thread ? normalizeRule(ruleType, threadRuleDefaults[ruleType]) : "");
   };
 
@@ -267,7 +280,7 @@ export const BundleManagerModal = ({
       <div className={s.dialog} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className={s.head}>
           <div>
-            <h2 className={s.title}>Bundle manager</h2>
+            <h2 className={s.title}>Settings</h2>
             {thread && <p className={s.subtitle}>Add rules from this thread or manage any bundle.</p>}
           </div>
           <button type="button" className={s.closeBtn} onClick={onClose} aria-label="Close">
@@ -277,10 +290,27 @@ export const BundleManagerModal = ({
 
         <div className={s.body}>
           <aside className={s.sidebar}>
-            <div className={s.sideSectionLabel}>Built-in</div>
+            <button
+              type="button"
+              className={clsx(s.bundleNavItem, paneKey(selected) === "general" && s.bundleNavItemActive)}
+              onClick={() => choose({ kind: "general" })}
+            >
+              <Icon name="settings" className={s.navIcon} />
+              <span className={s.navName}>General</span>
+            </button>
+            <button
+              type="button"
+              className={clsx(s.bundleNavItem, paneKey(selected) === "remoteImages" && s.bundleNavItemActive)}
+              onClick={() => choose({ kind: "remoteImages" })}
+            >
+              <Icon name="image" className={s.navIcon} />
+              <span className={s.navName}>Remote Images</span>
+            </button>
+
+            <div className={s.sideSectionLabel}>Bundling</div>
             {BUNDLE_CATEGORIES.map((cat) => {
               const meta = CATEGORIES[cat];
-              const selectedKey = bundleKey(selected);
+              const selectedKey = paneKey(selected);
               const count = overrides.filter((o) => o.category === cat).length +
                 bundleRules.filter((r) => r.category === cat).length;
               return (
@@ -304,7 +334,7 @@ export const BundleManagerModal = ({
                 <button
                   key={bundle.id}
                   type="button"
-                  className={clsx(s.bundleNavItem, bundleKey(selected) === `custom:${bundle.id}` && s.bundleNavItemActive)}
+                  className={clsx(s.bundleNavItem, paneKey(selected) === `custom:${bundle.id}` && s.bundleNavItemActive)}
                   onClick={() => choose({ kind: "custom", id: bundle.id })}
                 >
                   <Icon name={meta.icon} className={s.navIcon} style={{ color: meta.color }} />
@@ -324,7 +354,11 @@ export const BundleManagerModal = ({
           </aside>
 
           <main className={s.content}>
-            {selected.kind === "builtin" ? (
+            {selected.kind === "general" ? (
+              <GeneralSettings />
+            ) : selected.kind === "remoteImages" ? (
+              <RemoteImagesSettings />
+            ) : selected.kind === "builtin" ? (
               <BuiltinBundleEditor
                 category={selected.id}
                 ruleType={ruleType}
@@ -362,6 +396,149 @@ export const BundleManagerModal = ({
 
   return createPortal(modal, document.body);
 };
+
+const GeneralSettings = () => (
+  <div className={s.editor}>
+    <div className={s.editorHeader}>
+      <Icon name="settings" className={s.editorIcon} />
+      <div>
+        <h3 className={s.editorTitle}>General</h3>
+        <p className={s.editorDesc}>General settings will appear here.</p>
+      </div>
+    </div>
+    <section className={s.section}>
+      <p className={s.emptyText}>No general settings yet.</p>
+    </section>
+  </div>
+);
+
+const normalizeEmail = (value: string): string => value.trim().toLowerCase();
+
+const RemoteImagesSettings = () => {
+  const notify = useMailStore((st) => st.notify);
+  const [senders, setSenders] = useState(() => listTrustedImageSenders());
+  const [policy, setPolicy] = useState<RemoteImagePolicy>(() => getRemoteImagePolicy());
+  const [email, setEmail] = useState("");
+
+  useEffect(
+    () =>
+      subscribeTrustedImageSenders(() => {
+        setSenders(listTrustedImageSenders());
+        setPolicy(getRemoteImagePolicy());
+      }),
+    [],
+  );
+
+  const normalizedEmail = normalizeEmail(email);
+  const canAdd = policy === "senders" && normalizedEmail.includes("@");
+
+  const addSender = () => {
+    if (!canAdd) return;
+    trustImageSender(normalizedEmail);
+    setEmail("");
+    notify(`Images allowed from ${normalizedEmail}`);
+  };
+
+  const removeSender = (sender: string) => {
+    untrustImageSender(sender);
+    notify(`Images blocked from ${sender}`);
+  };
+
+  const updatePolicy = (next: RemoteImagePolicy) => {
+    setRemoteImagePolicy(next);
+    setPolicy(next);
+  };
+
+  return (
+    <div className={s.editor}>
+      <div className={s.editorHeader}>
+        <Icon name="image" className={s.editorIcon} />
+        <div>
+          <h3 className={s.editorTitle}>Remote Images</h3>
+          <p className={s.editorDesc}>Control which senders can display remote images automatically.</p>
+        </div>
+      </div>
+
+      <section className={s.section}>
+        <h4 className={s.sectionTitle}>Display</h4>
+        <div className={s.policyChoices}>
+          <PolicyChoice
+            checked={policy === "never"}
+            label="Never show remote images"
+            onChange={() => updatePolicy("never")}
+          />
+          <PolicyChoice
+            checked={policy === "always"}
+            label="Always show remote images"
+            onChange={() => updatePolicy("always")}
+          />
+          <PolicyChoice
+            checked={policy === "senders"}
+            label="Only show from the following senders"
+            onChange={() => updatePolicy("senders")}
+          />
+        </div>
+      </section>
+
+      <section className={clsx(s.section, policy !== "senders" && s.sectionDisabled)}>
+        <div className={s.senderInputRow}>
+          <input
+            type="email"
+            className={s.input}
+            value={email}
+            placeholder="sender@example.com"
+            disabled={policy !== "senders"}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addSender()}
+          />
+          <button type="button" className={s.primaryBtn} disabled={!canAdd} onClick={addSender}>
+            Add sender
+          </button>
+        </div>
+        {senders.length === 0 ? (
+          <p className={s.emptyText}>No senders are allowed yet.</p>
+        ) : (
+          <div className={s.ruleList}>
+            {senders.map((sender) => (
+              <div className={s.senderRow} key={sender}>
+                <span className={s.senderValue}>{sender}</span>
+                <button
+                  type="button"
+                  className={s.ruleRemove}
+                  onClick={() => removeSender(sender)}
+                  title="Remove sender"
+                >
+                  <Icon name="close" className={s.ruleRemoveIcon} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+};
+
+const PolicyChoice = ({
+  checked,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  label: string;
+  onChange: () => void;
+}) => (
+  <label className={s.policyChoice}>
+    <input
+      type="radio"
+      name="remote-image-policy"
+      checked={checked}
+      onChange={onChange}
+      className={s.policyInput}
+    />
+    <span>{label}</span>
+  </label>
+);
 
 const RuleComposer = ({
   ruleType,
