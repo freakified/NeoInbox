@@ -228,13 +228,39 @@
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--color-md-on-surface);
 }
 
+.iconSearch {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.iconPicker {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.iconGroup + .iconGroup {
+  margin-top: 10px;
+}
+
+.iconGroupLabel {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 0 5px;
+  padding: 2px 0;
+  background: #fff;
+  color: var(--color-md-secondary-text);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
 .iconGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
   gap: 5px;
-  max-height: 178px;
-  overflow-y: auto;
-  padding-right: 4px;
 }
 
 .iconOption {

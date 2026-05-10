@@ -41,18 +41,92 @@ const PRESET_COLORS = [
   "#607D8B", "#E91E63", "#009688", "#673AB7",
 ];
 
-const CUSTOM_BUNDLE_ICONS = [
-  "label", "label_important", "local_offer", "sell", "flag", "bookmark", "star", "favorite",
-  "inbox", "mail", "drafts", "mark_email_unread", "notifications", "campaign",
-  "work", "business", "badge", "assignment", "task_alt", "event", "schedule",
-  "account_balance", "finance_mode", "credit_card", "savings", "receipt", "payments", "trending_up",
-  "shopping_bag", "shopping_cart", "storefront", "redeem", "inventory_2",
-  "flight", "travel", "hotel", "luggage", "map", "directions_car", "train",
-  "group", "person", "contacts", "forum", "chat", "alternate_email",
-  "school", "local_library", "menu_book", "science", "psychology", "lightbulb",
-  "restaurant", "local_cafe", "cake", "fitness_center", "health_and_safety", "spa",
-  "music_note", "movie", "photo_camera", "sports_esports", "sports_soccer", "pets",
-  "home", "build", "key", "security", "cloud", "folder",
+const CUSTOM_BUNDLE_ICON_GROUPS = [
+  {
+    label: "General",
+    icons: [
+      "label", "label_important", "local_offer", "sell", "flag", "bookmark", "star", "favorite",
+      "push_pin", "priority_high", "bolt", "auto_awesome", "category", "dashboard", "widgets",
+      "folder", "folder_open", "inventory_2", "archive", "history", "schedule", "event", "calendar_month",
+    ],
+  },
+  {
+    label: "Mail",
+    icons: [
+      "inbox", "mail", "drafts", "send", "outbox", "mark_email_unread", "forward_to_inbox",
+      "unsubscribe", "notifications", "notifications_active", "campaign", "rss_feed", "alternate_email",
+      "contact_mail", "contact_phone", "quickreply",
+    ],
+  },
+  {
+    label: "Work",
+    icons: [
+      "work", "business", "corporate_fare", "badge", "assignment", "assignment_turned_in", "task_alt",
+      "checklist", "description", "article", "fact_check", "approval", "groups", "meeting_room",
+      "support_agent", "engineering", "construction", "build", "handyman", "print", "scanner",
+    ],
+  },
+  {
+    label: "Money",
+    icons: [
+      "account_balance", "finance_mode", "credit_card", "account_balance_wallet", "savings", "receipt",
+      "receipt_long", "payments", "paid", "attach_money", "price_check", "request_quote",
+      "trending_up", "trending_down", "query_stats", "monitoring", "currency_exchange", "calculate",
+    ],
+  },
+  {
+    label: "Shopping",
+    icons: [
+      "shopping_bag", "shopping_cart", "add_shopping_cart", "storefront", "store", "redeem",
+      "card_giftcard", "sell", "loyalty", "barcode_scanner", "qr_code_scanner", "local_shipping",
+      "package_2", "inventory", "warehouse", "confirmation_number",
+    ],
+  },
+  {
+    label: "Travel",
+    icons: [
+      "flight", "travel", "hotel", "luggage", "map", "explore", "near_me", "public", "language",
+      "directions_car", "train", "directions_bus", "directions_boat", "local_taxi", "commute",
+      "airport_shuttle", "restaurant", "local_cafe", "local_bar", "attractions",
+    ],
+  },
+  {
+    label: "People",
+    icons: [
+      "group", "person", "contacts", "account_circle", "supervisor_account", "diversity_3",
+      "family_restroom", "forum", "chat", "chat_bubble", "sms", "reviews", "thumb_up", "volunteer_activism",
+      "favorite", "celebration",
+    ],
+  },
+  {
+    label: "Learning",
+    icons: [
+      "school", "local_library", "menu_book", "book", "history_edu", "science", "biotech",
+      "psychology", "lightbulb", "tips_and_updates", "extension", "code", "terminal", "data_object",
+      "memory", "smart_toy",
+    ],
+  },
+  {
+    label: "Lifestyle",
+    icons: [
+      "home", "apartment", "chair", "kitchen", "yard", "restaurant_menu", "cake", "fitness_center",
+      "health_and_safety", "medical_services", "spa", "self_improvement", "music_note", "movie",
+      "theaters", "photo_camera", "palette", "brush", "sports_esports", "sports_soccer", "sports_basketball",
+      "hiking", "pets",
+    ],
+  },
+  {
+    label: "Tech",
+    icons: [
+      "computer", "desktop_mac", "laptop_mac", "smartphone", "tablet_mac", "devices", "router",
+      "wifi", "cloud", "cloud_sync", "sync", "backup", "download", "upload", "security", "key",
+      "lock", "vpn_key", "shield", "bug_report", "settings", "tune",
+    ],
+  },
+] as const;
+
+const CUSTOM_BUNDLE_ICONS: readonly string[] = [
+  ...new Set(CUSTOM_BUNDLE_ICON_GROUPS.flatMap((group) => group.icons)),
 ];
 
 const ruleTypeLabel: Record<RuleType, string> = {
@@ -700,96 +774,135 @@ const CustomBundleEditor = ({
   onSave: () => void;
   onDelete?: () => void;
   saveHint: string;
-}) => (
-  <div className={s.editor}>
-    <div className={s.editorHeader}>
-      <Icon name={form.icon} className={s.editorIcon} style={{ color: form.color }} />
-      <div>
-        <h3 className={s.editorTitle}>{title}</h3>
-        <p className={s.editorDesc}>Custom bundle rules are checked before built-in bundle rules.</p>
-      </div>
-    </div>
+}) => {
+  const [iconQuery, setIconQuery] = useState("");
+  const normalizedIconQuery = iconQuery.trim().toLowerCase();
+  const iconGroups = useMemo(() => {
+    const groups = CUSTOM_BUNDLE_ICON_GROUPS.map((group) => ({
+      ...group,
+      icons: group.icons.filter((icon) => {
+        if (!normalizedIconQuery) return true;
+        const searchable = `${group.label} ${icon.replaceAll("_", " ")}`.toLowerCase();
+        return searchable.includes(normalizedIconQuery);
+      }),
+    })).filter((group) => group.icons.length > 0);
 
-    <section className={s.section}>
-      <label className={s.label}>Bundle name</label>
-      <input
-        type="text"
-        className={s.input}
-        value={form.name}
-        placeholder="My Bundle"
-        onChange={(e) => onFormChange({ name: e.target.value })}
-      />
-    </section>
+    if (!CUSTOM_BUNDLE_ICONS.includes(form.icon) && form.icon.includes(normalizedIconQuery)) {
+      return [{ label: "Selected", icons: [form.icon] }, ...groups];
+    }
+    return groups;
+  }, [form.icon, normalizedIconQuery]);
 
-    <section className={s.twoColumn}>
-      <div>
-        <label className={s.label}>Color</label>
-        <div className={s.colorGrid}>
-          {PRESET_COLORS.map((color) => (
-            <button
-              key={color}
-              type="button"
-              className={clsx(s.colorSwatch, form.color === color && s.colorSwatchActive)}
-              style={{ backgroundColor: color }}
-              onClick={() => onFormChange({ color })}
-              title={color}
-            />
-          ))}
+  return (
+    <div className={s.editor}>
+      <div className={s.editorHeader}>
+        <Icon name={form.icon} className={s.editorIcon} style={{ color: form.color }} />
+        <div>
+          <h3 className={s.editorTitle}>{title}</h3>
+          <p className={s.editorDesc}>Custom bundle rules are checked before built-in bundle rules.</p>
         </div>
       </div>
-      <div>
-        <label className={s.label}>Icon</label>
-        <div className={s.iconGrid}>
-          {CUSTOM_BUNDLE_ICONS.map((icon) => (
-            <button
-              key={icon}
-              type="button"
-              className={clsx(s.iconOption, form.icon === icon && s.iconOptionActive)}
-              onClick={() => onFormChange({ icon })}
-              title={icon}
-            >
-              <Icon name={icon} className={s.iconOptionIcon} style={{ color: form.icon === icon ? form.color : undefined }} />
-            </button>
-          ))}
-        </div>
-      </div>
-    </section>
 
-    <section className={s.section}>
-      <h4 className={s.sectionTitle}>Rules</h4>
-      {form.rules.length === 0 ? (
-        <p className={s.emptyText}>No rules yet.</p>
-      ) : (
-        <div className={s.ruleList}>
-          {form.rules.map((rule, idx) => (
-            <RuleRow key={`${rule.type}:${rule.value}:${idx}`} rule={rule} onRemove={() => onRemoveRule(idx)} />
-          ))}
-        </div>
-      )}
-      <RuleComposer
-        ruleType={ruleType}
-        ruleValue={ruleValue}
-        thread={thread}
-        threadDefaults={threadDefaults}
-        onRuleTypeChange={onRuleTypeChange}
-        onRuleValueChange={onRuleValueChange}
-        onAddRule={onAddRule}
-        saveHint={saveHint}
-      />
-    </section>
+      <section className={s.section}>
+        <label className={s.label}>Bundle name</label>
+        <input
+          type="text"
+          className={s.input}
+          value={form.name}
+          placeholder="My Bundle"
+          onChange={(e) => onFormChange({ name: e.target.value })}
+        />
+      </section>
 
-    <div className={s.actions}>
-      {onDelete && (
-        <button type="button" className={s.deleteBtn} onClick={onDelete}>
-          Delete
+      <section className={s.twoColumn}>
+        <div>
+          <label className={s.label}>Color</label>
+          <div className={s.colorGrid}>
+            {PRESET_COLORS.map((color) => (
+              <button
+                key={color}
+                type="button"
+                className={clsx(s.colorSwatch, form.color === color && s.colorSwatchActive)}
+                style={{ backgroundColor: color }}
+                onClick={() => onFormChange({ color })}
+                title={color}
+              />
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className={s.label}>Icon</label>
+          <input
+            type="search"
+            className={clsx(s.input, s.iconSearch)}
+            value={iconQuery}
+            placeholder="Search icons"
+            onChange={(e) => setIconQuery(e.target.value)}
+          />
+          <div className={s.iconPicker}>
+            {iconGroups.length === 0 ? (
+              <p className={s.emptyText}>No matching icons.</p>
+            ) : (
+              iconGroups.map((group) => (
+                <div key={group.label} className={s.iconGroup}>
+                  <div className={s.iconGroupLabel}>{group.label}</div>
+                  <div className={s.iconGrid}>
+                    {group.icons.map((icon) => (
+                      <button
+                        key={icon}
+                        type="button"
+                        className={clsx(s.iconOption, form.icon === icon && s.iconOptionActive)}
+                        onClick={() => onFormChange({ icon })}
+                        title={icon}
+                        aria-label={`Use ${icon.replaceAll("_", " ")} icon`}
+                      >
+                        <Icon name={icon} className={s.iconOptionIcon} style={{ color: form.icon === icon ? form.color : undefined }} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className={s.section}>
+        <h4 className={s.sectionTitle}>Rules</h4>
+        {form.rules.length === 0 ? (
+          <p className={s.emptyText}>No rules yet.</p>
+        ) : (
+          <div className={s.ruleList}>
+            {form.rules.map((rule, idx) => (
+              <RuleRow key={`${rule.type}:${rule.value}:${idx}`} rule={rule} onRemove={() => onRemoveRule(idx)} />
+            ))}
+          </div>
+        )}
+        <RuleComposer
+          ruleType={ruleType}
+          ruleValue={ruleValue}
+          thread={thread}
+          threadDefaults={threadDefaults}
+          onRuleTypeChange={onRuleTypeChange}
+          onRuleValueChange={onRuleValueChange}
+          onAddRule={onAddRule}
+          saveHint={saveHint}
+        />
+      </section>
+
+      <div className={s.actions}>
+        {onDelete && (
+          <button type="button" className={s.deleteBtn} onClick={onDelete}>
+            Delete
+          </button>
+        )}
+        <button type="button" className={s.saveBtn} disabled={!form.name.trim()} onClick={onSave}>
+          Save bundle
         </button>
-      )}
-      <button type="button" className={s.saveBtn} disabled={!form.name.trim()} onClick={onSave}>
-        Save bundle
-      </button>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const RuleRow = ({ rule, onRemove }: { rule: CustomBundleRule; onRemove: () => void }) => (
   <div className={s.ruleRow}>
