@@ -23,7 +23,7 @@ export type ServerMsg =
   | {
       type: "backfill-progress";
       scanned: number;
-      tagged: number;
+      classified: number;
       done: boolean;
       error?: string;
     }

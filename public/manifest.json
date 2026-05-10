@@ -19,7 +19,6 @@
   "permissions": [
     "messagesRead",
     "messagesUpdate",
-    "messagesTags",
     "messagesMove",
     "messagesDelete",
     "accountsRead",

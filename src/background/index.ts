@@ -1,7 +1,6 @@
-import { ensureTagsRegistered } from "./tags";
 import {
   applyMessageDetails,
-  classifyAndTag,
+  classifyMessage,
   doneMessage,
   pinMessage,
   trashMessage,
@@ -13,7 +12,6 @@ import { pushMyEmails, wireSyncEngine } from "./sync";
 import { broadcast, onCommand, startPortServer } from "./port";
 import { setOverride } from "../classifier/overrides";
 import { db } from "../store/db";
-import { categoryFromTags } from "../shared/categories";
 import { log } from "../shared/log";
 
 const INBOX_URL = "inbox.html";
@@ -39,10 +37,6 @@ messenger.browserAction.onClicked.addListener(() => {
   void openOrFocusInbox();
 });
 
-void ensureTagsRegistered()
-  .then(() => log.info("tags", "registered"))
-  .catch((e) => log.warn("tags", "registration failed", e));
-
 messenger.runtime.onInstalled.addListener((details) => {
   log.info("background", "onInstalled", details.reason);
   void runBackfill().catch((e) => log.warn("backfill", "failed", e));
@@ -56,7 +50,8 @@ messenger.alarms.onAlarm.addListener(async (alarm) => {
   const result = await handleSnoozeAlarm(alarm.name);
   if (!result) return;
   if (result.restoredHeader) {
-    const raw = headerToRawMessage(result.restoredHeader, "inbox");
+    const cat = await classifyMessage(result.restoredHeader);
+    const raw = headerToRawMessage(result.restoredHeader, "inbox", cat);
     await applyMessageDetails(raw);
     await db.messages.put(raw);
     broadcast({ type: "delta", added: [raw] });
@@ -85,7 +80,11 @@ onCommand(async (msg) => {
       await pinMessage(msg.messageId, msg.pinned);
       const header = await messenger.messages.get(msg.messageId);
       const cached = await db.messages.get(msg.messageId);
-      const raw = headerToRawMessage(header, cached?.origin ?? "inbox");
+      const raw = headerToRawMessage(
+        header,
+        cached?.origin ?? "inbox",
+        cached?.category ?? null,
+      );
       await applyMessageDetails(raw, cached);
       await db.messages.put(raw);
       broadcast({ type: "delta", updated: [raw] });
@@ -153,20 +152,14 @@ onCommand(async (msg) => {
       for (const cmsg of cached) {
         try {
           const header = await messenger.messages.get(cmsg.id);
-          const stripped: messenger.messages.MessageHeader = {
-            ...header,
-            tags: (header.tags ?? []).filter(
-              (t) => categoryFromTags([t]) === null,
-            ),
-          };
-          const cat = await classifyAndTag(stripped);
+          const cat = await classifyMessage(header);
           const fresh = await messenger.messages.get(cmsg.id);
           const raw = headerToRawMessage(fresh, "inbox", cat);
           await applyMessageDetails(raw, cmsg);
           await db.messages.put(raw);
           updated.push(raw);
         } catch (e) {
-          log.warn("override", "retag failed", { id: cmsg.id, e });
+          log.warn("override", "reclassify failed", { id: cmsg.id, e });
         }
       }
       if (updated.length) broadcast({ type: "delta", updated });
@@ -202,18 +195,14 @@ onCommand(async (msg) => {
       for (const cachedMsg of affected) {
         try {
           const header = await messenger.messages.get(cachedMsg.id);
-          const stripped: messenger.messages.MessageHeader = {
-            ...header,
-            tags: (header.tags ?? []).filter((t) => categoryFromTags([t]) === null),
-          };
-          const cat = await classifyAndTag(stripped);
+          const cat = await classifyMessage(header);
           const fresh = await messenger.messages.get(cachedMsg.id);
           const raw = headerToRawMessage(fresh, "inbox", cat);
           await applyMessageDetails(raw, cachedMsg);
           await db.messages.put(raw);
           updated.push(raw);
         } catch (e) {
-          log.warn("delete-custom-bundle", "retag failed", { id: cachedMsg.id, e });
+          log.warn("delete-custom-bundle", "reclassify failed", { id: cachedMsg.id, e });
         }
       }
       if (updated.length) broadcast({ type: "delta", updated });

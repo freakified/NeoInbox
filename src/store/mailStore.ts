@@ -25,7 +25,7 @@ type RuntimeWithConnect = {
 
 interface SyncProgress {
   scanned: number;
-  tagged: number;
+  classified: number;
   done: boolean;
   error: string | null;
 }
@@ -278,7 +278,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
     set({
       syncProgress: prev
         ? { ...prev, done: false, error: null }
-        : { scanned: 0, tagged: 0, done: false, error: null },
+        : { scanned: 0, classified: 0, done: false, error: null },
     });
     send({ type: "retry-backfill" });
   },
@@ -372,7 +372,7 @@ const applyServerMsg = (
       set({
         syncProgress: {
           scanned: msg.scanned,
-          tagged: msg.tagged,
+          classified: msg.classified,
           done: msg.done,
           error: msg.error ?? null,
         },

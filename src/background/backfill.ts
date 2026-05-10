@@ -1,8 +1,7 @@
-import { applyMessageDetails, classifyAndTag } from "./ingest";
+import { applyMessageDetails, classifyMessage } from "./ingest";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
 import { db } from "../store/db";
-import { CATEGORIES, NEO_TAG_KEYS, categoryFromTags } from "../shared/categories";
 import { collectInboxFolders, collectSentFolders } from "../shared/folders";
 import { log } from "../shared/log";
 import type { ServerMsg } from "../shared/messaging";
@@ -24,16 +23,16 @@ export const getLastProgress = (): ServerMsg | null => lastProgress;
 
 export const runBackfill = async (): Promise<{
   scanned: number;
-  tagged: number;
+  classified: number;
 }> => {
   if (running) {
-    sendProgress({ type: "backfill-progress", scanned: 0, tagged: 0, done: true });
-    return { scanned: 0, tagged: 0 };
+    sendProgress({ type: "backfill-progress", scanned: 0, classified: 0, done: true });
+    return { scanned: 0, classified: 0 };
   }
   running = true;
 
   let scanned = 0;
-  let tagged = 0;
+  let classified = 0;
   let errored: string | null = null;
   const liveIds = new Set<number>();
 
@@ -63,14 +62,10 @@ export const runBackfill = async (): Promise<{
         for (const header of page.messages) {
           scanned++;
           liveIds.add(header.id);
-          const before = categoryFromTags(header.tags);
-          let appliedCategory: Category | null = before;
-          if (origin === "inbox" && !before) {
-            const cat = await classifyAndTag(header);
-            if (cat) {
-              tagged++;
-              appliedCategory = cat;
-            }
+          let appliedCategory: Category | null = null;
+          if (origin === "inbox") {
+            appliedCategory = await classifyMessage(header);
+            if (appliedCategory) classified++;
           }
           const raw = headerToRawMessage(header, origin, appliedCategory);
           const cached = await db.messages.get(header.id);
@@ -81,7 +76,7 @@ export const runBackfill = async (): Promise<{
             sendProgress({
               type: "backfill-progress",
               scanned,
-              tagged,
+              classified,
               done: false,
             });
           }
@@ -104,7 +99,7 @@ export const runBackfill = async (): Promise<{
       log.info("backfill", `pruned ${orphans.length} orphaned cache entries`);
     }
 
-    log.info("backfill", `done: ${tagged}/${scanned} tagged`);
+    log.info("backfill", `done: ${classified}/${scanned} classified`);
   } catch (e) {
     errored = e instanceof Error ? e.message : String(e);
     log.error("backfill", "failed", e);
@@ -113,7 +108,7 @@ export const runBackfill = async (): Promise<{
       sendProgress({
         type: "backfill-progress",
         scanned,
-        tagged,
+        classified,
         done: true,
         ...(errored ? { error: errored } : {}),
       });
@@ -123,12 +118,12 @@ export const runBackfill = async (): Promise<{
     running = false;
   }
 
-  return { scanned, tagged };
+  return { scanned, classified };
 };
 
 export const reclassifyAll = async (): Promise<{ scanned: number; updated: number }> => {
   if (reclassifying) {
-    sendProgress({ type: "backfill-progress", scanned: 0, tagged: 0, done: true });
+    sendProgress({ type: "backfill-progress", scanned: 0, classified: 0, done: true });
     return { scanned: 0, updated: 0 };
   }
   reclassifying = true;
@@ -150,16 +145,8 @@ export const reclassifyAll = async (): Promise<{ scanned: number; updated: numbe
       } catch {
         continue;
       }
-      const tags = header.tags ?? [];
-      const before = categoryFromTags(tags);
-      const strippedTags = tags.filter((t) => !NEO_TAG_KEYS.has(t));
-      const cat = await classifyAndTag({ ...header, tags: strippedTags });
-      const meta = cat
-        ? (CATEGORIES as Record<string, typeof CATEGORIES[keyof typeof CATEGORIES] | undefined>)[cat]
-        : undefined;
-      if (!meta?.key && strippedTags.length !== tags.length) {
-        await messenger.messages.update(cachedMsg.id, { tags: strippedTags });
-      }
+      const before = cachedMsg.category;
+      const cat = await classifyMessage(header);
       if (cat !== before) updated++;
       const fresh = await messenger.messages.get(cachedMsg.id);
       const raw = headerToRawMessage(fresh, "inbox", cat);
@@ -171,7 +158,7 @@ export const reclassifyAll = async (): Promise<{ scanned: number; updated: numbe
         batch = [];
       }
       if (scanned % PROGRESS_EVERY === 0) {
-        sendProgress({ type: "backfill-progress", scanned, tagged: updated, done: false });
+        sendProgress({ type: "backfill-progress", scanned, classified: updated, done: false });
       }
     }
     if (batch.length) {
@@ -186,7 +173,7 @@ export const reclassifyAll = async (): Promise<{ scanned: number; updated: numbe
       sendProgress({
         type: "backfill-progress",
         scanned,
-        tagged: updated,
+        classified: updated,
         done: true,
         ...(errored ? { error: errored } : {}),
       });

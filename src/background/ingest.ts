@@ -1,11 +1,6 @@
 import { classify } from "../classifier/pipeline";
 import { extractFeatures } from "../classifier/features";
-import {
-  CATEGORIES,
-  NEO_TAG_KEYS,
-  PINNED_KEY,
-  categoryFromTags,
-} from "../shared/categories";
+import { PINNED_KEY } from "../shared/categories";
 import { log } from "../shared/log";
 import { scanCidRefs } from "../spa/lib/srcdoc";
 import type { AttachmentSummary, Category, RawMessage } from "../shared/types";
@@ -32,12 +27,9 @@ const folderIdOf = async (id: number): Promise<string> => {
   return msg.folder?.id ?? "";
 }
 
-export const classifyAndTag = async (
+export const classifyMessage = async (
   header: messenger.messages.MessageHeader,
 ): Promise<Category | null> => {
-  const existing = categoryFromTags(header.tags);
-  if (existing) return existing;
-
   let headers: Record<string, string[]> = {};
   try {
     const full = await messenger.messages.getFull(header.id);
@@ -48,19 +40,7 @@ export const classifyAndTag = async (
 
   const features = extractFeatures(header, headers);
   const category = await classify(features);
-  if (!category) return null;
-
-  const meta = (CATEGORIES as Record<string, typeof CATEGORIES[keyof typeof CATEGORIES] | undefined>)[category];
-  if (!meta?.key) return category;
-
-  try {
-    await messenger.messages.update(header.id, {
-      tags: [...header.tags.filter((t) => !NEO_TAG_KEYS.has(t)), meta.key],
-    });
-  } catch (e) {
-    log.warn("ingest", "tag update failed", { id: header.id, e });
-  }
-  return category;
+  return category ?? null;
 }
 
 export const pinMessage = async (id: number, pinned: boolean): Promise<void> => {

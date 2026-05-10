@@ -89,7 +89,7 @@ export const App = () => {
         <div className={s.headerRight}>
           {syncing && sync && (
             <span className={s.syncText}>
-              Syncing… {sync.tagged}/{sync.scanned}
+              Classifying... {sync.classified}/{sync.scanned}
             </span>
           )}
           {syncFailed && (

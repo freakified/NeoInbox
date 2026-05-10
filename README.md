@@ -4,7 +4,7 @@ A Thunderbird MailExtension that brings back the Google Inbox experience —
 auto-bundles, trip bundles, inline highlights, pin/snooze/done, and a single
 smooth list that expands in place.
 
-Status: **M2** — auto-classification into 7 bundles (Travel, Finance, Purchases, Social, Updates, Promos, Forums) via local heuristics + Thunderbird tags. See `/Users/dan/.claude/plans/remember-google-inbox-i-reactive-otter.md`.
+Status: **M2** — auto-classification into 7 bundles (Travel, Finance, Purchases, Social, Updates, Promos, Forums) via local heuristics stored in NeoInbox's local cache. See `/Users/dan/.claude/plans/remember-google-inbox-i-reactive-otter.md`.
 
 ## Build
 
@@ -35,16 +35,16 @@ To iterate: `npm run dev` (watch mode). After a rebuild, click the **Reload** bu
 
 ## M2 verification checklist
 
-First install: on reload, the background script auto-runs a one-time backfill of up to 500 inbox messages. Expect a log line like `[NeoInbox] backfill: N/M tagged`.
+First install: on reload, the background script auto-runs a one-time backfill of up to 500 inbox messages. Expect a log line like `[NeoInbox] backfill: N/M classified`.
 
 - [ ] The NeoInbox tab now shows collapsed **bundle sections** (Travel, Finance, Purchases, Social, Updates, Promos, Forums) when those categories have messages.
 - [ ] Uncategorised messages appear below, in the "Inbox" section (always expanded).
 - [ ] Clicking a bundle toggles its expansion.
 - [ ] The **Re-classify** button re-runs the backfill (visible in bg-script console).
-- [ ] Open the Thunderbird native 3-pane view and confirm that classified messages have the matching `neoinbox-*` tag — tags are visible in the message list and message header area.
+- [ ] Open the Thunderbird native 3-pane view and confirm that bundle classification stays private to NeoInbox; no `neoinbox-*` bundle tags are added to messages.
 
 **Known v1 sharp edges** (see plan § Known risks):
 
 - Rules are heuristic; expect some misclassifications (e.g., airline promos → travel). The rules files are in `src/classifier/rules/` — easy to extend.
 - Backfill is capped at 500 messages and only processes inbox folders. Deeper backfill / reprocessing is a later milestone.
-- Tags are applied via `messages.update(..., { tags })`; any pre-existing non-NeoInbox tags are preserved.
+- Bundle categories are stored in NeoInbox's local IndexedDB cache. Pin and snooze still use small NeoInbox tags for Thunderbird-visible state.

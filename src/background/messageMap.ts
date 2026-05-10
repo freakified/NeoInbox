@@ -1,10 +1,4 @@
-import {
-  CATEGORIES,
-  NEO_TAG_KEYS,
-  PINNED_KEY,
-  categoryFromTags,
-  type CategoryMeta,
-} from "../shared/categories";
+import { PINNED_KEY } from "../shared/categories";
 import type { Category, RawMessage } from "../shared/types";
 
 type FolderRef = { id?: string; accountId?: string };
@@ -20,20 +14,8 @@ export const headerToRawMessage = (
   const folder = (header as HeaderWithFolder).folder;
   const baseTags = header.tags ?? [];
 
-  let tags = baseTags;
-  let category: Category | null;
-
-  if (appliedCategory !== undefined) {
-    category = appliedCategory;
-    const meta = appliedCategory
-      ? (CATEGORIES as Record<string, CategoryMeta | undefined>)[appliedCategory]
-      : undefined;
-    if (meta?.key) {
-      tags = [...baseTags.filter((t) => !NEO_TAG_KEYS.has(t)), meta.key];
-    }
-  } else {
-    category = categoryFromTags(tags);
-  }
+  const tags = baseTags;
+  const category = appliedCategory ?? null;
 
   return {
     id: header.id,
