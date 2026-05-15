@@ -17,6 +17,7 @@
     "type": "module"
   },
   "permissions": [
+    "compose",
     "messagesRead",
     "messagesUpdate",
     "messagesMove",

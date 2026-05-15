@@ -2,6 +2,7 @@ import { applyMessageDetails, classifyMessage } from "./ingest";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
 import { db } from "../store/db";
+import { collectInboxFolders, collectSentFolders } from "../shared/folders";
 import { log } from "../shared/log";
 import type { RawMessage } from "../shared/types";
 
@@ -29,28 +30,80 @@ type OnMovedApi = {
 const idsFromList = (list: MessageList | undefined): number[] =>
   (list?.messages ?? []).map((m) => m.id);
 
+const folderIdOf = (header: messenger.messages.MessageHeader): string => {
+  return (
+    header as messenger.messages.MessageHeader & {
+      folder?: { id?: string };
+    }
+  ).folder?.id ?? "";
+};
+
+const getFolderIds = async (
+  collect: () => Promise<{ id: string }[]>,
+): Promise<Set<string>> => {
+  try {
+    return new Set((await collect()).map((f) => f.id));
+  } catch (e) {
+    log.warn("sync", "folder lookup failed", e);
+    return new Set();
+  }
+};
+
+const cacheMessages = async (
+  headers: readonly messenger.messages.MessageHeader[],
+  origin: RawMessage["origin"],
+): Promise<RawMessage[]> => {
+  const out: RawMessage[] = [];
+  for (const header of headers) {
+    try {
+      const fresh = await messenger.messages.get(header.id);
+      const cat = origin === "inbox" ? await classifyMessage(fresh) : null;
+      const raw = headerToRawMessage(fresh, origin, cat);
+      const cached = await db.messages.get(fresh.id);
+      await applyMessageDetails(raw, cached);
+      out.push(raw);
+    } catch (e) {
+      log.warn("sync", "cacheMessages per-msg failed", {
+        id: header.id,
+        origin,
+        e,
+      });
+    }
+  }
+  if (out.length) await db.messages.bulkPut(out);
+  return out;
+};
+
 export const wireSyncEngine = (): void => {
   messenger.messages.onNewMailReceived.addListener(async (_folder, list) => {
-    const added: RawMessage[] = [];
-    for (const header of list.messages) {
-      try {
-        const cat = await classifyMessage(header);
-        const fresh = await messenger.messages.get(header.id);
-        const raw = headerToRawMessage(fresh, "inbox", cat);
-        await applyMessageDetails(raw);
-        added.push(raw);
-      } catch (e) {
-        log.warn("sync", "onNewMail per-msg failed", { id: header.id, e });
-      }
-    }
     try {
+      const added = await cacheMessages(list.messages, "inbox");
       if (!added.length) return;
-      await db.messages.bulkPut(added);
       broadcast({ type: "delta", added });
     } catch (e) {
       log.error("sync", "onNewMail flush failed", e);
     }
   });
+
+  const onAfterSend = messenger.compose?.onAfterSend;
+  if (onAfterSend) {
+    onAfterSend.addListener(async (_tab, sendInfo) => {
+      try {
+        if (sendInfo.error) {
+          log.warn("sync", "onAfterSend reported error", sendInfo.error);
+          return;
+        }
+        const added = await cacheMessages(sendInfo.messages ?? [], "sent");
+        if (!added.length) return;
+        broadcast({ type: "delta", added });
+        log.debug("sync", `onAfterSend added ${added.length} sent copies`);
+      } catch (e) {
+        log.warn("sync", "onAfterSend failed", e);
+      }
+    });
+  } else {
+    log.warn("sync", "compose.onAfterSend unavailable");
+  }
 
   const onUpdated = (
     messenger.messages as unknown as { onUpdated?: OnUpdatedApi }
@@ -60,7 +113,20 @@ export const wireSyncEngine = (): void => {
       try {
         const fresh = await messenger.messages.get(header.id);
         const cached = await db.messages.get(header.id);
-        const origin = cached?.origin ?? "inbox";
+        let origin = cached?.origin;
+        if (!origin) {
+          const folderId = folderIdOf(fresh);
+          const [inboxIds, sentIds] = await Promise.all([
+            getFolderIds(collectInboxFolders),
+            getFolderIds(collectSentFolders),
+          ]);
+          origin = sentIds.has(folderId)
+            ? "sent"
+            : inboxIds.has(folderId)
+              ? "inbox"
+              : undefined;
+        }
+        if (!origin) return;
         const category = cached
           ? cached.category
           : origin === "inbox"
