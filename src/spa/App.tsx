@@ -8,6 +8,7 @@ import {
   useSyncProgress,
   type StreamItem,
 } from "../store/mailStore";
+import { CATEGORIES, getCategoryMeta } from "../shared/categories";
 import { BundleSliceRow } from "./components/BundleSliceRow";
 import { BundleManagerModal } from "./components/BundleManagerModal";
 import { useBulkActions } from "./components/BulkActionConfirm";
@@ -27,6 +28,7 @@ export const App = () => {
   const stream = useStream();
   const connectionState = useConnectionState();
   const retryBackfill = useMailStore((st) => st.retryBackfill);
+  const customBundles = useMailStore((st) => st.customBundles);
 
   const { doneMessages } = useBulkActions();
 
@@ -44,6 +46,9 @@ export const App = () => {
   const [openBundleThreadId, setOpenBundleThreadId] = useState<string | null>(null);
   const expandedRef = useRef<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(() =>
+    typeof window === "undefined" ? true : window.matchMedia("(min-width: 980px)").matches,
+  );
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -67,10 +72,17 @@ export const App = () => {
   const syncing = !!sync && !sync.done;
   const syncFailed = !!sync?.done && !!sync.error;
   const reconnecting = connectionState === "reconnecting";
+  const bundles = [
+    ...Object.keys(CATEGORIES).filter((category) => category !== "personal"),
+    ...customBundles.map((bundle) => bundle.id),
+  ].map((category) => ({
+    id: category,
+    meta: getCategoryMeta(category, customBundles),
+  }));
 
   return (
     <div
-      className={s.root}
+      className={`${s.root} ${drawerOpen ? s.drawerOpen : ""}`}
       onClick={(e) => {
         if (!expandedKey) return;
         if (!(e.target as HTMLElement).closest("[data-row]")) {
@@ -86,7 +98,19 @@ export const App = () => {
       {settingsOpen && <BundleManagerModal onClose={() => setSettingsOpen(false)} />}
 
       <header className={s.header}>
-        <h1 className={s.title}>NeoInbox</h1>
+        <div className={s.headerLeft}>
+          <button
+            type="button"
+            className={s.menuBtn}
+            title={drawerOpen ? "Hide navigation" : "Show navigation"}
+            aria-label={drawerOpen ? "Hide navigation" : "Show navigation"}
+            aria-expanded={drawerOpen}
+            onClick={() => setDrawerOpen((open) => !open)}
+          >
+            <Icon name="menu" className={s.menuIcon} />
+          </button>
+          <h1 className={s.title}>NeoInbox</h1>
+        </div>
         <div className={s.headerRight}>
           {syncing && sync && (
             <span className={s.syncText}>
@@ -114,7 +138,77 @@ export const App = () => {
         </div>
       </header>
 
-      <div className={s.content}>
+      <div className={s.appShell}>
+        {drawerOpen && (
+          <button
+            type="button"
+            className={s.drawerScrim}
+            aria-label="Close navigation"
+            onClick={() => setDrawerOpen(false)}
+          />
+        )}
+
+        <aside className={s.drawer} aria-label="Mailbox navigation">
+          <nav className={s.drawerNav}>
+            <div className={s.drawerGroup}>
+              <button type="button" className={`${s.navItem} ${s.navItemActive}`}>
+                <Icon name="inbox" className={s.navIcon} />
+                <span>Inbox</span>
+              </button>
+              <button type="button" className={s.navItem}>
+                <Icon name="schedule" className={s.navIcon} />
+                <span>Snoozed</span>
+              </button>
+              <button type="button" className={s.navItem}>
+                <Icon name="done" className={s.navIcon} />
+                <span>Done</span>
+              </button>
+            </div>
+
+            <div className={s.drawerGroup}>
+              <button type="button" className={s.navItem}>
+                <Icon name="drafts" className={s.navIcon} />
+                <span>Drafts</span>
+              </button>
+              <button type="button" className={s.navItem}>
+                <Icon name="send" className={s.navIcon} />
+                <span>Sent</span>
+              </button>
+              <button type="button" className={s.navItem}>
+                <Icon name="notifications" className={s.navIcon} />
+                <span>Reminders</span>
+              </button>
+              <button type="button" className={s.navItem}>
+                <Icon name="delete" className={s.navIcon} />
+                <span>Trash</span>
+              </button>
+              <button type="button" className={s.navItem}>
+                <Icon name="report" className={s.navIcon} />
+                <span>Spam</span>
+              </button>
+              <button type="button" className={s.navItem}>
+                <Icon name="contacts" className={s.navIcon} />
+                <span>Contacts</span>
+              </button>
+            </div>
+
+            <div className={s.drawerGroup}>
+              <div className={s.drawerLabel}>Bundled in the inbox</div>
+              {bundles.map(({ id, meta }) => (
+                <button type="button" key={id} className={s.navItem}>
+                  <Icon
+                    name={meta.icon}
+                    className={s.navIcon}
+                    style={{ color: meta.color }}
+                  />
+                  <span>{meta.name}</span>
+                </button>
+              ))}
+            </div>
+          </nav>
+        </aside>
+
+        <main className={s.content}>
         {!hydrated && (
           <p className={s.emptyText}>Loading…</p>
         )}
@@ -299,6 +393,7 @@ export const App = () => {
             </section>
           );
         })}
+        </main>
       </div>
       <Toaster />
     </div>
