@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
 import type { Thread } from "../../shared/types";
+import { useMailStore } from "../../store/mailStore";
+import { formatSnoozeToastTime } from "../lib/snoozePresets";
 import { useBulkActions } from "./BulkActionConfirm";
 import { BundleMenu } from "./BundleMenu";
 import { Icon } from "./Icon";
 import { InlineMessage } from "./InlineMessage";
 import { ReplyFooter } from "./ReplyFooter";
+import { SnoozeMenu } from "./SnoozeMenu";
 import s from "./ThreadView.module.css";
 
 export const ThreadView = ({
@@ -13,6 +16,8 @@ export const ThreadView = ({
   thread: Thread;
 }) => {
   const { doneMessages, trashMessages } = useBulkActions();
+  const snoozeThread = useMailStore((st) => st.snoozeThread);
+  const notify = useMailStore((st) => st.notify);
 
   const latestInbox = useMemo(() => {
     const inbox = t.messages.filter((m) => m.origin === "inbox");
@@ -38,6 +43,10 @@ export const ThreadView = ({
     doneMessages(
       t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
     );
+  const onSnooze = (wakeAt: number) => {
+    snoozeThread(t.messages.map((m) => m.id), wakeAt);
+    notify(`Snoozed until ${formatSnoozeToastTime(wakeAt)}`);
+  };
   const onTrash = () => trashMessages(t.messages.map((m) => m.id));
   const translateLatest = () => {
     setTranslationRequests((prev) => ({
@@ -52,6 +61,7 @@ export const ThreadView = ({
         <h2 className={s.title}>{t.subject || "(no subject)"}</h2>
         <div className={s.headerActions}>
           <BundleMenu thread={t} onTranslateToEnglish={translateLatest} />
+          <SnoozeMenu onChoose={onSnooze} />
           <button
             onClick={(e) => {
               e.stopPropagation();

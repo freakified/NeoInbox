@@ -1,6 +1,7 @@
 import { clsx } from "clsx";
 import type { Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
+import { formatSnoozeToastTime } from "../lib/snoozePresets";
 import { useBulkActions } from "./BulkActionConfirm";
 import { Icon } from "./Icon";
 import { SnoozeMenu } from "./SnoozeMenu";
@@ -9,6 +10,7 @@ import s from "./ActionStrip.module.css";
 export const ActionStrip = ({ thread }: { thread: Thread }) => {
   const pin = useMailStore((st) => st.pin);
   const snoozeThread = useMailStore((st) => st.snoozeThread);
+  const notify = useMailStore((st) => st.notify);
   const { doneMessages, trashMessages } = useBulkActions();
 
   const togglePin = () => {
@@ -17,8 +19,10 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
   };
   const onDone = () =>
     doneMessages(thread.messages.filter((m) => m.origin === "inbox").map((m) => m.id));
-  const onSnooze = (wakeAt: number) =>
+  const onSnooze = (wakeAt: number) => {
     snoozeThread(thread.messages.map((m) => m.id), wakeAt);
+    notify(`Snoozed until ${formatSnoozeToastTime(wakeAt)}`);
+  };
   const onTrash = () => trashMessages(thread.messages.map((m) => m.id));
 
   return (
