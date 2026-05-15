@@ -10,6 +10,7 @@ import {
 } from "../store/mailStore";
 import { BundleSliceRow } from "./components/BundleSliceRow";
 import { BundleManagerModal } from "./components/BundleManagerModal";
+import { useBulkActions } from "./components/BulkActionConfirm";
 import { Icon } from "./components/Icon";
 import { MotionSurface } from "./components/Motion";
 import { RowGroup } from "./components/RowGroup";
@@ -27,7 +28,7 @@ export const App = () => {
   const connectionState = useConnectionState();
   const retryBackfill = useMailStore((st) => st.retryBackfill);
 
-  const doneThread = useMailStore((st) => st.doneThread);
+  const { doneMessages } = useBulkActions();
 
   const sectionDoneAll = (items: StreamItem[]) => {
     const ids = items.flatMap((item) => {
@@ -36,7 +37,7 @@ export const App = () => {
         t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
       );
     });
-    doneThread(ids);
+    doneMessages(ids);
   };
 
   const [expandedKey, setExpandedKey] = useState<string | null>(null);

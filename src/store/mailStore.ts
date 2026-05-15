@@ -78,6 +78,15 @@ const UNDO_TIMEOUT_MS = 5000;
 let toastSeq = 0;
 const nextToastId = (): string => `t${++toastSeq}-${Date.now()}`;
 
+const messagesLabel = (count: number): string =>
+  count === 1 ? "Message" : `${count} messages`;
+
+const doneToastMessage = (count: number): string =>
+  `${messagesLabel(count)} marked as done`;
+
+const trashToastMessage = (count: number): string =>
+  count === 1 ? "Moved to trash" : `${count} messages moved to trash`;
+
 const undoTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 const commitUndoToast = (
@@ -178,6 +187,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   },
 
   doneThread: (messageIds) => {
+    if (messageIds.length === 0) return;
     const prev = get().messagesById;
     const map = { ...prev };
     const pending = { ...get().pendingOps };
@@ -189,7 +199,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
     const toastId = nextToastId();
     const toast: ToastRecord = {
       id: toastId,
-      message: "Message marked as done",
+      message: doneToastMessage(messageIds.length),
       undo: { messageIds, kind: "done" },
     };
     const allToasts = [...get().toasts, toast];
@@ -203,6 +213,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   },
 
   snoozeThread: (messageIds, wakeAt) => {
+    if (messageIds.length === 0) return;
     const prev = get().messagesById;
     const map = { ...prev };
     const pending = { ...get().pendingOps };
@@ -216,6 +227,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   },
 
   trashThread: (messageIds) => {
+    if (messageIds.length === 0) return;
     const prev = get().messagesById;
     const map = { ...prev };
     const pending = { ...get().pendingOps };
@@ -227,7 +239,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
     const toastId = nextToastId();
     const toast: ToastRecord = {
       id: toastId,
-      message: "Moved to trash",
+      message: trashToastMessage(messageIds.length),
       undo: { messageIds, kind: "trash" },
     };
     const allToasts = [...get().toasts, toast];

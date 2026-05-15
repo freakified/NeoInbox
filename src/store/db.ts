@@ -6,6 +6,7 @@ import type {
   OverrideRecord,
   RawMessage,
   SnoozeRecord,
+  TranslationRecord,
 } from "../shared/types";
 
 class NeoInboxDb extends Dexie {
@@ -15,6 +16,7 @@ class NeoInboxDb extends Dexie {
   bundleRules!: Table<BundleRuleRecord, string>;
   folderCursors!: Table<FolderCursorRecord, string>;
   customBundles!: Table<CustomBundleRecord, string>;
+  translations!: Table<TranslationRecord, string>;
 
   constructor() {
     super("neoinbox");
@@ -42,6 +44,15 @@ class NeoInboxDb extends Dexie {
       bundleRules: "id, category",
       folderCursors: "folderId",
       customBundles: "id",
+    });
+    this.version(6).stores({
+      messages: "id, date, accountId, folderId",
+      snoozes: "messageId, wakeAt",
+      overrides: "senderDomain",
+      bundleRules: "id, category",
+      folderCursors: "folderId",
+      customBundles: "id",
+      translations: "id, messageId, targetLanguage, provider, createdAt",
     });
   }
 }

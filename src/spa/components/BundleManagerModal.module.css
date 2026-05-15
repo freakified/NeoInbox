@@ -175,6 +175,19 @@
   gap: 8px;
 }
 
+.fieldBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.helpText {
+  margin: 0;
+  color: var(--color-md-secondary-text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .sectionTitle,
 .label {
   margin: 0;
@@ -516,6 +529,15 @@
 
 .deleteBtn:hover {
   background: #fce8e6;
+}
+
+.deleteBtn:disabled {
+  color: #bdbdbd;
+  cursor: default;
+}
+
+.deleteBtn:hover:disabled {
+  background: transparent;
 }
 
 .actions {

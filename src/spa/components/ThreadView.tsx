@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Thread } from "../../shared/types";
-import { useMailStore } from "../../store/mailStore";
+import { useBulkActions } from "./BulkActionConfirm";
 import { BundleMenu } from "./BundleMenu";
 import { Icon } from "./Icon";
 import { InlineMessage } from "./InlineMessage";
@@ -12,8 +12,7 @@ export const ThreadView = ({
 }: {
   thread: Thread;
 }) => {
-  const doneThread = useMailStore((st) => st.doneThread);
-  const trashThread = useMailStore((st) => st.trashThread);
+  const { doneMessages, trashMessages } = useBulkActions();
 
   const latestInbox = useMemo(() => {
     const inbox = t.messages.filter((m) => m.origin === "inbox");
@@ -23,6 +22,7 @@ export const ThreadView = ({
 
   const [openIds, setOpenIds] = useState<Set<number>>(() => new Set());
   const [showMiddle, setShowMiddle] = useState(false);
+  const [translationRequests, setTranslationRequests] = useState<Record<number, number>>({});
 
   if (!latestInbox || !latestMessage) return null;
 
@@ -35,17 +35,23 @@ export const ThreadView = ({
     });
 
   const onDone = () =>
-    doneThread(
+    doneMessages(
       t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
     );
-  const onTrash = () => trashThread(t.messages.map((m) => m.id));
+  const onTrash = () => trashMessages(t.messages.map((m) => m.id));
+  const translateLatest = () => {
+    setTranslationRequests((prev) => ({
+      ...prev,
+      [latestMessage.id]: (prev[latestMessage.id] ?? 0) + 1,
+    }));
+  };
 
   return (
     <div>
       <div className={s.header}>
         <h2 className={s.title}>{t.subject || "(no subject)"}</h2>
         <div className={s.headerActions}>
-          <BundleMenu thread={t} />
+          <BundleMenu thread={t} onTranslateToEnglish={translateLatest} />
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -78,6 +84,7 @@ export const ThreadView = ({
               isOpen={m.id === latestMessage.id || openIds.has(m.id)}
               canToggle={m.id !== latestMessage.id}
               onToggle={() => toggleMsg(m.id)}
+              translationRequest={translationRequests[m.id] ?? 0}
             />
           ))
         ) : (
@@ -87,6 +94,7 @@ export const ThreadView = ({
               message={t.messages[0]!}
               isOpen={openIds.has(t.messages[0]!.id)}
               onToggle={() => toggleMsg(t.messages[0]!.id)}
+              translationRequest={translationRequests[t.messages[0]!.id] ?? 0}
             />
             {showMiddle ? (
               t.messages.slice(1, -1).map((m) => (
@@ -95,6 +103,7 @@ export const ThreadView = ({
                   message={m}
                   isOpen={openIds.has(m.id)}
                   onToggle={() => toggleMsg(m.id)}
+                  translationRequest={translationRequests[m.id] ?? 0}
                 />
               ))
             ) : (
@@ -117,6 +126,7 @@ export const ThreadView = ({
               isOpen
               canToggle={false}
               onToggle={() => undefined}
+              translationRequest={translationRequests[latestMessage.id] ?? 0}
             />
           </>
         )}

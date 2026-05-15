@@ -14,11 +14,13 @@ export const InlineMessage = ({
   isOpen,
   onToggle,
   canToggle = true,
+  translationRequest = 0,
 }: {
   message: RawMessage;
   isOpen: boolean;
   onToggle: () => void;
   canToggle?: boolean;
+  translationRequest?: number;
 }) => {
   const name = senderName(m.author);
   const color = avatarColor(name);
@@ -76,7 +78,7 @@ export const InlineMessage = ({
                 e.stopPropagation();
               }}
             >
-              <MessageBody message={m} />
+              <MessageBody message={m} translationRequest={translationRequest} />
             </div>
           </ExpandableRegion>
           {m.attachments && m.attachments.length > 0 && (

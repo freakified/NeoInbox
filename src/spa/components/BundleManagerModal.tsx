@@ -14,12 +14,20 @@ import {
   trustImageSender,
   untrustImageSender,
 } from "../lib/remoteImagePrefs";
+import {
+  DEFAULT_TRANSLATION_CONFIG,
+  getTranslationConfig,
+  setTranslationConfig,
+  TRANSLATION_PROVIDERS,
+  type TranslationConfig,
+  type TranslationProvider,
+} from "../lib/translation";
 import { Icon } from "./Icon";
 import s from "./BundleManagerModal.module.css";
 
 type RuleType = CustomBundleRule["type"];
 type SelectedBundle = { kind: "builtin"; id: BuiltinCategory } | { kind: "custom"; id: string } | { kind: "new" };
-type SelectedPane = { kind: "general" } | { kind: "remoteImages" } | SelectedBundle;
+type SelectedPane = { kind: "general" } | { kind: "remoteImages" } | { kind: "translation" } | SelectedBundle;
 
 interface BundleFormState {
   id: string;
@@ -176,7 +184,9 @@ const bundleKey = (selected: SelectedBundle): string =>
   selected.kind === "new" ? "new" : `${selected.kind}:${selected.id}`;
 
 const paneKey = (selected: SelectedPane): string =>
-  selected.kind === "general" || selected.kind === "remoteImages" ? selected.kind : bundleKey(selected);
+  selected.kind === "general" || selected.kind === "remoteImages" || selected.kind === "translation"
+    ? selected.kind
+    : bundleKey(selected);
 
 const hasRule = (rules: readonly CustomBundleRule[], rule: CustomBundleRule): boolean =>
   rules.some((r) => r.type === rule.type && r.value.toLowerCase() === rule.value.toLowerCase());
@@ -380,6 +390,14 @@ export const BundleManagerModal = ({
               <Icon name="image" className={s.navIcon} />
               <span className={s.navName}>Remote Images</span>
             </button>
+            <button
+              type="button"
+              className={clsx(s.bundleNavItem, paneKey(selected) === "translation" && s.bundleNavItemActive)}
+              onClick={() => choose({ kind: "translation" })}
+            >
+              <Icon name="translate" className={s.navIcon} />
+              <span className={s.navName}>Translation</span>
+            </button>
 
             <div className={s.sideSectionLabel}>Bundling</div>
             {BUNDLE_CATEGORIES.map((cat) => {
@@ -432,6 +450,8 @@ export const BundleManagerModal = ({
               <GeneralSettings />
             ) : selected.kind === "remoteImages" ? (
               <RemoteImagesSettings />
+            ) : selected.kind === "translation" ? (
+              <TranslationSettings />
             ) : selected.kind === "builtin" ? (
               <BuiltinBundleEditor
                 category={selected.id}
@@ -477,7 +497,7 @@ const GeneralSettings = () => (
       <Icon name="settings" className={s.editorIcon} />
       <div>
         <h3 className={s.editorTitle}>General</h3>
-        <p className={s.editorDesc}>General settings will appear here.</p>
+        <p className={s.editorDesc}>Configure app-wide behavior.</p>
       </div>
     </div>
     <section className={s.section}>
@@ -485,6 +505,151 @@ const GeneralSettings = () => (
     </section>
   </div>
 );
+
+const sameTranslationConfig = (a: TranslationConfig, b: TranslationConfig): boolean =>
+  a.provider === b.provider &&
+  a.apiKey === b.apiKey &&
+  a.endpoint === b.endpoint &&
+  a.region === b.region;
+
+const TranslationSettings = () => {
+  const notify = useMailStore((st) => st.notify);
+  const [config, setConfig] = useState<TranslationConfig>(() => getTranslationConfig());
+
+  const saved = getTranslationConfig();
+  const normalized: TranslationConfig = {
+    provider: config.provider,
+    apiKey: config.apiKey.trim(),
+    endpoint: config.endpoint.trim(),
+    region: config.region.trim(),
+  };
+  const providerMeta = TRANSLATION_PROVIDERS[config.provider];
+  const hasChanges = !sameTranslationConfig(normalized, saved);
+
+  const updateConfig = (patch: Partial<TranslationConfig>) => {
+    setConfig((prev) => ({ ...prev, ...patch }));
+  };
+
+  const save = () => {
+    setTranslationConfig(normalized);
+    setConfig(normalized);
+    notify("Translation settings saved");
+  };
+
+  const reset = () => {
+    setTranslationConfig(DEFAULT_TRANSLATION_CONFIG);
+    setConfig(DEFAULT_TRANSLATION_CONFIG);
+    notify("Translation settings reset");
+  };
+
+  const endpointPlaceholder =
+    config.provider === "deepl"
+      ? "https://api-free.deepl.com/v2/translate"
+      : config.provider === "azure"
+        ? "https://api.cognitive.microsofttranslator.com"
+        : config.provider === "libretranslate"
+          ? "https://libretranslate.com/translate"
+          : "https://example.com/translate";
+
+  return (
+    <div className={s.editor}>
+      <div className={s.editorHeader}>
+        <Icon name="translate" className={s.editorIcon} />
+        <div>
+          <h3 className={s.editorTitle}>Translation</h3>
+          <p className={s.editorDesc}>Translate messages to English on demand.</p>
+        </div>
+      </div>
+
+      <section className={s.section}>
+        <h4 className={s.sectionTitle}>Provider</h4>
+        <label className={s.fieldBlock}>
+          <span className={s.label}>Translation service</span>
+          <select
+            className={s.select}
+            value={config.provider}
+            onChange={(e) => updateConfig({ provider: e.target.value as TranslationProvider })}
+          >
+            {(Object.keys(TRANSLATION_PROVIDERS) as TranslationProvider[]).map((provider) => (
+              <option key={provider} value={provider}>
+                {TRANSLATION_PROVIDERS[provider].label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className={s.helpText}>
+          Message text is sent only when you choose Translate to English.
+        </p>
+      </section>
+
+      <section className={s.section}>
+        <h4 className={s.sectionTitle}>Credentials</h4>
+        {(providerMeta.needsApiKey || providerMeta.optionalApiKey) && (
+          <label className={s.fieldBlock}>
+            <span className={s.label}>
+              {providerMeta.optionalApiKey ? "API key (optional)" : "API key"}
+            </span>
+            <input
+              type="password"
+              className={s.input}
+              value={config.apiKey}
+              placeholder={`${providerMeta.label} API key`}
+              onChange={(e) => updateConfig({ apiKey: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && save()}
+            />
+          </label>
+        )}
+        {(providerMeta.needsEndpoint || config.provider === "deepl" || config.provider === "azure") && (
+          <label className={s.fieldBlock}>
+            <span className={s.label}>
+              {providerMeta.needsEndpoint ? "Endpoint" : "Endpoint override"}
+            </span>
+            <input
+              type="url"
+              className={s.input}
+              value={config.endpoint}
+              placeholder={endpointPlaceholder}
+              onChange={(e) => updateConfig({ endpoint: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && save()}
+            />
+          </label>
+        )}
+        {providerMeta.needsRegion && (
+          <label className={s.fieldBlock}>
+            <span className={s.label}>Region</span>
+            <input
+              type="text"
+              className={s.input}
+              value={config.region}
+              placeholder="global, eastus, westeurope..."
+              onChange={(e) => updateConfig({ region: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && save()}
+            />
+          </label>
+        )}
+        {config.provider === "custom" && (
+          <p className={s.helpText}>
+            Custom endpoints should accept JSON with text and targetLanguage, and return translatedText.
+          </p>
+        )}
+        {config.provider === "libretranslate" && (
+          <p className={s.helpText}>
+            LibreTranslate endpoints should accept q, source, target, format, and optionally api_key.
+          </p>
+        )}
+      </section>
+
+      <div className={s.actions}>
+        <button type="button" className={s.deleteBtn} onClick={reset}>
+          Reset
+        </button>
+        <button type="button" className={s.saveBtn} disabled={!hasChanges} onClick={save}>
+          Save
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const normalizeEmail = (value: string): string => value.trim().toLowerCase();
 

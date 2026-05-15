@@ -302,3 +302,18 @@ export const buildSrcdoc = (rawHtml: string, showImages: boolean): string => {
   doc.head.insertAdjacentHTML("afterbegin", BASE_CSS);
   return `<!DOCTYPE html>${doc.documentElement.outerHTML}`;
 }
+
+export const buildTextSrcdoc = (rawText: string): string =>
+  `<!DOCTYPE html><html><head>${BASE_CSS}</head><body>${renderTextWithQuoteToggle(rawText)}</body></html>`;
+
+export const extractRawTextBody = (
+  part: messenger.messages.MessagePart,
+): string | null => {
+  if (part.contentType === "text/plain") return part.body ?? "";
+  for (const p of part.parts ?? []) {
+    const found = extractRawTextBody(p);
+    if (found !== null) return found;
+  }
+  const html = extractHtmlBody(part);
+  return html ? htmlToText(html) : null;
+};

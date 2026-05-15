@@ -89,6 +89,17 @@ export interface FolderCursorRecord {
   done: boolean;
 }
 
+export interface TranslationRecord {
+  id: string;
+  messageId: number;
+  bodyHash: string;
+  provider: string;
+  sourceLanguage: string | null;
+  targetLanguage: string;
+  translatedText: string;
+  createdAt: number;
+}
+
 export interface Delta {
   added?: RawMessage[];
   updated?: RawMessage[];

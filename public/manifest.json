@@ -24,6 +24,11 @@
     "accountsRead",
     "storage",
     "alarms",
-    "tabs"
+    "tabs",
+    "https://api-free.deepl.com/*",
+    "https://api.deepl.com/*",
+    "https://translation.googleapis.com/*",
+    "https://api.cognitive.microsofttranslator.com/*",
+    "https://libretranslate.com/*"
   ]
 }

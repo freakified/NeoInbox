@@ -3,11 +3,13 @@ import { parseSender } from "../../shared/senders";
 import type { RawMessage } from "../../shared/types";
 import { useIframeAutoHeight } from "../lib/useIframeAutoHeight";
 import {
+  buildTextSrcdoc,
   buildSrcdoc,
   extractHtmlBody,
   extractTextBody,
   hasBlockedRemoteImages,
 } from "../lib/srcdoc";
+import { translateMessageToEnglish } from "../lib/translation";
 import {
   getRemoteImagePolicy,
   isTrustedImageSender,
@@ -18,13 +20,21 @@ import s from "./MessageBody.module.css";
 
 export const MessageBody = ({
   message: m,
+  translationRequest = 0,
 }: {
   message: RawMessage;
+  translationRequest?: number;
 }) => {
   const [rawHtml, setRawHtml] = useState<string | null>(null);
   const [isPlainText, setIsPlainText] = useState(false);
   const [showImagesForMessage, setShowImagesForMessage] = useState(false);
   const [remoteImagePrefsVersion, setRemoteImagePrefsVersion] = useState(0);
+  const [translationStatus, setTranslationStatus] = useState<
+    "idle" | "loading" | "done" | "error"
+  >("idle");
+  const [translationError, setTranslationError] = useState("");
+  const [translatedText, setTranslatedText] = useState<string | null>(null);
+  const [showTranslation, setShowTranslation] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { height, onLoad } = useIframeAutoHeight(iframeRef);
   const senderEmail = useMemo(() => {
@@ -52,6 +62,13 @@ export const MessageBody = ({
     return () => {
       cancelled = true;
     };
+  }, [m.id]);
+
+  useEffect(() => {
+    setTranslationStatus("idle");
+    setTranslationError("");
+    setTranslatedText(null);
+    setShowTranslation(false);
   }, [m.id]);
 
   useEffect(
@@ -84,6 +101,31 @@ export const MessageBody = ({
     () => (rawHtml !== null ? buildSrcdoc(rawHtml, showImages) : ""),
     [rawHtml, showImages],
   );
+  const translatedSrcdoc = useMemo(
+    () => (translatedText !== null ? buildTextSrcdoc(translatedText) : ""),
+    [translatedText],
+  );
+  const activeSrcdoc = showTranslation && translatedSrcdoc ? translatedSrcdoc : srcdoc;
+
+  const requestTranslation = () => {
+    setTranslationStatus("loading");
+    setTranslationError("");
+    translateMessageToEnglish(m.id)
+      .then((record) => {
+        setTranslatedText(record.translatedText);
+        setShowTranslation(true);
+        setTranslationStatus("done");
+      })
+      .catch((e) => {
+        setTranslationError(String((e as Error)?.message ?? e));
+        setTranslationStatus("error");
+      });
+  };
+
+  useEffect(() => {
+    if (translationRequest <= 0) return;
+    requestTranslation();
+  }, [translationRequest]);
 
   return (
     <div className={s.body}>
@@ -123,10 +165,35 @@ export const MessageBody = ({
               )}
             </div>
           )}
+          {translationStatus !== "idle" && (
+            <div className={s.imageNotice}>
+              <span>
+                {translationStatus === "loading"
+                  ? "Translating to English..."
+                  : translationStatus === "done"
+                    ? "Translated to English."
+                    : translationError || "Couldn't translate this message."}
+              </span>
+              {translationStatus === "done" && translatedText && (
+                <button
+                  className={s.noticeButton}
+                  type="button"
+                  onClick={() => setShowTranslation((showing) => !showing)}
+                >
+                  {showTranslation ? "Show original" : "Show translation"}
+                </button>
+              )}
+              {translationStatus === "error" && (
+                <button className={s.noticeButton} type="button" onClick={requestTranslation}>
+                  Retry
+                </button>
+              )}
+            </div>
+          )}
           <iframe
             ref={iframeRef}
             sandbox="allow-same-origin"
-            srcDoc={srcdoc}
+            srcDoc={activeSrcdoc}
             onLoad={onLoad}
             style={{
               width: "100%",

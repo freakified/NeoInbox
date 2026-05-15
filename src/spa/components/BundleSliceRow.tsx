@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import type { Category, Thread } from "../../shared/types";
 import { getCategoryMeta } from "../../shared/categories";
-import { useMailStore, useCustomBundles } from "../../store/mailStore";
+import { useCustomBundles } from "../../store/mailStore";
 import { senderName } from "../lib/avatar";
 import { formatDate, groupByBucket } from "../lib/dateBucket";
+import { useBulkActions } from "./BulkActionConfirm";
 import { Icon } from "./Icon";
 import { MessageAttachments, collectAttachments } from "./MessageAttachments";
 import { ExpandableRegion, MotionRow, MotionSurface } from "./Motion";
@@ -34,8 +35,7 @@ export const BundleSliceRow = ({
 }) => {
   const customBundles = useCustomBundles();
   const meta = getCategoryMeta(category, customBundles);
-  const doneThread = useMailStore((st) => st.doneThread);
-  const trashThread = useMailStore((st) => st.trashThread);
+  const { doneMessages, trashMessages } = useBulkActions();
 
   const threadCountLabel = threads.length > 25 ? "(25+)" : `(${threads.length})`;
   const latestDate = threads.reduce((max, t) => Math.max(max, t.latestDate), 0);
@@ -75,13 +75,13 @@ export const BundleSliceRow = ({
     const ids = threads.flatMap((t) =>
       t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
     );
-    doneThread(ids);
+    doneMessages(ids);
   };
 
   const handleTrashAll = (e: React.MouseEvent) => {
     e.stopPropagation();
     const ids = threads.flatMap((t) => t.messages.map((m) => m.id));
-    trashThread(ids);
+    trashMessages(ids);
   };
 
   return (
