@@ -46,6 +46,7 @@ export interface RawMessage {
   author: string;
   recipients: string[];
   date: number;
+  resurfacedAt?: number;
   size: number;
   read: boolean;
   folderId: string;

@@ -46,11 +46,47 @@ export const SnoozeMenu = ({
   const [open, setOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+
+  useEffect(() => {
+    if (!open) return;
+
+    const updatePosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const width = Math.min(272, window.innerWidth - 32);
+      const left = Math.min(
+        window.innerWidth - width - 16,
+        Math.max(16, rect.right - width),
+      );
+      setDropdownStyle({
+        left,
+        top: rect.bottom + 8,
+        width,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (
+        ref.current?.contains(target) ||
+        dropdownRef.current?.contains(target)
+      ) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -65,6 +101,7 @@ export const SnoozeMenu = ({
   return (
     <div ref={ref} className={s.wrapper}>
       <button
+        ref={triggerRef}
         type="button"
         title="Snooze"
         aria-haspopup="menu"
@@ -75,43 +112,52 @@ export const SnoozeMenu = ({
         }}
         className={s.trigger}
       >
-        <Icon name="snooze" className={s.triggerIcon} />
+        <Icon name="schedule" className={s.triggerIcon} />
       </button>
-      {open && (
-        <div className={s.dropdown} role="menu" aria-label="Snooze until">
-          <div className={s.title}>Snooze until...</div>
-          {snoozePresets().map(({ label, icon, wakeAt }) => (
+      {open &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            className={s.dropdown}
+            style={dropdownStyle}
+            role="menu"
+            aria-label="Snooze until"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={s.title}>Snooze until...</div>
+            {snoozePresets().map(({ label, icon, wakeAt }) => (
+              <button
+                key={label}
+                className={s.option}
+                type="button"
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  choose(wakeAt);
+                }}
+              >
+                <Icon name={icon} className={s.optionIcon} />
+                <span className={s.optionLabel}>{label}</span>
+                <span className={s.optionTime}>{formatSnoozeOptionTime(wakeAt)}</span>
+              </button>
+            ))}
+            <div className={s.divider} />
             <button
-              key={label}
               className={s.option}
               type="button"
               role="menuitem"
               onClick={(e) => {
                 e.stopPropagation();
-                choose(wakeAt);
+                setOpen(false);
+                setPickerOpen(true);
               }}
             >
-              <Icon name={icon} className={s.optionIcon} />
-              <span className={s.optionLabel}>{label}</span>
-              <span className={s.optionTime}>{formatSnoozeOptionTime(wakeAt)}</span>
+              <Icon name="event" className={s.optionIcon} />
+              <span className={s.optionLabel}>Pick date &amp; time</span>
             </button>
-          ))}
-          <div className={s.divider} />
-          <button
-            className={s.option}
-            type="button"
-            role="menuitem"
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen(false);
-              setPickerOpen(true);
-            }}
-          >
-            <Icon name="event" className={s.optionIcon} />
-            <span className={s.optionLabel}>Pick date &amp; time</span>
-          </button>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
       {pickerOpen && (
         <SnoozePicker
           onCancel={() => setPickerOpen(false)}

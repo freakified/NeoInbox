@@ -195,6 +195,10 @@ export const applyMessageDetails = async (
   raw: RawMessage,
   cached?: RawMessage,
 ): Promise<void> => {
+  if (raw.origin === "inbox" && raw.resurfacedAt === undefined && cached?.resurfacedAt !== undefined) {
+    raw.resurfacedAt = cached.resurfacedAt;
+  }
+
   if (canReuseMessageDetails(cached, raw)) {
     raw.attachments = cached.attachments;
     raw.references = cached.references;

@@ -6,7 +6,7 @@ import {
   trashMessage,
 } from "./ingest";
 import { headerToRawMessage } from "./messageMap";
-import { handleSnoozeAlarm, snoozeMessage } from "./snooze";
+import { handleSnoozeAlarm, snoozeAlarmName, snoozeMessage } from "./snooze";
 import { getLastProgress, runBackfill, reclassifyAll } from "./backfill";
 import { pushMyEmails, wireSyncEngine } from "./sync";
 import { broadcast, onCommand, startPortServer } from "./port";
@@ -63,41 +63,78 @@ const removeCachedSnoozedCopies = async (raw: { id: number; headerMessageId: str
   broadcast({ type: "delta", removedIds: staleIds });
 }
 
+const inFlightSnoozeAlarms = new Set<string>();
+let restoreSnoozeAlarmsPromise: Promise<void> | null = null;
+
+const processSnoozeAlarm = async (alarmName: string): Promise<void> => {
+  if (inFlightSnoozeAlarms.has(alarmName)) return;
+  inFlightSnoozeAlarms.add(alarmName);
+  try {
+    const result = await handleSnoozeAlarm(alarmName);
+    if (!result) return;
+    if (result.restoredHeader) {
+      const cat = await classifyMessage(result.restoredHeader);
+      const raw = headerToRawMessage(result.restoredHeader, "inbox", cat);
+      if (result.wakeAt !== undefined) raw.resurfacedAt = result.wakeAt;
+      await applyMessageDetails(raw);
+      if (result.originalId !== raw.id) {
+        await db.messages.delete(result.originalId);
+        broadcast({ type: "delta", removedIds: [result.originalId] });
+      }
+      await removeCachedSnoozedCopies(raw);
+      await db.messages.put(raw);
+      broadcast({ type: "delta", added: [raw] });
+    } else {
+      await db.messages.delete(result.originalId);
+      broadcast({ type: "delta", removedIds: [result.originalId] });
+    }
+  } finally {
+    inFlightSnoozeAlarms.delete(alarmName);
+  }
+}
+
+const restoreSnoozeAlarms = async (): Promise<void> => {
+  const now = Date.now();
+  const snoozes = await db.snoozes.toArray();
+  for (const snooze of snoozes) {
+    const alarmName = snoozeAlarmName(snooze.messageId);
+    if (snooze.wakeAt <= now) {
+      await processSnoozeAlarm(alarmName);
+    } else {
+      await messenger.alarms.create(alarmName, { when: snooze.wakeAt });
+    }
+  }
+}
+
+const ensureSnoozeAlarmsRestored = (): Promise<void> => {
+  restoreSnoozeAlarmsPromise ??= restoreSnoozeAlarms().finally(() => {
+    restoreSnoozeAlarmsPromise = null;
+  });
+  return restoreSnoozeAlarmsPromise;
+}
+
 messenger.browserAction.onClicked.addListener(() => {
   void openOrFocusInbox();
 });
 
 messenger.runtime.onInstalled.addListener((details) => {
   log.info("background", "onInstalled", details.reason);
+  void ensureSnoozeAlarmsRestored().catch((e) => log.warn("snooze", "restore alarms failed", e));
   void runBackfill().catch((e) => log.warn("backfill", "failed", e));
 });
 
 messenger.runtime.onStartup.addListener(() => {
+  void ensureSnoozeAlarmsRestored().catch((e) => log.warn("snooze", "restore alarms failed", e));
   void runBackfill().catch((e) => log.warn("backfill", "failed", e));
 });
 
 messenger.alarms.onAlarm.addListener(async (alarm) => {
-  const result = await handleSnoozeAlarm(alarm.name);
-  if (!result) return;
-  if (result.restoredHeader) {
-    const cat = await classifyMessage(result.restoredHeader);
-    const raw = headerToRawMessage(result.restoredHeader, "inbox", cat);
-    await applyMessageDetails(raw);
-    if (result.originalId !== raw.id) {
-      await db.messages.delete(result.originalId);
-      broadcast({ type: "delta", removedIds: [result.originalId] });
-    }
-    await removeCachedSnoozedCopies(raw);
-    await db.messages.put(raw);
-    broadcast({ type: "delta", added: [raw] });
-  } else {
-    await db.messages.delete(result.originalId);
-    broadcast({ type: "delta", removedIds: [result.originalId] });
-  }
+  await processSnoozeAlarm(alarm.name);
 });
 
 wireSyncEngine();
 startPortServer();
+void ensureSnoozeAlarmsRestored().catch((e) => log.warn("snooze", "restore alarms failed", e));
 
 onCommand(async (msg) => {
   switch (msg.type) {

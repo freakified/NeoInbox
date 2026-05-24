@@ -18,6 +18,11 @@ type HeaderWithFolder = messenger.messages.MessageHeader & {
   headerMessageId?: string;
 };
 
+type MessageListLike = { messages?: messenger.messages.MessageHeader[] };
+
+export const snoozeAlarmName = (messageId: number): string =>
+  `${ALARM_PREFIX}${messageId}`;
+
 export const snoozeMessage = async (
   messageId: number,
   wakeAt: number,
@@ -60,13 +65,14 @@ export const snoozeMessage = async (
     throw e;
   }
 
-  await messenger.alarms.create(`${ALARM_PREFIX}${messageId}`, { when: wakeAt });
+  await messenger.alarms.create(snoozeAlarmName(messageId), { when: wakeAt });
 
   return { removedId: messageId };
 }
 
 export interface SnoozeWakeResult {
   originalId: number;
+  wakeAt?: number;
   restoredHeader?: messenger.messages.MessageHeader;
 }
 
@@ -86,6 +92,7 @@ export const handleSnoozeAlarm = async (
     record.headerMessageId,
     record.originAccountId,
   );
+  let restoredHeader = restored;
 
   if (restored) {
     try {
@@ -97,10 +104,14 @@ export const handleSnoozeAlarm = async (
     }
     if (record.originFolderId) {
       try {
-        await messenger.messages.move(
+        const moved = await messenger.messages.move(
           [restored.id],
           record.originFolderId as unknown as messenger.folders.MailFolderId,
-        );
+        ) as MessageListLike | undefined;
+        restoredHeader = moved?.messages?.[0] ?? await findByHeaderMessageIdInFolder(
+          record.originFolderId,
+          record.headerMessageId,
+        ) ?? restored;
       } catch (e) {
         log.warn("snooze", "move-back on wake failed", e);
       }
@@ -108,7 +119,7 @@ export const handleSnoozeAlarm = async (
   }
 
   await db.snoozes.delete(originalId);
-  return { originalId, restoredHeader: restored };
+  return { originalId, wakeAt: record.wakeAt, restoredHeader };
 }
 
 const findByHeaderMessageId = async (
@@ -140,4 +151,12 @@ const scanFolderForHeader = async (
     if (!page.id || ++pages >= SEARCH_PAGE_LIMIT) return undefined;
     page = await messenger.messages.continueList(page.id);
   }
+}
+
+const findByHeaderMessageIdInFolder = async (
+  folderId: string,
+  headerMessageId: string,
+): Promise<messenger.messages.MessageHeader | undefined> => {
+  if (!folderId || !headerMessageId) return undefined;
+  return scanFolderForHeader(folderId, headerMessageId);
 }

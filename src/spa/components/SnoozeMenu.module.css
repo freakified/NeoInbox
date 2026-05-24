@@ -21,17 +21,13 @@
 }
 
 .dropdown {
-  position: absolute;
-  right: 0;
-  top: 100%;
-  margin-top: 8px;
-  z-index: 120;
+  position: fixed;
+  z-index: 1300;
   background: #fff;
   box-shadow: var(--shadow-elevation-2);
   border-radius: 2px;
   border: 1px solid var(--color-md-divider);
   padding: 0;
-  width: min(272px, calc(100vw - 32px));
   overflow: hidden;
 }
 
