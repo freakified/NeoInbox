@@ -9,6 +9,7 @@ export type BuiltinCategory =
   | "personal";
 
 export type Category = string;
+export type MessageOrigin = "inbox" | "sent" | "done";
 
 export interface CustomBundleRule {
   type: "domain" | "email" | "subject_keyword";
@@ -52,7 +53,7 @@ export interface RawMessage {
   tags: string[];
   category: Category | null;
   pinned: boolean;
-  origin: "inbox" | "sent";
+  origin: MessageOrigin;
   references?: string[];
   inReplyTo?: string[];
   attachments?: AttachmentSummary[];
@@ -69,6 +70,7 @@ export interface Thread {
   category: Category | null;
   accountId: string;
   hasMe: boolean;
+  snoozeDueAt?: number;
 }
 
 export interface SnoozeRecord {

@@ -1,10 +1,11 @@
-import { applyMessageDetails, classifyMessage } from "./ingest";
+import { applyMessageDetailsForOrigin, classifyMessage } from "./ingest";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
 import { db } from "../store/db";
-import { collectInboxFolders, collectSentFolders } from "../shared/folders";
+import { SNOOZED_KEY } from "../shared/categories";
+import { collectArchiveFolders, collectInboxFolders, collectSentFolders } from "../shared/folders";
 import { log } from "../shared/log";
-import type { RawMessage } from "../shared/types";
+import type { MessageOrigin, RawMessage } from "../shared/types";
 
 type MessageList = { id?: string; messages: { id: number }[] };
 
@@ -51,16 +52,19 @@ const getFolderIds = async (
 
 const cacheMessages = async (
   headers: readonly messenger.messages.MessageHeader[],
-  origin: RawMessage["origin"],
+  origin: MessageOrigin,
 ): Promise<RawMessage[]> => {
   const out: RawMessage[] = [];
   for (const header of headers) {
     try {
       const fresh = await messenger.messages.get(header.id);
-      const cat = origin === "inbox" ? await classifyMessage(fresh) : null;
-      const raw = headerToRawMessage(fresh, origin, cat);
+      const logicalOrigin = origin === "done" && (fresh.tags ?? []).includes(SNOOZED_KEY)
+        ? "inbox"
+        : origin;
+      const cat = logicalOrigin === "inbox" ? await classifyMessage(fresh) : null;
+      const raw = headerToRawMessage(fresh, logicalOrigin, cat);
       const cached = await db.messages.get(fresh.id);
-      await applyMessageDetails(raw, cached);
+      await applyMessageDetailsForOrigin(raw, cached);
       out.push(raw);
     } catch (e) {
       log.warn("sync", "cacheMessages per-msg failed", {
@@ -72,6 +76,18 @@ const cacheMessages = async (
   }
   if (out.length) await db.messages.bulkPut(out);
   return out;
+};
+
+const originForFolder = async (folderId: string): Promise<MessageOrigin | undefined> => {
+  const [inboxIds, sentIds, archiveIds] = await Promise.all([
+    getFolderIds(collectInboxFolders),
+    getFolderIds(collectSentFolders),
+    getFolderIds(collectArchiveFolders),
+  ]);
+  if (sentIds.has(folderId)) return "sent";
+  if (archiveIds.has(folderId)) return "done";
+  if (inboxIds.has(folderId)) return "inbox";
+  return undefined;
 };
 
 export const wireSyncEngine = (): void => {
@@ -116,24 +132,19 @@ export const wireSyncEngine = (): void => {
         let origin = cached?.origin;
         if (!origin) {
           const folderId = folderIdOf(fresh);
-          const [inboxIds, sentIds] = await Promise.all([
-            getFolderIds(collectInboxFolders),
-            getFolderIds(collectSentFolders),
-          ]);
-          origin = sentIds.has(folderId)
-            ? "sent"
-            : inboxIds.has(folderId)
-              ? "inbox"
-              : undefined;
+          origin = await originForFolder(folderId);
         }
         if (!origin) return;
+        const logicalOrigin = origin === "done" && (fresh.tags ?? []).includes(SNOOZED_KEY)
+          ? "inbox"
+          : origin;
         const category = cached
           ? cached.category
-          : origin === "inbox"
+          : logicalOrigin === "inbox"
             ? await classifyMessage(fresh)
             : null;
-        const raw = headerToRawMessage(fresh, origin, category);
-        await applyMessageDetails(raw, cached);
+        const raw = headerToRawMessage(fresh, logicalOrigin, category);
+        await applyMessageDetailsForOrigin(raw, cached);
         await db.messages.put(raw);
         broadcast({ type: "delta", updated: [raw] });
       } catch (e) {
@@ -150,9 +161,15 @@ export const wireSyncEngine = (): void => {
       try {
         const ids = idsFromList(messages);
         if (!ids.length) return;
-        await db.messages.bulkDelete(ids);
-        broadcast({ type: "delta", removedIds: ids });
-        log.debug("sync", `onDeleted removed ${ids.length}`);
+        const removedIds = [];
+        for (const id of ids) {
+          if (await db.snoozes.get(id)) continue;
+          removedIds.push(id);
+        }
+        if (!removedIds.length) return;
+        await db.messages.bulkDelete(removedIds);
+        broadcast({ type: "delta", removedIds });
+        log.debug("sync", `onDeleted removed ${removedIds.length}`);
       } catch (e) {
         log.warn("sync", "onDeleted failed", e);
       }
@@ -163,13 +180,42 @@ export const wireSyncEngine = (): void => {
 
   const onMoved = (messenger.messages as unknown as { onMoved?: OnMovedApi }).onMoved;
   if (onMoved) {
-    onMoved.addListener(async (originalMessages) => {
+    onMoved.addListener(async (originalMessages, movedMessages) => {
       try {
         const ids = idsFromList(originalMessages);
         if (!ids.length) return;
-        await db.messages.bulkDelete(ids);
-        broadcast({ type: "delta", removedIds: ids });
-        log.debug("sync", `onMoved removed ${ids.length} (re-added on next sync if still in inbox)`);
+        const byOrigin = new Map<MessageOrigin, messenger.messages.MessageHeader[]>();
+        const snoozedOriginalIds = new Set<number>();
+        for (let idx = 0; idx < (movedMessages.messages ?? []).length; idx++) {
+          const moved = movedMessages.messages[idx]!;
+          const originalId = originalMessages.messages[idx]?.id;
+          const isKnownSnooze = originalId !== undefined && !!(await db.snoozes.get(originalId));
+          if (isKnownSnooze) {
+            snoozedOriginalIds.add(originalId);
+            continue;
+          }
+          const fresh = await messenger.messages.get(moved.id);
+          if ((fresh.tags ?? []).includes(SNOOZED_KEY)) {
+            if (originalId !== undefined) snoozedOriginalIds.add(originalId);
+            continue;
+          }
+          const origin = await originForFolder(folderIdOf(fresh));
+          if (!origin) continue;
+          const arr = byOrigin.get(origin) ?? [];
+          arr.push(fresh);
+          byOrigin.set(origin, arr);
+        }
+        const removedIds = ids.filter((id) => !snoozedOriginalIds.has(id));
+        if (removedIds.length) {
+          await db.messages.bulkDelete(removedIds);
+          broadcast({ type: "delta", removedIds });
+        }
+        const added = [];
+        for (const [origin, headers] of byOrigin) {
+          added.push(...await cacheMessages(headers, origin));
+        }
+        if (added.length) broadcast({ type: "delta", added });
+        log.debug("sync", `onMoved removed ${removedIds.length}, cached ${added.length} moved messages`);
       } catch (e) {
         log.warn("sync", "onMoved failed", e);
       }

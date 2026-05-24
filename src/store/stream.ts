@@ -1,7 +1,14 @@
 import { SNOOZED_KEY } from "../shared/categories";
 import { buildThreads } from "../shared/threading";
-import type { Category, RawMessage, Thread } from "../shared/types";
-import { dateBucket } from "../spa/lib/dateBucket";
+import type { Category, MessageOrigin, RawMessage, SnoozeRecord, Thread } from "../shared/types";
+import { dateBucket, futureDateBucket } from "../spa/lib/dateBucket";
+
+export type StreamView =
+  | { type: "inbox" }
+  | { type: "snoozed" }
+  | { type: "sent" }
+  | { type: "done" }
+  | { type: "bundle"; category: Category };
 
 export type StreamItem =
   | { type: "thread"; date: number; thread: Thread }
@@ -21,12 +28,15 @@ export interface Stream {
   pinned: Thread[];
   sections: StreamSection[];
   threadCount: number;
+  view: StreamView;
 }
 
 const SECTION_ORDER = [
   "Today",
+  "Tomorrow",
   "Yesterday",
   "This week",
+  "Next week",
   "Last week",
   "This month",
 ];
@@ -43,18 +53,41 @@ const compareSection = (a: string, b: string): number => {
 export const deriveStream = (
   messagesById: Record<number, RawMessage>,
   myEmails: ReadonlySet<string>,
+  view: StreamView = { type: "inbox" },
+  snoozesByMessageId: Record<number, SnoozeRecord> = {},
 ): Stream => {
-  const visible = Object.values(messagesById).filter(
-    (m) => !m.tags.includes(SNOOZED_KEY),
+  const allMessages = Object.values(messagesById);
+  const anchorOrigins: ReadonlySet<MessageOrigin> = new Set(
+    view.type === "sent" ? ["sent"] : view.type === "done" ? ["done"] : ["inbox"],
   );
-  const threads = buildThreads(visible, myEmails);
-  const pinned = threads.filter((t) => t.pinned);
-  const unpinned = threads.filter((t) => !t.pinned);
+  const visible = allMessages.filter((m) => {
+    if (view.type === "inbox") return m.origin === "sent" || (m.origin === "inbox" && !m.tags.includes(SNOOZED_KEY));
+    if (view.type === "snoozed") return m.origin === "sent" || (m.origin === "inbox" && m.tags.includes(SNOOZED_KEY));
+    if (view.type === "sent") return m.origin === "sent";
+    if (view.type === "done") return m.origin === "sent" || m.origin === "done";
+    return m.origin === "sent" || (m.origin === "inbox" && !m.tags.includes(SNOOZED_KEY) && m.category === view.category);
+  });
+  let threads = buildThreads(visible, myEmails, anchorOrigins);
+  if (view.type === "snoozed") {
+    threads = threads
+      .map((thread) => {
+        const dueAt = thread.messages
+          .map((m) => snoozesByMessageId[m.id]?.wakeAt)
+          .filter((wakeAt): wakeAt is number => typeof wakeAt === "number")
+          .sort((a, b) => a - b)[0];
+        return dueAt ? { ...thread, latestDate: dueAt, snoozeDueAt: dueAt } : thread;
+      })
+      .filter((thread) => typeof thread.snoozeDueAt === "number");
+  }
+  const showInboxBundles = view.type === "inbox";
+  const showPinned = view.type === "inbox";
+  const pinned = showPinned ? threads.filter((t) => t.pinned) : [];
+  const unpinned = showPinned ? threads.filter((t) => !t.pinned) : threads;
 
   const byCategory = new Map<Category, Thread[]>();
   const personal: Thread[] = [];
   for (const t of unpinned) {
-    if (t.category) {
+    if (showInboxBundles && t.category) {
       let arr = byCategory.get(t.category);
       if (!arr) {
         arr = [];
@@ -81,11 +114,11 @@ export const deriveStream = (
       date: t.latestDate,
       thread: t,
     })),
-  ].sort((a, b) => b.date - a.date);
+  ].sort((a, b) => view.type === "snoozed" ? a.date - b.date : b.date - a.date);
 
   const byBucket = new Map<string, StreamItem[]>();
   for (const item of items) {
-    const label = dateBucket(item.date);
+    const label = view.type === "snoozed" ? futureDateBucket(item.date) : dateBucket(item.date);
     let arr = byBucket.get(label);
     if (!arr) {
       arr = [];
@@ -104,8 +137,8 @@ export const deriveStream = (
     if (order !== 0) return order;
     const aDate = a.items[0]?.date ?? 0;
     const bDate = b.items[0]?.date ?? 0;
-    return bDate - aDate;
+    return view.type === "snoozed" ? aDate - bDate : bDate - aDate;
   });
 
-  return { pinned, sections, threadCount: threads.length };
+  return { pinned, sections, threadCount: threads.length, view };
 }

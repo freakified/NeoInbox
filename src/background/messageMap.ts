@@ -1,5 +1,5 @@
 import { PINNED_KEY } from "../shared/categories";
-import type { Category, RawMessage } from "../shared/types";
+import type { Category, MessageOrigin, RawMessage } from "../shared/types";
 
 type FolderRef = { id?: string; accountId?: string };
 type HeaderWithFolder = messenger.messages.MessageHeader & {
@@ -8,7 +8,7 @@ type HeaderWithFolder = messenger.messages.MessageHeader & {
 
 export const headerToRawMessage = (
   header: messenger.messages.MessageHeader,
-  origin: "inbox" | "sent",
+  origin: MessageOrigin,
   appliedCategory?: Category | null,
 ): RawMessage => {
   const folder = (header as HeaderWithFolder).folder;

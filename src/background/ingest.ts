@@ -103,7 +103,11 @@ export const doneMessage = async (id: number): Promise<void> => {
 
 export const trashMessage = async (id: number): Promise<void> => {
   try {
-    await messenger.messages.delete([id], false);
+    const deleteMessages = messenger.messages.delete as unknown as (
+      ids: number[],
+      options?: { deletePermanently?: boolean },
+    ) => Promise<void>;
+    await deleteMessages([id], { deletePermanently: false });
   } catch (e) {
     log.warn("trash", "delete threw", { id, e: String(e) });
     throw new TrashFailedError("Delete failed", e);
@@ -202,6 +206,27 @@ export const applyMessageDetails = async (
   raw.attachments = details.attachments;
   raw.references = details.references;
   raw.inReplyTo = details.inReplyTo;
+}
+
+export const applyMessageDetailsForOrigin = async (
+  raw: RawMessage,
+  cached?: RawMessage,
+): Promise<void> => {
+  if (raw.origin === "inbox") {
+    await applyMessageDetails(raw, cached);
+    return;
+  }
+
+  if (canReuseMessageDetails(cached, raw)) {
+    raw.attachments = cached.attachments;
+    raw.references = cached.references;
+    raw.inReplyTo = cached.inReplyTo;
+    return;
+  }
+
+  raw.attachments = [];
+  raw.references = [];
+  raw.inReplyTo = [];
 }
 
 const isCidReferenced = (cidRefs: Set<string>, name: string): boolean => {

@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LayoutGroup, useReducedMotion } from "framer-motion";
 import {
   useConnectionState,
   useHydrated,
   useMailStore,
-  useStream,
+  useStreamForView,
   useSyncProgress,
   type StreamItem,
+  type StreamSection,
+  type StreamView,
 } from "../store/mailStore";
 import { CATEGORIES, getCategoryMeta } from "../shared/categories";
 import { BundleSliceRow } from "./components/BundleSliceRow";
@@ -20,12 +22,83 @@ import { ThreadRow } from "./components/ThreadRow";
 import { Toaster } from "./components/Toaster";
 import s from "./App.module.css";
 
+const STREAM_PAGE_SIZE = 80;
+
+const parseHashView = (): StreamView => {
+  if (typeof window === "undefined") return { type: "inbox" };
+  const raw = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+  if (raw === "snoozed") return { type: "snoozed" };
+  if (raw === "sent") return { type: "sent" };
+  if (raw === "done") return { type: "done" };
+  if (raw.startsWith("bundle/")) {
+    const category = raw.slice("bundle/".length);
+    if (category) return { type: "bundle", category };
+  }
+  return { type: "inbox" };
+};
+
+const viewHash = (view: StreamView): string => {
+  if (view.type === "bundle") return `#bundle/${encodeURIComponent(view.category)}`;
+  return `#${view.type}`;
+};
+
+const isSameView = (a: StreamView, b: StreamView): boolean =>
+  a.type === b.type && (a.type !== "bundle" || b.type !== "bundle" || a.category === b.category);
+
+const emptyTextForView = (view: StreamView): string => {
+  if (view.type === "snoozed") return "No snoozed messages.";
+  if (view.type === "sent") return "No sent messages.";
+  if (view.type === "done") return "No done messages.";
+  if (view.type === "bundle") return "No messages in this bundle.";
+  return "No messages found.";
+};
+
+const headerForView = (
+  view: StreamView,
+  customBundles: ReturnType<typeof useMailStore.getState>["customBundles"],
+): { title: string; color: string } => {
+  if (view.type === "snoozed") return { title: "Snoozed", color: "#DF742C" };
+  if (view.type === "done") return { title: "Done", color: "#5CA46F" };
+  if (view.type === "sent") return { title: "Sent", color: "var(--color-md-primary)" };
+  if (view.type === "bundle") {
+    const meta = getCategoryMeta(view.category, customBundles);
+    return { title: meta.name, color: meta.color };
+  }
+  return { title: "Inbox", color: "var(--color-md-primary)" };
+};
+
+const canDoneSection = (items: StreamItem[]): boolean =>
+  items.some((item) => {
+    const threads = item.type === "thread" ? [item.thread] : item.threads;
+    return threads.some((t) => t.messages.some((m) => m.origin === "inbox"));
+  });
+
+const limitSections = (
+  sections: StreamSection[],
+  limit: number,
+): { sections: StreamSection[]; visibleCount: number; totalCount: number } => {
+  let remaining = limit;
+  let visibleCount = 0;
+  let totalCount = 0;
+  const visible: StreamSection[] = [];
+
+  for (const section of sections) {
+    totalCount += section.items.length;
+    if (remaining <= 0) continue;
+    const items = section.items.slice(0, remaining);
+    if (!items.length) continue;
+    visible.push({ ...section, items });
+    visibleCount += items.length;
+    remaining -= items.length;
+  }
+
+  return { sections: visible, visibleCount, totalCount };
+};
 
 export const App = () => {
   const init = useMailStore((st) => st.init);
   const hydrated = useHydrated();
   const sync = useSyncProgress();
-  const stream = useStream();
   const connectionState = useConnectionState();
   const retryBackfill = useMailStore((st) => st.retryBackfill);
   const customBundles = useMailStore((st) => st.customBundles);
@@ -46,6 +119,9 @@ export const App = () => {
   const [openBundleThreadId, setOpenBundleThreadId] = useState<string | null>(null);
   const expandedRef = useRef<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeView, setActiveView] = useState<StreamView>(parseHashView);
+  const stream = useStreamForView(activeView);
+  const [visibleItemLimit, setVisibleItemLimit] = useState(STREAM_PAGE_SIZE);
   const [drawerOpen, setDrawerOpen] = useState(() =>
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 980px)").matches,
   );
@@ -54,6 +130,18 @@ export const App = () => {
   useEffect(() => {
     void init();
   }, [init]);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      setActiveView(parseHashView());
+      setExpandedKey(null);
+      setOpenBundleThreadId(null);
+      setVisibleItemLimit(STREAM_PAGE_SIZE);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    onHashChange();
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   useEffect(() => {
     if (expandedKey) {
@@ -72,13 +160,38 @@ export const App = () => {
   const syncing = !!sync && !sync.done;
   const syncFailed = !!sync?.done && !!sync.error;
   const reconnecting = connectionState === "reconnecting";
-  const bundles = [
-    ...Object.keys(CATEGORIES).filter((category) => category !== "personal"),
-    ...customBundles.map((bundle) => bundle.id),
-  ].map((category) => ({
-    id: category,
-    meta: getCategoryMeta(category, customBundles),
-  }));
+  const bundles = useMemo(
+    () => [
+      ...Object.keys(CATEGORIES).filter((category) => category !== "personal"),
+      ...customBundles.map((bundle) => bundle.id),
+    ].map((category) => ({
+      id: category,
+      meta: getCategoryMeta(category, customBundles),
+    })),
+    [customBundles],
+  );
+  const navigate = (view: StreamView) => {
+    setExpandedKey(null);
+    setOpenBundleThreadId(null);
+    if (typeof window !== "undefined") {
+      const nextHash = viewHash(view);
+      if (window.location.hash === nextHash) setActiveView(view);
+      else window.location.hash = nextHash;
+      if (window.matchMedia("(max-width: 979px)").matches) setDrawerOpen(false);
+    } else {
+      setActiveView(view);
+    }
+  };
+  const navClass = (view: StreamView) =>
+    `${s.navItem} ${isSameView(activeView, view) ? s.navItemActive : ""}`;
+  const unsupportedClass = `${s.navItem} ${s.navItemDisabled}`;
+  const showDoneAll = activeView.type === "inbox" || activeView.type === "bundle";
+  const header = headerForView(activeView, customBundles);
+  const visibleStream = useMemo(
+    () => limitSections(stream.sections, visibleItemLimit),
+    [stream.sections, visibleItemLimit],
+  );
+  const hasMoreItems = visibleStream.visibleCount < visibleStream.totalCount;
 
   return (
     <div
@@ -97,7 +210,7 @@ export const App = () => {
     >
       {settingsOpen && <BundleManagerModal onClose={() => setSettingsOpen(false)} />}
 
-      <header className={s.header}>
+      <header className={s.header} style={{ backgroundColor: header.color }}>
         <div className={s.headerLeft}>
           <button
             type="button"
@@ -109,12 +222,12 @@ export const App = () => {
           >
             <Icon name="menu" className={s.menuIcon} />
           </button>
-          <h1 className={s.title}>NeoInbox</h1>
+          <h1 className={s.title}>{header.title}</h1>
         </div>
         <div className={s.headerRight}>
           {syncing && sync && (
             <span className={s.syncText}>
-              Classifying... {sync.classified}/{sync.scanned}
+              Scanning... {sync.scanned} messages, {sync.classified} classified
             </span>
           )}
           {syncFailed && (
@@ -151,42 +264,42 @@ export const App = () => {
         <aside className={s.drawer} aria-label="Mailbox navigation">
           <nav className={s.drawerNav}>
             <div className={s.drawerGroup}>
-              <button type="button" className={`${s.navItem} ${s.navItemActive}`}>
+              <button type="button" className={navClass({ type: "inbox" })} onClick={() => navigate({ type: "inbox" })}>
                 <Icon name="inbox" className={s.navIcon} />
                 <span>Inbox</span>
               </button>
-              <button type="button" className={s.navItem}>
+              <button type="button" className={navClass({ type: "snoozed" })} onClick={() => navigate({ type: "snoozed" })}>
                 <Icon name="schedule" className={s.navIcon} />
                 <span>Snoozed</span>
               </button>
-              <button type="button" className={s.navItem}>
+              <button type="button" className={navClass({ type: "done" })} onClick={() => navigate({ type: "done" })}>
                 <Icon name="done" className={s.navIcon} />
                 <span>Done</span>
               </button>
             </div>
 
             <div className={s.drawerGroup}>
-              <button type="button" className={s.navItem}>
+              <button type="button" className={unsupportedClass} disabled title="Coming later">
                 <Icon name="drafts" className={s.navIcon} />
                 <span>Drafts</span>
               </button>
-              <button type="button" className={s.navItem}>
+              <button type="button" className={navClass({ type: "sent" })} onClick={() => navigate({ type: "sent" })}>
                 <Icon name="send" className={s.navIcon} />
                 <span>Sent</span>
               </button>
-              <button type="button" className={s.navItem}>
+              <button type="button" className={unsupportedClass} disabled title="Coming later">
                 <Icon name="notifications" className={s.navIcon} />
                 <span>Reminders</span>
               </button>
-              <button type="button" className={s.navItem}>
+              <button type="button" className={unsupportedClass} disabled title="Coming later">
                 <Icon name="delete" className={s.navIcon} />
                 <span>Trash</span>
               </button>
-              <button type="button" className={s.navItem}>
+              <button type="button" className={unsupportedClass} disabled title="Coming later">
                 <Icon name="report" className={s.navIcon} />
                 <span>Spam</span>
               </button>
-              <button type="button" className={s.navItem}>
+              <button type="button" className={unsupportedClass} disabled title="Coming later">
                 <Icon name="contacts" className={s.navIcon} />
                 <span>Contacts</span>
               </button>
@@ -195,7 +308,12 @@ export const App = () => {
             <div className={s.drawerGroup}>
               <div className={s.drawerLabel}>Bundled in the inbox</div>
               {bundles.map(({ id, meta }) => (
-                <button type="button" key={id} className={s.navItem}>
+                <button
+                  type="button"
+                  key={id}
+                  className={navClass({ type: "bundle", category: id })}
+                  onClick={() => navigate({ type: "bundle", category: id })}
+                >
                   <Icon
                     name={meta.icon}
                     className={s.navIcon}
@@ -214,7 +332,7 @@ export const App = () => {
         )}
 
         {hydrated && stream.threadCount === 0 && !syncing && (
-          <p className={s.emptyText}>No messages found.</p>
+          <p className={s.emptyText}>{emptyTextForView(activeView)}</p>
         )}
 
         {stream.pinned.length > 0 && (
@@ -287,7 +405,7 @@ export const App = () => {
           </section>
         )}
 
-        {stream.sections.map((group) => {
+        {visibleStream.sections.map((group) => {
           const expandedBundleIdx = expandedKey?.startsWith("bundle:")
             ? group.items.findIndex(
                 (item) => item.type === "bundle" && expandedKey === `bundle:${item.category}`
@@ -331,13 +449,15 @@ export const App = () => {
             <section key={group.label} className={s.section}>
               <div className={s.sectionHeader}>
                 <SectionLabel>{group.label}</SectionLabel>
-                <button
-                  onClick={() => sectionDoneAll(group.items)}
-                  title="Done all"
-                  className={s.doneAllBtn}
-                >
-                  <Icon name="done_all" className={s.doneAllIcon} />
-                </button>
+                {showDoneAll && canDoneSection(group.items) && (
+                  <button
+                    onClick={() => sectionDoneAll(group.items)}
+                    title="Done all"
+                    className={s.doneAllBtn}
+                  >
+                    <Icon name="done_all" className={s.doneAllIcon} />
+                  </button>
+                )}
               </div>
               <LayoutGroup>
                 {openBundle ? (
@@ -393,6 +513,20 @@ export const App = () => {
             </section>
           );
         })}
+        {hasMoreItems && (
+          <div className={s.loadMoreWrap}>
+            <button
+              type="button"
+              className={s.loadMoreBtn}
+              onClick={() => setVisibleItemLimit((limit) => limit + STREAM_PAGE_SIZE)}
+            >
+              Load more
+              <span className={s.loadMoreCount}>
+                {visibleStream.visibleCount} of {visibleStream.totalCount}
+              </span>
+            </button>
+          </div>
+        )}
         </main>
       </div>
       <Toaster />

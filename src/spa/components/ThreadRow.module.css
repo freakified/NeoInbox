@@ -13,3 +13,18 @@
   font-weight: 500;
   font-size: 14px;
 }
+
+.snoozeDue {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #df742c;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.snoozeIcon {
+  color: #df742c;
+  font-size: 20px;
+}

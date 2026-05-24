@@ -12,6 +12,8 @@ import { pushMyEmails, wireSyncEngine } from "./sync";
 import { broadcast, onCommand, startPortServer } from "./port";
 import { setOverride } from "../classifier/overrides";
 import { db } from "../store/db";
+import { collectArchiveFolders } from "../shared/folders";
+import { SNOOZED_KEY } from "../shared/categories";
 import { log } from "../shared/log";
 
 const INBOX_URL = "inbox.html";
@@ -31,6 +33,34 @@ const openOrFocusInbox = async (): Promise<void> => {
     return;
   }
   await messenger.tabs.create({ url: INBOX_URL });
+}
+
+const folderIdOf = (header: messenger.messages.MessageHeader): string => {
+  return (
+    header as messenger.messages.MessageHeader & {
+      folder?: { id?: string };
+    }
+  ).folder?.id ?? "";
+}
+
+const isArchiveFolder = async (folderId: string): Promise<boolean> => {
+  if (!folderId) return false;
+  const folders = await collectArchiveFolders();
+  return folders.some((folder) => folder.id === folderId);
+}
+
+const removeCachedSnoozedCopies = async (raw: { id: number; headerMessageId: string }): Promise<void> => {
+  if (!raw.headerMessageId) return;
+  const staleIds = (await db.messages.toArray())
+    .filter((m) =>
+      m.id !== raw.id &&
+      m.headerMessageId === raw.headerMessageId &&
+      m.tags.includes(SNOOZED_KEY)
+    )
+    .map((m) => m.id);
+  if (!staleIds.length) return;
+  await db.messages.bulkDelete(staleIds);
+  broadcast({ type: "delta", removedIds: staleIds });
 }
 
 messenger.browserAction.onClicked.addListener(() => {
@@ -53,6 +83,11 @@ messenger.alarms.onAlarm.addListener(async (alarm) => {
     const cat = await classifyMessage(result.restoredHeader);
     const raw = headerToRawMessage(result.restoredHeader, "inbox", cat);
     await applyMessageDetails(raw);
+    if (result.originalId !== raw.id) {
+      await db.messages.delete(result.originalId);
+      broadcast({ type: "delta", removedIds: [result.originalId] });
+    }
+    await removeCachedSnoozedCopies(raw);
     await db.messages.put(raw);
     broadcast({ type: "delta", added: [raw] });
   } else {
@@ -91,6 +126,7 @@ onCommand(async (msg) => {
       return;
     }
     case "done": {
+      const cached = await db.messages.get(msg.messageId);
       try {
         await doneMessage(msg.messageId);
       } catch (e) {
@@ -102,6 +138,18 @@ onCommand(async (msg) => {
           reason: String((e as Error)?.message ?? e),
         });
         return;
+      }
+      try {
+        const header = await messenger.messages.get(msg.messageId);
+        if (await isArchiveFolder(folderIdOf(header))) {
+          const raw = headerToRawMessage(header, "done", cached?.category ?? null);
+          await applyMessageDetails(raw, cached);
+          await db.messages.put(raw);
+          broadcast({ type: "delta", added: [raw] });
+          return;
+        }
+      } catch {
+        /* The move may have assigned a new message id; onMoved/backfill will cache it. */
       }
       await db.messages.delete(msg.messageId);
       broadcast({ type: "delta", removedIds: [msg.messageId] });
@@ -126,6 +174,7 @@ onCommand(async (msg) => {
     }
     case "snooze": {
       let removedId: number;
+      const cached = await db.messages.get(msg.messageId);
       try {
         ({ removedId } = await snoozeMessage(msg.messageId, msg.wakeAt));
       } catch (e) {
@@ -138,8 +187,18 @@ onCommand(async (msg) => {
         });
         return;
       }
-      await db.messages.delete(removedId);
-      broadcast({ type: "delta", removedIds: [removedId] });
+      if (cached) {
+        const raw = {
+          ...cached,
+          tags: [...cached.tags.filter((t) => t !== SNOOZED_KEY), SNOOZED_KEY],
+          origin: "inbox" as const,
+        };
+        await db.messages.put(raw);
+        broadcast({ type: "delta", updated: [raw] });
+      } else {
+        await db.messages.delete(removedId);
+        broadcast({ type: "delta", removedIds: [removedId] });
+      }
       return;
     }
     case "override": {

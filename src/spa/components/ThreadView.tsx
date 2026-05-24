@@ -18,6 +18,11 @@ export const ThreadView = ({
   const { doneMessages, trashMessages } = useBulkActions();
   const snoozeThread = useMailStore((st) => st.snoozeThread);
   const notify = useMailStore((st) => st.notify);
+  const inboxMessageIds = useMemo(
+    () => t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
+    [t],
+  );
+  const hasInboxMessages = inboxMessageIds.length > 0;
 
   const latestInbox = useMemo(() => {
     const inbox = t.messages.filter((m) => m.origin === "inbox");
@@ -39,12 +44,9 @@ export const ThreadView = ({
       return next;
     });
 
-  const onDone = () =>
-    doneMessages(
-      t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
-    );
+  const onDone = () => doneMessages(inboxMessageIds);
   const onSnooze = (wakeAt: number) => {
-    snoozeThread(t.messages.map((m) => m.id), wakeAt);
+    snoozeThread(inboxMessageIds, wakeAt);
     notify(`Snoozed until ${formatSnoozeToastTime(wakeAt)}`);
   };
   const onTrash = () => trashMessages(t.messages.map((m) => m.id));
@@ -61,7 +63,7 @@ export const ThreadView = ({
         <h2 className={s.title}>{t.subject || "(no subject)"}</h2>
         <div className={s.headerActions}>
           <BundleMenu thread={t} onTranslateToEnglish={translateLatest} />
-          <SnoozeMenu onChoose={onSnooze} />
+          {hasInboxMessages && <SnoozeMenu onChoose={onSnooze} />}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -72,16 +74,18 @@ export const ThreadView = ({
           >
             <Icon name="delete" className={s.iconBtnIcon} />
           </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDone();
-            }}
-            title="Archive thread"
-            className={s.iconBtn}
-          >
-            <Icon name="check" className={s.iconBtnIcon} />
-          </button>
+          {hasInboxMessages && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDone();
+              }}
+              title="Archive thread"
+              className={s.iconBtn}
+            >
+              <Icon name="check" className={s.iconBtnIcon} />
+            </button>
+          )}
         </div>
       </div>
 

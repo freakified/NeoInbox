@@ -66,6 +66,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  transition: background-color 160ms ease;
 }
 
 .headerLeft {
@@ -228,6 +229,13 @@
   font-weight: 500;
 }
 
+.navItemDisabled,
+.navItemDisabled:hover {
+  color: rgba(117, 117, 117, 0.48);
+  background: transparent;
+  cursor: default;
+}
+
 .navIcon {
   justify-self: center;
   color: currentColor;
@@ -304,6 +312,40 @@
   background: #fff;
   box-shadow: var(--shadow-elevation-3);
   overflow: clip;
+}
+
+.loadMoreWrap {
+  max-width: 48rem;
+  margin: 8px auto 32px;
+  display: flex;
+  justify-content: center;
+}
+
+.loadMoreBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 16px;
+  color: var(--color-md-secondary-text);
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.loadMoreBtn:hover {
+  color: var(--color-md-on-surface);
+  background: var(--color-md-hover);
+}
+
+.loadMoreCount {
+  color: var(--color-md-secondary-text);
+  font-size: 12px;
+  font-weight: 400;
 }
 
 @media (min-width: 980px) {

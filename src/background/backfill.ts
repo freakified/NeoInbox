@@ -1,11 +1,12 @@
-import { applyMessageDetails, classifyMessage } from "./ingest";
+import { applyMessageDetailsForOrigin, classifyMessage } from "./ingest";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
 import { db } from "../store/db";
+import { SNOOZED_KEY } from "../shared/categories";
 import { collectInboxFolders, collectSentFolders } from "../shared/folders";
 import { log } from "../shared/log";
 import type { ServerMsg } from "../shared/messaging";
-import type { Category, RawMessage } from "../shared/types";
+import type { Category, MessageOrigin, RawMessage } from "../shared/types";
 
 const PROGRESS_EVERY = 50;
 const BATCH_FLUSH = 100;
@@ -53,25 +54,36 @@ export const runBackfill = async (): Promise<{
 
     const visit = async (
       folder: { id: string },
-      origin: "inbox" | "sent",
+      origin: MessageOrigin,
     ) => {
       let page = await messenger.messages.list(
         folder.id as unknown as messenger.folders.MailFolderId,
       );
       while (true) {
         for (const header of page.messages) {
-          scanned++;
-          liveIds.add(header.id);
-          let appliedCategory: Category | null = null;
-          if (origin === "inbox") {
-            appliedCategory = await classifyMessage(header);
-            if (appliedCategory) classified++;
+          try {
+            scanned++;
+            liveIds.add(header.id);
+            const logicalOrigin = origin === "done" && (header.tags ?? []).includes(SNOOZED_KEY)
+              ? "inbox"
+              : origin;
+            let appliedCategory: Category | null = null;
+            if (logicalOrigin === "inbox") {
+              appliedCategory = await classifyMessage(header);
+              if (appliedCategory) classified++;
+            }
+            const raw = headerToRawMessage(header, logicalOrigin, appliedCategory);
+            const cached = await db.messages.get(header.id);
+            await applyMessageDetailsForOrigin(raw, cached);
+            batch.push(raw);
+            if (batch.length >= BATCH_FLUSH) await flush();
+          } catch (e) {
+            log.warn("backfill", "skipping message after per-message failure", {
+              id: header.id,
+              origin,
+              e: String(e),
+            });
           }
-          const raw = headerToRawMessage(header, origin, appliedCategory);
-          const cached = await db.messages.get(header.id);
-          await applyMessageDetails(raw, cached);
-          batch.push(raw);
-          if (batch.length >= BATCH_FLUSH) await flush();
           if (scanned % PROGRESS_EVERY === 0) {
             sendProgress({
               type: "backfill-progress",
@@ -92,7 +104,13 @@ export const runBackfill = async (): Promise<{
     await flush();
 
     const cached = await db.messages.toArray();
-    const orphans = cached.filter((m) => !liveIds.has(m.id)).map((m) => m.id);
+    const orphans = cached
+      .filter((m) =>
+        !liveIds.has(m.id) &&
+        m.origin !== "done" &&
+        !m.tags.includes(SNOOZED_KEY)
+      )
+      .map((m) => m.id);
     if (orphans.length) {
       await db.messages.bulkDelete(orphans);
       broadcast({ type: "delta", removedIds: orphans });
@@ -139,23 +157,25 @@ export const reclassifyAll = async (): Promise<{ scanned: number; updated: numbe
     for (const cachedMsg of cached) {
       if (cachedMsg.origin !== "inbox") continue;
       scanned++;
-      let header: messenger.messages.MessageHeader;
       try {
-        header = await messenger.messages.get(cachedMsg.id);
-      } catch {
-        continue;
-      }
-      const before = cachedMsg.category;
-      const cat = await classifyMessage(header);
-      if (cat !== before) updated++;
-      const fresh = await messenger.messages.get(cachedMsg.id);
-      const raw = headerToRawMessage(fresh, "inbox", cat);
-      await applyMessageDetails(raw, cachedMsg);
-      batch.push(raw);
-      if (batch.length >= BATCH_FLUSH) {
-        await db.messages.bulkPut(batch);
-        broadcast({ type: "delta", updated: batch });
-        batch = [];
+        const header = await messenger.messages.get(cachedMsg.id);
+        const before = cachedMsg.category;
+        const cat = await classifyMessage(header);
+        if (cat !== before) updated++;
+        const fresh = await messenger.messages.get(cachedMsg.id);
+        const raw = headerToRawMessage(fresh, "inbox", cat);
+        await applyMessageDetailsForOrigin(raw, cachedMsg);
+        batch.push(raw);
+        if (batch.length >= BATCH_FLUSH) {
+          await db.messages.bulkPut(batch);
+          broadcast({ type: "delta", updated: batch });
+          batch = [];
+        }
+      } catch (e) {
+        log.warn("reclassify", "skipping message after per-message failure", {
+          id: cachedMsg.id,
+          e: String(e),
+        });
       }
       if (scanned % PROGRESS_EVERY === 0) {
         sendProgress({ type: "backfill-progress", scanned, classified: updated, done: false });

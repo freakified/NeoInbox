@@ -16,7 +16,7 @@ export const RowHeader = ({
   primary: React.ReactNode;
   secondary?: React.ReactNode;
   trailing?: React.ReactNode;
-  date?: string;
+  date?: React.ReactNode;
   bold?: boolean;
   onClick?: () => void;
   actionStrip?: React.ReactNode;

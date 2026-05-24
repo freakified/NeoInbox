@@ -1,4 +1,4 @@
-import type { RawMessage, Thread } from "./types";
+import type { MessageOrigin, RawMessage, Thread } from "./types";
 
 export function normalizeSubject(subject: string): string {
   let s = subject.trim();
@@ -75,12 +75,13 @@ function makeParticipantsLabel(
 }
 
 function threadCategory(msgs: RawMessage[]): RawMessage["category"] {
-  return msgs.find((m) => m.origin === "inbox" && m.category)?.category ?? null;
+  return msgs.find((m) => (m.origin === "inbox" || m.origin === "done") && m.category)?.category ?? null;
 }
 
 export function buildThreads(
   messages: readonly RawMessage[],
   myEmails: ReadonlySet<string>,
+  anchorOrigins: ReadonlySet<MessageOrigin> = new Set(["inbox"]),
 ): Thread[] {
   const separator = "\0";
   const ids = new DisjointSet();
@@ -113,7 +114,7 @@ export function buildThreads(
 
   const threads: Thread[] = [];
   for (const [key, msgs] of byKey) {
-    if (!msgs.some((m) => m.origin === "inbox")) continue;
+    if (!msgs.some((m) => anchorOrigins.has(m.origin))) continue;
     msgs.sort((a, b) => a.date - b.date);
     const latest = msgs[msgs.length - 1];
     if (!latest) continue;
@@ -123,7 +124,7 @@ export function buildThreads(
       messages: msgs,
       participantsLabel: makeParticipantsLabel(msgs, myEmails),
       latestDate: latest.date,
-      unreadCount: msgs.filter((m) => !m.read && m.origin === "inbox").length,
+      unreadCount: msgs.filter((m) => !m.read && anchorOrigins.has(m.origin)).length,
       pinned: msgs.some((m) => m.pinned),
       category: threadCategory(msgs),
       accountId: latest.accountId,

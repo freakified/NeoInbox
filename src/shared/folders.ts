@@ -12,6 +12,10 @@ export const collectSentFolders = async (): Promise<InboxFolder[]> => {
   return collectFolders(isSent);
 }
 
+export const collectArchiveFolders = async (): Promise<InboxFolder[]> => {
+  return collectFolders(isArchive);
+}
+
 const collectFolders = async (
   match: (f: messenger.folders.MailFolder) => boolean,
 ): Promise<InboxFolder[]> => {
@@ -40,6 +44,12 @@ const isInbox = (f: messenger.folders.MailFolder): boolean => {
 const isSent = (f: messenger.folders.MailFolder): boolean => {
   if (f.specialUse?.includes("sent")) return true;
   if (f.type === "sent") return true;
+  return false;
+}
+
+const isArchive = (f: messenger.folders.MailFolder): boolean => {
+  if (f.specialUse?.includes("archives")) return true;
+  if (f.type === "archives") return true;
   return false;
 }
 

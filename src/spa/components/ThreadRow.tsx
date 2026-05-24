@@ -2,6 +2,7 @@ import type { Thread } from "../../shared/types";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate } from "../lib/dateBucket";
 import { ActionStrip } from "./ActionStrip";
+import { Icon } from "./Icon";
 import { MessageAttachments, collectAttachments } from "./MessageAttachments";
 import { FadeIn, MotionRow } from "./Motion";
 import { RowHeader } from "./RowHeader";
@@ -24,6 +25,12 @@ export const ThreadRow = ({
   const avatarBg = avatarColor(name);
   const initial = firstSender ? senderInitial(firstSender.author) : "?";
   const attachmentRefs = collectAttachments(t.messages);
+  const date = t.snoozeDueAt ? (
+    <span className={s.snoozeDue}>
+      <span>{formatDate(t.snoozeDueAt)}</span>
+      <Icon name="schedule" className={s.snoozeIcon} />
+    </span>
+  ) : formatDate(t.latestDate);
 
   return (
     <MotionRow
@@ -50,7 +57,7 @@ export const ThreadRow = ({
               />
             ) : undefined
           }
-          date={formatDate(t.latestDate)}
+          date={date}
           bold={t.unreadCount > 0}
           onClick={onToggle}
           actionStrip={<ActionStrip thread={t} />}

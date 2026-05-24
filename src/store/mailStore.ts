@@ -1,17 +1,17 @@
 import { useMemo } from "react";
 import { create } from "zustand";
 import { db } from "./db";
-import { deriveStream, type Stream } from "./stream";
-import { PINNED_KEY } from "../shared/categories";
+import { deriveStream, type Stream, type StreamView } from "./stream";
+import { PINNED_KEY, SNOOZED_KEY } from "../shared/categories";
 import { log } from "../shared/log";
 import {
   PORT_NAME,
   type ClientMsg,
   type ServerMsg,
 } from "../shared/messaging";
-import type { BuiltinCategory, BundleRuleRecord, CustomBundleRecord, OverrideRecord, RawMessage } from "../shared/types";
+import type { BuiltinCategory, BundleRuleRecord, CustomBundleRecord, OverrideRecord, RawMessage, SnoozeRecord } from "../shared/types";
 
-export type { Stream, StreamItem, StreamSection } from "./stream";
+export type { Stream, StreamItem, StreamSection, StreamView } from "./stream";
 
 interface BackgroundPort {
   postMessage: (msg: ClientMsg) => void;
@@ -54,6 +54,7 @@ interface MailStore {
   overrides: OverrideRecord[];
   connectionState: ConnectionState;
   pendingOps: Record<number, PendingOp>;
+  snoozesByMessageId: Record<number, SnoozeRecord>;
   toasts: ToastRecord[];
 
   init: () => Promise<void>;
@@ -129,20 +130,24 @@ export const useMailStore = create<MailStore>((set, get) => ({
   overrides: [],
   connectionState: "connected",
   pendingOps: {},
+  snoozesByMessageId: {},
   toasts: [],
 
   init: async () => {
     if (get().hydrated) return;
-    const [all, rawBundles, bundleRules, overrides] = await Promise.all([
+    const [all, rawBundles, bundleRules, overrides, snoozes] = await Promise.all([
       db.messages.toArray(),
       db.customBundles.toArray(),
       db.bundleRules.toArray(),
       db.overrides.toArray(),
+      db.snoozes.toArray(),
     ]);
     const customBundles = rawBundles.sort((a, b) => a.order - b.order);
     const byId: Record<number, RawMessage> = {};
     for (const m of all) byId[m.id] = m;
-    set({ messagesById: byId, hydrated: true, customBundles, bundleRules, overrides });
+    const snoozesByMessageId: Record<number, SnoozeRecord> = {};
+    for (const snooze of snoozes) snoozesByMessageId[snooze.messageId] = snooze;
+    set({ messagesById: byId, hydrated: true, customBundles, bundleRules, overrides, snoozesByMessageId });
 
     const runtime = messenger.runtime as unknown as RuntimeWithConnect;
     if (!runtime.connect) {
@@ -220,9 +225,26 @@ export const useMailStore = create<MailStore>((set, get) => ({
     for (const id of messageIds) {
       const m = prev[id];
       if (m) pending[id] = { kind: "snooze", message: m, wakeAt };
-      delete map[id];
+      if (m) {
+        map[id] = {
+          ...m,
+          tags: [...m.tags.filter((t) => t !== SNOOZED_KEY), SNOOZED_KEY],
+          origin: "inbox",
+        };
+      }
     }
-    set({ messagesById: map, pendingOps: pending });
+    const snoozesByMessageId = { ...get().snoozesByMessageId };
+    for (const id of messageIds) {
+      const m = prev[id];
+      if (!m) continue;
+      snoozesByMessageId[id] = {
+        messageId: id,
+        wakeAt,
+        originFolderId: m.folderId,
+        originAccountId: m.accountId,
+      };
+    }
+    set({ messagesById: map, pendingOps: pending, snoozesByMessageId });
     for (const id of messageIds) send({ type: "snooze", messageId: id, wakeAt });
   },
 
@@ -363,11 +385,18 @@ const applyServerMsg = (
       if (msg.added) for (const m of msg.added) map[m.id] = m;
       if (msg.updated) for (const m of msg.updated) map[m.id] = m;
       if (msg.removedIds) for (const id of msg.removedIds) delete map[id];
-      set({ messagesById: map });
-      if (msg.removedIds?.length) {
+      const snoozesByMessageId = { ...get().snoozesByMessageId };
+      if (msg.removedIds) for (const id of msg.removedIds) delete snoozesByMessageId[id];
+      set({ messagesById: map, snoozesByMessageId });
+      const settledIds = [
+        ...(msg.removedIds ?? []),
+        ...(msg.added ?? []).map((m) => m.id),
+        ...(msg.updated ?? []).map((m) => m.id),
+      ];
+      if (settledIds.length) {
         const pending = { ...get().pendingOps };
         let changed = false;
-        for (const id of msg.removedIds) {
+        for (const id of settledIds) {
           if (id in pending) {
             delete pending[id];
             changed = true;
@@ -399,13 +428,15 @@ const applyServerMsg = (
         delete pending[msg.messageId];
       }
       const wakeAt = op?.kind === "snooze" ? op.wakeAt : undefined;
+      const snoozesByMessageId = { ...get().snoozesByMessageId };
+      if (msg.command === "snooze") delete snoozesByMessageId[msg.messageId];
       const toast: ToastRecord = {
         id: nextToastId(),
         message: `${failureLabel(msg.command)} — ${msg.reason}`,
         retry: { kind: msg.command, messageId: msg.messageId, wakeAt },
       };
       const toasts = [...get().toasts, toast].slice(-TOAST_LIMIT);
-      set({ messagesById: map, pendingOps: pending, toasts });
+      set({ messagesById: map, pendingOps: pending, snoozesByMessageId, toasts });
       log.warn("store", "command failed", msg);
       return;
     }
@@ -423,6 +454,16 @@ export const useStream = (): Stream => {
   return useMemo(
     () => deriveStream(messagesById, myEmails),
     [messagesById, myEmails],
+  );
+}
+
+export const useStreamForView = (view: StreamView): Stream => {
+  const messagesById = useMailStore((s) => s.messagesById);
+  const myEmails = useMailStore((s) => s.myEmails);
+  const snoozesByMessageId = useMailStore((s) => s.snoozesByMessageId);
+  return useMemo(
+    () => deriveStream(messagesById, myEmails, view, snoozesByMessageId),
+    [messagesById, myEmails, view, snoozesByMessageId],
   );
 }
 

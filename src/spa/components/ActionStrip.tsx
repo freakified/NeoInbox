@@ -12,15 +12,16 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
   const snoozeThread = useMailStore((st) => st.snoozeThread);
   const notify = useMailStore((st) => st.notify);
   const { doneMessages, trashMessages } = useBulkActions();
+  const inboxMessageIds = thread.messages.filter((m) => m.origin === "inbox").map((m) => m.id);
+  const hasInboxMessages = inboxMessageIds.length > 0;
 
   const togglePin = () => {
     const next = !thread.pinned;
     for (const m of thread.messages) pin(m.id, next);
   };
-  const onDone = () =>
-    doneMessages(thread.messages.filter((m) => m.origin === "inbox").map((m) => m.id));
+  const onDone = () => doneMessages(inboxMessageIds);
   const onSnooze = (wakeAt: number) => {
-    snoozeThread(thread.messages.map((m) => m.id), wakeAt);
+    snoozeThread(inboxMessageIds, wakeAt);
     notify(`Snoozed until ${formatSnoozeToastTime(wakeAt)}`);
   };
   const onTrash = () => trashMessages(thread.messages.map((m) => m.id));
@@ -33,13 +34,15 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
           className={clsx(s.iconBase, thread.pinned ? s.iconPrimary : s.iconMuted)}
         />
       </ActionBtn>
-      <SnoozeMenu onChoose={onSnooze} />
+      {hasInboxMessages && <SnoozeMenu onChoose={onSnooze} />}
       <ActionBtn title="Trash" onClick={onTrash}>
         <Icon name="delete" className={clsx(s.iconBase, s.iconMuted)} />
       </ActionBtn>
-      <ActionBtn title="Done" onClick={onDone}>
-        <Icon name="check" className={clsx(s.iconBase, s.iconMuted)} />
-      </ActionBtn>
+      {hasInboxMessages && (
+        <ActionBtn title="Done" onClick={onDone}>
+          <Icon name="check" className={clsx(s.iconBase, s.iconMuted)} />
+        </ActionBtn>
+      )}
     </div>
   );
 };
