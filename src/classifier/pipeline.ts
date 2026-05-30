@@ -23,9 +23,11 @@ export const classifyByRules = (f: Features): Category | null => {
 }
 
 export const classify = async (f: Features): Promise<Category | null> => {
+  const specificBundleRule = await matchesBundleRules(f, ["subject_keyword", "email"]);
+  if (specificBundleRule) return specificBundleRule;
   const override = await lookupOverride(f.senderDomain);
   if (override) return override;
-  const bundleRule = await matchesBundleRules(f);
+  const bundleRule = await matchesBundleRules(f, ["domain"]);
   if (bundleRule) return bundleRule;
   const custom = await matchesCustomBundles(f);
   if (custom) return custom;

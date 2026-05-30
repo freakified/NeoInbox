@@ -29,6 +29,9 @@ const folderIdOf = async (id: number): Promise<string> => {
   return msg.folder?.id ?? "";
 }
 
+const isMessageNotFound = (e: unknown): boolean =>
+  String((e as Error)?.message ?? e).includes("Message not found");
+
 export const classifyMessage = async (
   header: messenger.messages.MessageHeader,
 ): Promise<Category | null> => {
@@ -55,12 +58,25 @@ export const pinMessage = async (id: number, pinned: boolean): Promise<void> => 
 }
 
 export const doneMessage = async (id: number): Promise<void> => {
-  const sourceFolderId = await folderIdOf(id);
+  let sourceFolderId = "";
+  try {
+    sourceFolderId = await folderIdOf(id);
+  } catch (e) {
+    if (isMessageNotFound(e)) {
+      log.info("archive", "message already gone; treating archive as settled", { id });
+      return;
+    }
+    throw e;
+  }
 
   let archiveError: unknown = null;
   try {
     await messenger.messages.archive([id]);
   } catch (e) {
+    if (isMessageNotFound(e)) {
+      log.info("archive", "message disappeared during archive; treating as settled", { id });
+      return;
+    }
     archiveError = e;
     log.warn("archive", "messages.archive threw", { id, sourceFolderId, e: String(e) });
   }

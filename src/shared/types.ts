@@ -100,6 +100,8 @@ export interface TranslationRecord {
   provider: string;
   sourceLanguage: string | null;
   targetLanguage: string;
+  bodyType?: "text" | "html";
+  translatedSubject?: string;
   translatedText: string;
   createdAt: number;
 }

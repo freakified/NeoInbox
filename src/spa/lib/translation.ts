@@ -1,9 +1,10 @@
 import { db } from "../../store/db";
-import type { TranslationRecord } from "../../shared/types";
-import { extractRawTextBody } from "./srcdoc";
+import type { RawMessage, TranslationRecord } from "../../shared/types";
+import { extractHtmlBody, extractRawTextBody } from "./srcdoc";
 
 const TARGET_LANGUAGE = "en";
 const TARGET_LABEL = "English";
+const TRANSLATION_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 const TRANSLATION_CONFIG_KEY = "neoinbox.translationConfig";
 export const TRANSLATION_ENDPOINT_KEY = "neoinbox.translationEndpoint";
 
@@ -59,6 +60,8 @@ export const TRANSLATION_PROVIDERS: Record<
 const normalizeText = (text: string): string =>
   text.replace(/\r\n/g, "\n").replace(/[ \t]+\n/g, "\n").trim();
 
+const normalizeHtml = (html: string): string => html.replace(/\r\n/g, "\n").trim();
+
 const hashText = (text: string): string => {
   let h1 = 0xdeadbeef;
   let h2 = 0x41c6ce57;
@@ -74,6 +77,16 @@ const hashText = (text: string): string => {
 
 const translationId = (messageId: number, bodyHash: string): string =>
   `${messageId}:${getTranslationConfig().provider}:${TARGET_LANGUAGE}:${bodyHash}`;
+
+const isFreshTranslation = (record: TranslationRecord): boolean =>
+  Date.now() - record.createdAt < TRANSLATION_CACHE_TTL_MS;
+
+const pruneExpiredTranslations = async (): Promise<void> => {
+  await db.translations
+    .where("createdAt")
+    .below(Date.now() - TRANSLATION_CACHE_TTL_MS)
+    .delete();
+};
 
 const parseProvider = (value: unknown): TranslationProvider =>
   value === "deepl" ||
@@ -175,6 +188,28 @@ const parseOpenAICompatibleText = (payload: unknown): string => {
 const decodeHtmlEntities = (text: string): string => {
   const doc = new DOMParser().parseFromString(text, "text/html");
   return doc.documentElement.textContent ?? text;
+};
+
+const TEXT_NODE_PARENT_SKIP = new Set([
+  "SCRIPT",
+  "STYLE",
+  "NOSCRIPT",
+  "TEXTAREA",
+  "SELECT",
+  "OPTION",
+  "CODE",
+  "SAMP",
+  "KBD",
+]);
+
+const TRANSLATABLE_TEXT_RE = /[\p{L}\p{N}]/u;
+
+const shouldTranslateTextNode = (node: Node): node is Text => {
+  if (node.nodeType !== Node.TEXT_NODE) return false;
+  const parent = node.parentElement;
+  if (!parent || TEXT_NODE_PARENT_SKIP.has(parent.tagName)) return false;
+  const text = node.textContent ?? "";
+  return TRANSLATABLE_TEXT_RE.test(text.trim());
 };
 
 const requireApiKey = (config: TranslationConfig): string => {
@@ -344,26 +379,66 @@ const requestTranslation = async (text: string): Promise<string> => {
   return requestCustomTranslation(text, config);
 };
 
+const translateHtml = async (rawHtml: string): Promise<string> => {
+  const doc = new DOMParser().parseFromString(rawHtml, "text/html");
+  doc.querySelectorAll("script, noscript").forEach((el) => el.remove());
+
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+  const nodes: Text[] = [];
+  let node = walker.nextNode();
+  while (node) {
+    if (shouldTranslateTextNode(node)) nodes.push(node);
+    node = walker.nextNode();
+  }
+
+  if (!nodes.length) throw new Error("No message text found to translate.");
+
+  for (const textNode of nodes) {
+    const original = textNode.textContent ?? "";
+    const match = original.match(/^(\s*)([\s\S]*?)(\s*)$/);
+    const leading = match?.[1] ?? "";
+    const core = match?.[2] ?? original.trim();
+    const trailing = match?.[3] ?? "";
+    if (!core.trim()) continue;
+    textNode.textContent = `${leading}${await requestTranslation(core)}${trailing}`;
+  }
+
+  return doc.documentElement.outerHTML;
+};
+
 export const translateMessageToEnglish = async (
-  messageId: number,
+  message: RawMessage,
 ): Promise<TranslationRecord> => {
-  const part = await messenger.messages.getFull(messageId);
-  const raw = normalizeText(extractRawTextBody(part) ?? "");
+  await pruneExpiredTranslations();
+
+  const part = await messenger.messages.getFull(message.id);
+  const html = extractHtmlBody(part);
+  const bodyType: "text" | "html" = html ? "html" : "text";
+  const raw = bodyType === "html"
+    ? normalizeHtml(html ?? "")
+    : normalizeText(extractRawTextBody(part) ?? "");
   if (!raw) throw new Error("No message text found to translate.");
 
-  const bodyHash = hashText(raw);
-  const id = translationId(messageId, bodyHash);
+  const rawSubject = normalizeText(message.subject);
+  const bodyHash = `${bodyType}:${hashText(`${rawSubject}\n\n${raw}`)}`;
+  const id = translationId(message.id, bodyHash);
   const cached = await db.translations.get(id);
-  if (cached) return cached;
+  if (cached && isFreshTranslation(cached)) return cached;
+  if (cached) await db.translations.delete(id);
 
-  const translatedText = await requestTranslation(raw);
+  const [translatedSubject, translatedText] = await Promise.all([
+    rawSubject ? requestTranslation(rawSubject) : Promise.resolve(""),
+    bodyType === "html" ? translateHtml(raw) : requestTranslation(raw),
+  ]);
   const record: TranslationRecord = {
     id,
-    messageId,
+    messageId: message.id,
     bodyHash,
     provider: getTranslationConfig().provider,
     sourceLanguage: null,
     targetLanguage: TARGET_LANGUAGE,
+    bodyType,
+    translatedSubject,
     translatedText,
     createdAt: Date.now(),
   };

@@ -26,12 +26,14 @@ export const InlineMessage = ({
   onToggle,
   canToggle = true,
   translationRequest = 0,
+  onTranslatedSubject,
 }: {
   message: RawMessage;
   isOpen: boolean;
   onToggle: () => void;
   canToggle?: boolean;
   translationRequest?: number;
+  onTranslatedSubject?: (subject: string) => void;
 }) => {
   const name = senderName(m.author);
   const sender = displayAddressName(m.author);
@@ -114,7 +116,11 @@ export const InlineMessage = ({
                 e.stopPropagation();
               }}
             >
-              <MessageBody message={m} translationRequest={translationRequest} />
+              <MessageBody
+                message={m}
+                translationRequest={translationRequest}
+                onTranslatedSubject={onTranslatedSubject}
+              />
             </div>
           </ExpandableRegion>
           {m.attachments && m.attachments.length > 0 && (

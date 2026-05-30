@@ -21,9 +21,11 @@ import s from "./MessageBody.module.css";
 export const MessageBody = ({
   message: m,
   translationRequest = 0,
+  onTranslatedSubject,
 }: {
   message: RawMessage;
   translationRequest?: number;
+  onTranslatedSubject?: (subject: string) => void;
 }) => {
   const [rawHtml, setRawHtml] = useState<string | null>(null);
   const [isPlainText, setIsPlainText] = useState(false);
@@ -34,6 +36,8 @@ export const MessageBody = ({
   >("idle");
   const [translationError, setTranslationError] = useState("");
   const [translatedText, setTranslatedText] = useState<string | null>(null);
+  const [translatedSubject, setTranslatedSubject] = useState("");
+  const [translatedBodyType, setTranslatedBodyType] = useState<"text" | "html">("text");
   const [showTranslation, setShowTranslation] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { height, onLoad } = useIframeAutoHeight(iframeRef);
@@ -68,7 +72,10 @@ export const MessageBody = ({
     setTranslationStatus("idle");
     setTranslationError("");
     setTranslatedText(null);
+    setTranslatedSubject("");
+    setTranslatedBodyType("text");
     setShowTranslation(false);
+    onTranslatedSubject?.("");
   }, [m.id]);
 
   useEffect(
@@ -102,17 +109,26 @@ export const MessageBody = ({
     [rawHtml, showImages],
   );
   const translatedSrcdoc = useMemo(
-    () => (translatedText !== null ? buildTextSrcdoc(translatedText) : ""),
-    [translatedText],
+    () => {
+      if (translatedText === null) return "";
+      return translatedBodyType === "html"
+        ? buildSrcdoc(translatedText, showImages)
+        : buildTextSrcdoc(translatedText);
+    },
+    [showImages, translatedBodyType, translatedText],
   );
   const activeSrcdoc = showTranslation && translatedSrcdoc ? translatedSrcdoc : srcdoc;
 
   const requestTranslation = () => {
     setTranslationStatus("loading");
     setTranslationError("");
-    translateMessageToEnglish(m.id)
+    translateMessageToEnglish(m)
       .then((record) => {
+        const subject = record.translatedSubject ?? "";
         setTranslatedText(record.translatedText);
+        setTranslatedSubject(subject);
+        setTranslatedBodyType(record.bodyType ?? "text");
+        onTranslatedSubject?.(subject);
         setShowTranslation(true);
         setTranslationStatus("done");
       })
@@ -126,6 +142,14 @@ export const MessageBody = ({
     if (translationRequest <= 0) return;
     requestTranslation();
   }, [translationRequest]);
+
+  const toggleTranslation = () => {
+    setShowTranslation((showing) => {
+      const next = !showing;
+      onTranslatedSubject?.(next ? translatedSubject : "");
+      return next;
+    });
+  };
 
   return (
     <div className={s.body}>
@@ -178,7 +202,7 @@ export const MessageBody = ({
                 <button
                   className={s.noticeButton}
                   type="button"
-                  onClick={() => setShowTranslation((showing) => !showing)}
+                  onClick={toggleTranslation}
                 >
                   {showTranslation ? "Show original" : "Show translation"}
                 </button>

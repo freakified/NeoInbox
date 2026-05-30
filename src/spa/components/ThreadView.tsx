@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
@@ -33,6 +33,11 @@ export const ThreadView = ({
   const [openIds, setOpenIds] = useState<Set<number>>(() => new Set());
   const [showMiddle, setShowMiddle] = useState(false);
   const [translationRequests, setTranslationRequests] = useState<Record<number, number>>({});
+  const [translatedSubject, setTranslatedSubject] = useState("");
+
+  useEffect(() => {
+    setTranslatedSubject("");
+  }, [t.id]);
 
   if (!latestInbox || !latestMessage) return null;
 
@@ -60,7 +65,7 @@ export const ThreadView = ({
   return (
     <div>
       <div className={s.header}>
-        <h2 className={s.title}>{t.subject || "(no subject)"}</h2>
+        <h2 className={s.title}>{translatedSubject || t.subject || "(no subject)"}</h2>
         <div className={s.headerActions}>
           <BundleMenu thread={t} onTranslateToEnglish={translateLatest} />
           {hasInboxMessages && <SnoozeMenu onChoose={onSnooze} />}
@@ -99,6 +104,7 @@ export const ThreadView = ({
               canToggle={m.id !== latestMessage.id}
               onToggle={() => toggleMsg(m.id)}
               translationRequest={translationRequests[m.id] ?? 0}
+              onTranslatedSubject={m.id === latestMessage.id ? setTranslatedSubject : undefined}
             />
           ))
         ) : (
@@ -109,6 +115,9 @@ export const ThreadView = ({
               isOpen={openIds.has(t.messages[0]!.id)}
               onToggle={() => toggleMsg(t.messages[0]!.id)}
               translationRequest={translationRequests[t.messages[0]!.id] ?? 0}
+              onTranslatedSubject={
+                t.messages[0]!.id === latestMessage.id ? setTranslatedSubject : undefined
+              }
             />
             {showMiddle ? (
               t.messages.slice(1, -1).map((m) => (
@@ -118,6 +127,7 @@ export const ThreadView = ({
                   isOpen={openIds.has(m.id)}
                   onToggle={() => toggleMsg(m.id)}
                   translationRequest={translationRequests[m.id] ?? 0}
+                  onTranslatedSubject={m.id === latestMessage.id ? setTranslatedSubject : undefined}
                 />
               ))
             ) : (
@@ -141,6 +151,7 @@ export const ThreadView = ({
               canToggle={false}
               onToggle={() => undefined}
               translationRequest={translationRequests[latestMessage.id] ?? 0}
+              onTranslatedSubject={setTranslatedSubject}
             />
           </>
         )}
