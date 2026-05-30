@@ -28,6 +28,7 @@ const parseHashView = (): StreamView => {
   if (typeof window === "undefined") return { type: "inbox" };
   const raw = decodeURIComponent(window.location.hash.replace(/^#/, ""));
   if (raw === "snoozed") return { type: "snoozed" };
+  if (raw === "draft") return { type: "draft" };
   if (raw === "sent") return { type: "sent" };
   if (raw === "done") return { type: "done" };
   if (raw.startsWith("bundle/")) {
@@ -47,6 +48,7 @@ const isSameView = (a: StreamView, b: StreamView): boolean =>
 
 const emptyTextForView = (view: StreamView): string => {
   if (view.type === "snoozed") return "No snoozed messages.";
+  if (view.type === "draft") return "No drafts.";
   if (view.type === "sent") return "No sent messages.";
   if (view.type === "done") return "No done messages.";
   if (view.type === "bundle") return "No messages in this bundle.";
@@ -58,6 +60,7 @@ const headerForView = (
   customBundles: ReturnType<typeof useMailStore.getState>["customBundles"],
 ): { title: string; color: string } => {
   if (view.type === "snoozed") return { title: "Snoozed", color: "#DF742C" };
+  if (view.type === "draft") return { title: "Drafts", color: "#C5221F" };
   if (view.type === "done") return { title: "Done", color: "#5CA46F" };
   if (view.type === "sent") return { title: "Sent", color: "var(--color-md-primary)" };
   if (view.type === "bundle") {
@@ -287,7 +290,7 @@ export const App = () => {
             </div>
 
             <div className={s.drawerGroup}>
-              <button type="button" className={unsupportedClass} disabled title="Coming later">
+              <button type="button" className={navClass({ type: "draft" })} onClick={() => navigate({ type: "draft" })}>
                 <Icon name="drafts" className={s.navIcon} />
                 <span>Drafts</span>
               </button>

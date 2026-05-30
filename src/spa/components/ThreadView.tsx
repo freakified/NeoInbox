@@ -29,6 +29,8 @@ export const ThreadView = ({
     return inbox[inbox.length - 1] ?? t.messages[t.messages.length - 1];
   }, [t]);
   const latestMessage = t.messages[t.messages.length - 1];
+  const replyTarget = [...t.messages].reverse().find((m) => m.origin === "inbox");
+  const latestDraft = [...t.messages].reverse().find((m) => m.origin === "draft");
 
   const [openIds, setOpenIds] = useState<Set<number>>(() => new Set());
   const [showMiddle, setShowMiddle] = useState(false);
@@ -157,7 +159,7 @@ export const ThreadView = ({
         )}
       </div>
 
-      <ReplyFooter latest={latestInbox} />
+      <ReplyFooter replyTarget={replyTarget} draft={latestDraft} />
     </div>
   );
 };

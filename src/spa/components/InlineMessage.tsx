@@ -40,6 +40,7 @@ export const InlineMessage = ({
   const recipients = m.recipients.map(displayAddressName);
   const color = avatarColor(name);
   const [preview, setPreview] = useState<string | null>(null);
+  const isDraft = m.origin === "draft";
 
   useEffect(() => {
     if (isOpen || preview !== null) return;
@@ -75,6 +76,7 @@ export const InlineMessage = ({
           <div className={s.metaLine}>
             {isOpen ? (
               <span className={s.addressLine}>
+                {isDraft && <span className={s.draftBadge}>Draft</span>}
                 <span className={s.senderOpen} title={sender.email}>
                   {sender.name}
                 </span>
@@ -96,7 +98,7 @@ export const InlineMessage = ({
               </span>
             ) : (
               <span className={clsx(s.sender, !m.read && s.senderUnread)}>
-                {m.origin === "sent" ? `${name} → ` : name}
+                {isDraft ? `Draft · ${name} → ` : m.origin === "sent" ? `${name} → ` : name}
               </span>
             )}
             <span className={s.date}>{formatDate(m.date)}</span>

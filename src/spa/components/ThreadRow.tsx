@@ -25,6 +25,7 @@ export const ThreadRow = ({
   const avatarBg = avatarColor(name);
   const initial = firstSender ? senderInitial(firstSender.author) : "?";
   const attachmentRefs = collectAttachments(t.messages);
+  const hasDraft = t.messages.some((m) => m.origin === "draft");
   const date = t.snoozeDueAt ? (
     <span className={s.snoozeDue}>
       <span>{formatDate(t.snoozeDueAt)}</span>
@@ -47,7 +48,15 @@ export const ThreadRow = ({
             </div>
           }
           primary={t.participantsLabel}
-          secondary={t.subject || "(no subject)"}
+          secondary={
+            hasDraft ? (
+              <>
+                <span className={s.draftLabel}>Draft</span> {t.subject || "(no subject)"}
+              </>
+            ) : (
+              t.subject || "(no subject)"
+            )
+          }
           trailing={
             attachmentRefs.length > 0 ? (
               <MessageAttachments

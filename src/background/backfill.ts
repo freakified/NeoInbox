@@ -3,7 +3,7 @@ import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
 import { db } from "../store/db";
 import { SNOOZED_KEY } from "../shared/categories";
-import { collectInboxFolders, collectSentFolders } from "../shared/folders";
+import { collectDraftFolders, collectInboxFolders, collectSentFolders } from "../shared/folders";
 import { log } from "../shared/log";
 import type { ServerMsg } from "../shared/messaging";
 import type { Category, MessageOrigin, RawMessage } from "../shared/types";
@@ -38,9 +38,10 @@ export const runBackfill = async (): Promise<{
   const liveIds = new Set<number>();
 
   try {
-    const [inboxes, sents] = await Promise.all([
+    const [inboxes, sents, drafts] = await Promise.all([
       collectInboxFolders(),
       collectSentFolders(),
+      collectDraftFolders(),
     ]);
 
     let batch: RawMessage[] = [];
@@ -100,6 +101,7 @@ export const runBackfill = async (): Promise<{
 
     for (const f of inboxes) await visit(f, "inbox");
     for (const f of sents) await visit(f, "sent");
+    for (const f of drafts) await visit(f, "draft");
 
     await flush();
 

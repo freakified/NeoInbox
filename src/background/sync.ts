@@ -3,7 +3,7 @@ import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
 import { db } from "../store/db";
 import { SNOOZED_KEY } from "../shared/categories";
-import { collectArchiveFolders, collectInboxFolders, collectSentFolders } from "../shared/folders";
+import { collectArchiveFolders, collectDraftFolders, collectInboxFolders, collectSentFolders } from "../shared/folders";
 import { log } from "../shared/log";
 import type { MessageOrigin, RawMessage } from "../shared/types";
 
@@ -28,8 +28,12 @@ type OnMovedApi = {
   ) => void;
 };
 
+const sendingDraftByTabId = new Map<number, number>();
+
 const idsFromList = (list: MessageList | undefined): number[] =>
   (list?.messages ?? []).map((m) => m.id);
+
+const tabIdOf = (tab: messenger.tabs.Tab): number | undefined => tab.id;
 
 const folderIdOf = (header: messenger.messages.MessageHeader): string => {
   return (
@@ -79,15 +83,41 @@ const cacheMessages = async (
 };
 
 const originForFolder = async (folderId: string): Promise<MessageOrigin | undefined> => {
-  const [inboxIds, sentIds, archiveIds] = await Promise.all([
+  const [inboxIds, sentIds, draftIds, archiveIds] = await Promise.all([
     getFolderIds(collectInboxFolders),
     getFolderIds(collectSentFolders),
+    getFolderIds(collectDraftFolders),
     getFolderIds(collectArchiveFolders),
   ]);
   if (sentIds.has(folderId)) return "sent";
+  if (draftIds.has(folderId)) return "draft";
   if (archiveIds.has(folderId)) return "done";
   if (inboxIds.has(folderId)) return "inbox";
   return undefined;
+};
+
+const removeSentDraft = async (draftId: number): Promise<void> => {
+  const cached = await db.messages.get(draftId);
+  if (cached && cached.origin !== "draft") return;
+
+  try {
+    const header = await messenger.messages.get(draftId);
+    if (!cached) {
+      const origin = await originForFolder(folderIdOf(header));
+      if (origin !== "draft") return;
+    }
+    await messenger.messages.delete([draftId], true);
+  } catch (e) {
+    log.debug("sync", "sent draft was already gone or could not be deleted", {
+      draftId,
+      e: String(e),
+    });
+  }
+
+  if (await db.messages.get(draftId)) {
+    await db.messages.delete(draftId);
+    broadcast({ type: "delta", removedIds: [draftId] });
+  }
 };
 
 export const wireSyncEngine = (): void => {
@@ -103,22 +133,65 @@ export const wireSyncEngine = (): void => {
 
   const onAfterSend = messenger.compose?.onAfterSend;
   if (onAfterSend) {
-    onAfterSend.addListener(async (_tab, sendInfo) => {
+    onAfterSend.addListener(async (tab, sendInfo) => {
+      const tabId = tabIdOf(tab);
+      const sentDraftId = tabId === undefined ? undefined : sendingDraftByTabId.get(tabId);
+      if (tabId !== undefined) sendingDraftByTabId.delete(tabId);
+
       try {
         if (sendInfo.error) {
           log.warn("sync", "onAfterSend reported error", sendInfo.error);
           return;
         }
         const added = await cacheMessages(sendInfo.messages ?? [], "sent");
-        if (!added.length) return;
-        broadcast({ type: "delta", added });
-        log.debug("sync", `onAfterSend added ${added.length} sent copies`);
+        if (added.length) {
+          broadcast({ type: "delta", added });
+          log.debug("sync", `onAfterSend added ${added.length} sent copies`);
+        }
+        if (sentDraftId !== undefined) await removeSentDraft(sentDraftId);
       } catch (e) {
         log.warn("sync", "onAfterSend failed", e);
       }
     });
   } else {
     log.warn("sync", "compose.onAfterSend unavailable");
+  }
+
+  const onAfterSave = messenger.compose?.onAfterSave;
+  if (onAfterSave) {
+    onAfterSave.addListener(async (_tab, saveInfo) => {
+      try {
+        if (saveInfo.error) {
+          log.warn("sync", "onAfterSave reported error", saveInfo.error);
+          return;
+        }
+        if (saveInfo.mode === "template") return;
+        const added = await cacheMessages(saveInfo.messages ?? [], "draft");
+        if (!added.length) return;
+        broadcast({ type: "delta", added });
+        log.debug("sync", `onAfterSave added ${added.length} draft copies`);
+      } catch (e) {
+        log.warn("sync", "onAfterSave failed", e);
+      }
+    });
+  } else {
+    log.warn("sync", "compose.onAfterSave unavailable");
+  }
+
+  const onBeforeSend = messenger.compose?.onBeforeSend;
+  if (onBeforeSend) {
+    onBeforeSend.addListener((tab, details) => {
+      const tabId = tabIdOf(tab);
+      if (tabId === undefined) return {};
+      if (details.type === "draft" && details.relatedMessageId !== undefined) {
+        sendingDraftByTabId.set(tabId, details.relatedMessageId);
+      } else {
+        sendingDraftByTabId.delete(tabId);
+      }
+      return {};
+    });
+  } else {
+    log.warn("sync", "compose.onBeforeSend unavailable");
   }
 
   const onUpdated = (

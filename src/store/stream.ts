@@ -6,6 +6,7 @@ import { dateBucket, futureDateBucket } from "../spa/lib/dateBucket";
 export type StreamView =
   | { type: "inbox" }
   | { type: "snoozed" }
+  | { type: "draft" }
   | { type: "sent" }
   | { type: "done" }
   | { type: "bundle"; category: Category };
@@ -58,14 +59,29 @@ export const deriveStream = (
 ): Stream => {
   const allMessages = Object.values(messagesById);
   const anchorOrigins: ReadonlySet<MessageOrigin> = new Set(
-    view.type === "sent" ? ["sent"] : view.type === "done" ? ["done"] : ["inbox"],
+    view.type === "sent"
+      ? ["sent"]
+      : view.type === "draft"
+        ? ["draft"]
+        : view.type === "done"
+          ? ["done"]
+          : ["inbox"],
   );
   const visible = allMessages.filter((m) => {
-    if (view.type === "inbox") return m.origin === "sent" || (m.origin === "inbox" && !m.tags.includes(SNOOZED_KEY));
-    if (view.type === "snoozed") return m.origin === "sent" || (m.origin === "inbox" && m.tags.includes(SNOOZED_KEY));
+    if (view.type === "inbox") {
+      return m.origin === "sent" || m.origin === "draft" || (m.origin === "inbox" && !m.tags.includes(SNOOZED_KEY));
+    }
+    if (view.type === "snoozed") {
+      return m.origin === "sent" || m.origin === "draft" || (m.origin === "inbox" && m.tags.includes(SNOOZED_KEY));
+    }
+    if (view.type === "draft") return m.origin === "draft";
     if (view.type === "sent") return m.origin === "sent";
-    if (view.type === "done") return m.origin === "sent" || m.origin === "done";
-    return m.origin === "sent" || (m.origin === "inbox" && !m.tags.includes(SNOOZED_KEY) && m.category === view.category);
+    if (view.type === "done") return m.origin === "sent" || m.origin === "draft" || m.origin === "done";
+    return (
+      m.origin === "sent" ||
+      m.origin === "draft" ||
+      (m.origin === "inbox" && !m.tags.includes(SNOOZED_KEY) && m.category === view.category)
+    );
   });
   let threads = buildThreads(visible, myEmails, anchorOrigins);
   if (view.type === "snoozed") {

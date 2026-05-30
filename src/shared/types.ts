@@ -9,7 +9,7 @@ export type BuiltinCategory =
   | "personal";
 
 export type Category = string;
-export type MessageOrigin = "inbox" | "sent" | "done";
+export type MessageOrigin = "inbox" | "sent" | "draft" | "done";
 
 export interface CustomBundleRule {
   type: "domain" | "email" | "subject_keyword";

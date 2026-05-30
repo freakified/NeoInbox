@@ -154,7 +154,7 @@ export function buildThreads(
 
   for (const m of messages) {
     if (anchorOrigins.has(m.origin)) continue;
-    if (m.origin !== "sent") continue;
+    if (m.origin !== "sent" && m.origin !== "draft") continue;
     const subject = normalizeSubject(m.subject);
     if (!subject) continue;
     const selfNode = messageNodes.get(m.id);
