@@ -1,5 +1,6 @@
 import { clsx } from "clsx";
 import { useEffect, useState } from "react";
+import { parseSender } from "../../shared/senders";
 import type { RawMessage } from "../../shared/types";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate } from "../lib/dateBucket";
@@ -8,6 +9,16 @@ import { MessageAttachments } from "./MessageAttachments";
 import { MessageBody } from "./MessageBody";
 import { ExpandableRegion } from "./Motion";
 import s from "./InlineMessage.module.css";
+
+const displayAddressName = (raw: string): { name: string; email: string } => {
+  const parsed = parseSender(raw);
+  const email = parsed.email;
+  const localPart = email.includes("@") ? parsed.localPart || email.split("@")[0] : "";
+  return {
+    name: parsed.name || localPart || raw,
+    email,
+  };
+};
 
 export const InlineMessage = ({
   message: m,
@@ -23,6 +34,8 @@ export const InlineMessage = ({
   translationRequest?: number;
 }) => {
   const name = senderName(m.author);
+  const sender = displayAddressName(m.author);
+  const recipients = m.recipients.map(displayAddressName);
   const color = avatarColor(name);
   const [preview, setPreview] = useState<string | null>(null);
 
@@ -58,9 +71,32 @@ export const InlineMessage = ({
         </div>
         <div className={s.meta}>
           <div className={s.metaLine}>
-            <span className={clsx(s.sender, !m.read && s.senderUnread)}>
-              {m.origin === "sent" ? `${name} → ` : name}
-            </span>
+            {isOpen ? (
+              <span className={s.addressLine}>
+                <span className={s.senderOpen} title={sender.email}>
+                  {sender.name}
+                </span>
+                {recipients.length > 0 && (
+                  <>
+                    <span className={s.toLabel}>to</span>
+                    <span className={s.recipients}>
+                      {recipients.map((recipient, index) => (
+                        <span key={`${recipient.email}-${index}`}>
+                          <span className={s.recipient} title={recipient.email}>
+                            {recipient.name}
+                          </span>
+                          {index < recipients.length - 1 && ", "}
+                        </span>
+                      ))}
+                    </span>
+                  </>
+                )}
+              </span>
+            ) : (
+              <span className={clsx(s.sender, !m.read && s.senderUnread)}>
+                {m.origin === "sent" ? `${name} → ` : name}
+              </span>
+            )}
             <span className={s.date}>{formatDate(m.date)}</span>
           </div>
           {!isOpen && (
