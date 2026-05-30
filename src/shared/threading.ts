@@ -104,6 +104,17 @@ function threadCategory(msgs: RawMessage[]): RawMessage["category"] {
 const messageSortDate = (msg: RawMessage): number =>
   msg.origin === "inbox" ? msg.resurfacedAt ?? msg.date : msg.date;
 
+const stableThreadId = (
+  msgs: readonly RawMessage[],
+  messageNodes: ReadonlyMap<number, string>,
+  anchorOrigins: ReadonlySet<MessageOrigin>,
+): string => {
+  const anchors = msgs.filter((m) => anchorOrigins.has(m.origin));
+  const candidates = anchors.length ? anchors : msgs;
+  const [first] = [...candidates].sort((a, b) => a.date - b.date || a.id - b.id);
+  return first ? messageNodes.get(first.id) ?? String(first.id) : "";
+}
+
 export function buildThreads(
   messages: readonly RawMessage[],
   myEmails: ReadonlySet<string>,
@@ -183,7 +194,7 @@ export function buildThreads(
     if (!latest) continue;
     const latestDate = msgs.reduce((max, msg) => Math.max(max, messageSortDate(msg)), 0);
     threads.push({
-      id: key,
+      id: stableThreadId(msgs, messageNodes, anchorOrigins) || key,
       subject: latest.subject || "(no subject)",
       messages: msgs,
       participantsLabel: makeParticipantsLabel(msgs, myEmails),
