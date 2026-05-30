@@ -123,6 +123,7 @@ export const InlineMessage = ({
                 messageId: m.id,
                 attachment: a,
               }))}
+              compact
             />
           )}
         </div>

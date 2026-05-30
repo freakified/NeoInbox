@@ -12,6 +12,7 @@
 }
 
 .card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -44,6 +45,26 @@
   border-radius: 2px;
 }
 
+.imageCard {
+  align-items: flex-end;
+  width: 224px;
+  height: 148px;
+  max-width: 224px;
+  padding: 0;
+  overflow: hidden;
+  background: #d6d6d6;
+}
+
+.imageCard:hover:not(:disabled) {
+  background: #d6d6d6;
+}
+
+.imageCardCompact {
+  width: 104px;
+  height: 64px;
+  max-width: 104px;
+}
+
 .cardRemoved {
   opacity: 0.55;
 }
@@ -55,6 +76,24 @@
 
 .iconCompact {
   font-size: 16px;
+}
+
+.coverImage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.imagePlaceholderIcon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  background: #e4e4e4;
 }
 
 .meta {
@@ -87,4 +126,215 @@
   color: var(--color-md-secondary-text);
   align-self: center;
   flex-shrink: 0;
+}
+
+.gallery {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #050505;
+  color: #ffffff;
+  cursor: zoom-out;
+}
+
+.galleryStage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 92px 104px;
+  box-sizing: border-box;
+}
+
+.galleryImage {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  cursor: pointer;
+}
+
+.galleryLoading {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.galleryButton {
+  position: absolute;
+  z-index: 1010;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 1px solid #555555;
+  border-radius: 4px;
+  background: #000000;
+  box-shadow: 0 0 0 2px #000000;
+  color: #ffffff;
+  cursor: pointer;
+  transition: border-color 150ms, opacity 200ms, transform 200ms;
+}
+
+.galleryButton:hover {
+  border-color: #ffffff;
+}
+
+.galleryButton :global(.material-symbols-rounded) {
+  font-size: 30px;
+}
+
+.galleryClose {
+  top: 12px;
+  right: 12px;
+}
+
+.galleryOpen {
+  top: 12px;
+  right: 76px;
+}
+
+.galleryPrev,
+.galleryNext {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.galleryPrev {
+  left: 12px;
+}
+
+.galleryNext {
+  right: 12px;
+}
+
+.galleryCaption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 72px;
+  z-index: 1010;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 16px;
+  box-sizing: border-box;
+  color: #ffffff;
+  font-size: 13px;
+  pointer-events: none;
+  transition: opacity 200ms, transform 200ms;
+}
+
+.galleryCaption span {
+  padding: 7px 9px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.74);
+}
+
+.galleryName {
+  max-width: min(68vw, 720px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.galleryThumbs {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1010;
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  overflow-x: auto;
+  background: #000000;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+  transition: opacity 200ms, transform 200ms;
+}
+
+.galleryThumbButton {
+  width: 80px;
+  height: 56px;
+  flex: 0 0 80px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  background: #191919;
+  color: #ffffff;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.galleryThumbButton img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.galleryThumbActive {
+  border-color: #ffffff;
+}
+
+.galleryHideUi .galleryButton,
+.galleryHideUi .galleryCaption,
+.galleryHideUi .galleryThumbs {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.galleryHideUi .galleryPrev,
+.galleryHideUi .galleryNext {
+  transform: translateY(-50%) scale(0.98);
+}
+
+.announcer {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+:global(body.attachmentGalleryOpen) {
+  overflow: hidden;
+}
+
+@media (max-width: 640px) {
+  .galleryStage {
+    padding: 64px 0 88px;
+  }
+
+  .galleryPrev,
+  .galleryNext {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .galleryButton {
+    width: 46px;
+    height: 46px;
+  }
+
+  .galleryOpen {
+    right: 68px;
+  }
+
+  .galleryCaption {
+    bottom: 66px;
+    flex-wrap: wrap;
+  }
+
+  .galleryName {
+    max-width: calc(100vw - 32px);
+  }
 }
