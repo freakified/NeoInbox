@@ -273,23 +273,36 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-right: 4px;
 }
 
-.doneAllBtn {
+.sectionActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-md-secondary-text);
+  margin-bottom: 8px;
+}
+
+.sectionActionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   color: var(--color-md-secondary-text);
   background: none;
   border: none;
+  border-radius: 4px;
   cursor: pointer;
-  margin-top: -8px;
   line-height: 1;
 }
 
-.doneAllBtn:hover {
+.sectionActionBtn:hover {
   color: var(--color-md-on-surface);
+  background: var(--color-md-hover);
 }
 
-.doneAllIcon {
+.sectionActionIcon {
   font-size: 20px;
 }
 

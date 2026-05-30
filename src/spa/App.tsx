@@ -103,7 +103,7 @@ export const App = () => {
   const retryBackfill = useMailStore((st) => st.retryBackfill);
   const customBundles = useMailStore((st) => st.customBundles);
 
-  const { doneMessages } = useBulkActions();
+  const { doneMessages, trashMessages } = useBulkActions();
 
   const sectionDoneAll = (items: StreamItem[]) => {
     const ids = items.flatMap((item) => {
@@ -113,6 +113,14 @@ export const App = () => {
       );
     });
     doneMessages(ids);
+  };
+
+  const sectionTrashAll = (items: StreamItem[]) => {
+    const ids = items.flatMap((item) => {
+      const threads = item.type === "thread" ? [item.thread] : item.threads;
+      return threads.flatMap((t) => t.messages.map((m) => m.id));
+    });
+    trashMessages(ids);
   };
 
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -450,13 +458,22 @@ export const App = () => {
               <div className={s.sectionHeader}>
                 <SectionLabel>{group.label}</SectionLabel>
                 {showDoneAll && canDoneSection(group.items) && (
-                  <button
-                    onClick={() => sectionDoneAll(group.items)}
-                    title="Done all"
-                    className={s.doneAllBtn}
-                  >
-                    <Icon name="done_all" className={s.doneAllIcon} />
-                  </button>
+                  <div className={s.sectionActions}>
+                    <button
+                      onClick={() => sectionTrashAll(group.items)}
+                      title="Delete all"
+                      className={s.sectionActionBtn}
+                    >
+                      <Icon name="delete" className={s.sectionActionIcon} />
+                    </button>
+                    <button
+                      onClick={() => sectionDoneAll(group.items)}
+                      title="Done all"
+                      className={s.sectionActionBtn}
+                    >
+                      <Icon name="done_all" className={s.sectionActionIcon} />
+                    </button>
+                  </div>
                 )}
               </div>
               <LayoutGroup>

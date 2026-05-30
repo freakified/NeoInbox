@@ -84,6 +84,20 @@ export const BundleSliceRow = ({
     trashMessages(ids);
   };
 
+  const handleBucketDoneAll = (bucketThreads: Thread[]) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const ids = bucketThreads.flatMap((t) =>
+      t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
+    );
+    doneMessages(ids);
+  };
+
+  const handleBucketTrashAll = (bucketThreads: Thread[]) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const ids = bucketThreads.flatMap((t) => t.messages.map((m) => m.id));
+    trashMessages(ids);
+  };
+
   return (
     <MotionRow
       data-row
@@ -175,7 +189,25 @@ export const BundleSliceRow = ({
 
             return (
               <div key={label}>
-                <p className={s.bucketLabel}>{label}</p>
+                <div className={s.bucketHeader}>
+                  <p className={s.bucketLabel}>{label}</p>
+                  <div className={s.actions}>
+                    <button
+                      onClick={handleBucketTrashAll(items)}
+                      title="Delete all"
+                      className={s.actionBtn}
+                    >
+                      <Icon name="delete" className={s.actionIcon} />
+                    </button>
+                    <button
+                      onClick={handleBucketDoneAll(items)}
+                      title="Done all"
+                      className={s.actionBtn}
+                    >
+                      <Icon name="done_all" className={s.actionIcon} />
+                    </button>
+                  </div>
+                </div>
                 {expandedIdx >= 0 ? (
                   <>
                     {expandedIdx > 0 && (
