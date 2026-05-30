@@ -12,6 +12,7 @@ export type TranslationProvider =
   | "google"
   | "azure"
   | "libretranslate"
+  | "openaiCompatible"
   | "custom";
 
 export interface TranslationConfig {
@@ -19,6 +20,7 @@ export interface TranslationConfig {
   apiKey: string;
   endpoint: string;
   region: string;
+  model: string;
 }
 
 export const DEFAULT_TRANSLATION_CONFIG: TranslationConfig = {
@@ -26,6 +28,7 @@ export const DEFAULT_TRANSLATION_CONFIG: TranslationConfig = {
   apiKey: "",
   endpoint: "",
   region: "",
+  model: "",
 };
 
 export const TRANSLATION_PROVIDERS: Record<
@@ -36,12 +39,20 @@ export const TRANSLATION_PROVIDERS: Record<
     needsEndpoint: boolean;
     optionalApiKey?: boolean;
     needsRegion?: boolean;
+    needsModel?: boolean;
   }
 > = {
   deepl: { label: "DeepL", needsApiKey: true, needsEndpoint: false },
   google: { label: "Google Cloud Translation", needsApiKey: true, needsEndpoint: false },
   azure: { label: "Azure Translator", needsApiKey: true, needsEndpoint: false, needsRegion: true },
   libretranslate: { label: "LibreTranslate", needsApiKey: false, optionalApiKey: true, needsEndpoint: true },
+  openaiCompatible: {
+    label: "Local LLM (OpenAI-compatible)",
+    needsApiKey: false,
+    optionalApiKey: true,
+    needsEndpoint: true,
+    needsModel: true,
+  },
   custom: { label: "Custom endpoint", needsApiKey: false, needsEndpoint: true },
 };
 
@@ -69,6 +80,7 @@ const parseProvider = (value: unknown): TranslationProvider =>
   value === "google" ||
   value === "azure" ||
   value === "libretranslate" ||
+  value === "openaiCompatible" ||
   value === "custom"
     ? value
     : DEFAULT_TRANSLATION_CONFIG.provider;
@@ -83,6 +95,7 @@ export const getTranslationConfig = (): TranslationConfig => {
         apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
         endpoint: typeof parsed.endpoint === "string" ? parsed.endpoint : "",
         region: typeof parsed.region === "string" ? parsed.region : "",
+        model: typeof parsed.model === "string" ? parsed.model : "",
       };
     } catch {
       // Fall through to legacy endpoint migration.
@@ -107,6 +120,7 @@ export const setTranslationConfig = (config: TranslationConfig): void => {
     apiKey: config.apiKey.trim(),
     endpoint: config.endpoint.trim(),
     region: config.region.trim(),
+    model: config.model.trim(),
   };
   localStorage.setItem(TRANSLATION_CONFIG_KEY, JSON.stringify(normalized));
   localStorage.removeItem(TRANSLATION_ENDPOINT_KEY);
@@ -148,6 +162,14 @@ const parseAzureText = (payload: unknown): string => {
   const translations = (payload as Array<{ translations?: Array<{ text?: unknown }> }>)?.[0]?.translations;
   const text = translations?.[0]?.text;
   return typeof text === "string" ? text.trim() : "";
+};
+
+const parseOpenAICompatibleText = (payload: unknown): string => {
+  const content = (payload as {
+    choices?: Array<{ message?: { content?: unknown }; text?: unknown }>;
+  })?.choices?.[0];
+  const value = content?.message?.content ?? content?.text;
+  return typeof value === "string" ? value.trim() : "";
 };
 
 const decodeHtmlEntities = (text: string): string => {
@@ -274,12 +296,44 @@ const requestAzure = async (
   return translated;
 };
 
+const requestOpenAICompatible = async (
+  text: string,
+  config: TranslationConfig,
+): Promise<string> => {
+  const endpoint = (config.endpoint || "http://localhost:1234/v1/chat/completions").trim();
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (config.apiKey) headers.authorization = `Bearer ${config.apiKey}`;
+
+  const translated = parseOpenAICompatibleText(await fetchJson(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model: config.model || "local-model",
+      temperature: 0.1,
+      messages: [
+        {
+          role: "system",
+          content: [
+            `Translate the user's email message to ${TARGET_LABEL}.`,
+            "Return only the translated message text.",
+            "Preserve paragraph breaks, links, dates, names, and quoted text.",
+          ].join(" "),
+        },
+        { role: "user", content: text },
+      ],
+    }),
+  }));
+  if (!translated) throw new Error("Local LLM response did not include translated text.");
+  return translated;
+};
+
 const requestTranslation = async (text: string): Promise<string> => {
   const config = getTranslationConfig();
   if (config.provider === "deepl") return requestDeepL(text, config);
   if (config.provider === "google") return requestGoogle(text, config);
   if (config.provider === "azure") return requestAzure(text, config);
   if (config.provider === "libretranslate") return requestLibreTranslate(text, config);
+  if (config.provider === "openaiCompatible") return requestOpenAICompatible(text, config);
 
   const endpoint = config.endpoint;
   if (!endpoint) {

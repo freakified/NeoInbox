@@ -510,7 +510,8 @@ const sameTranslationConfig = (a: TranslationConfig, b: TranslationConfig): bool
   a.provider === b.provider &&
   a.apiKey === b.apiKey &&
   a.endpoint === b.endpoint &&
-  a.region === b.region;
+  a.region === b.region &&
+  a.model === b.model;
 
 const TranslationSettings = () => {
   const notify = useMailStore((st) => st.notify);
@@ -522,6 +523,7 @@ const TranslationSettings = () => {
     apiKey: config.apiKey.trim(),
     endpoint: config.endpoint.trim(),
     region: config.region.trim(),
+    model: config.model.trim(),
   };
   const providerMeta = TRANSLATION_PROVIDERS[config.provider];
   const hasChanges = !sameTranslationConfig(normalized, saved);
@@ -549,7 +551,9 @@ const TranslationSettings = () => {
         ? "https://api.cognitive.microsofttranslator.com"
         : config.provider === "libretranslate"
           ? "https://libretranslate.com/translate"
-          : "https://example.com/translate";
+          : config.provider === "openaiCompatible"
+            ? "http://localhost:1234/v1/chat/completions"
+            : "https://example.com/translate";
 
   return (
     <div className={s.editor}>
@@ -627,9 +631,27 @@ const TranslationSettings = () => {
             />
           </label>
         )}
+        {providerMeta.needsModel && (
+          <label className={s.fieldBlock}>
+            <span className={s.label}>Model</span>
+            <input
+              type="text"
+              className={s.input}
+              value={config.model}
+              placeholder="local-model"
+              onChange={(e) => updateConfig({ model: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && save()}
+            />
+          </label>
+        )}
         {config.provider === "custom" && (
           <p className={s.helpText}>
             Custom endpoints should accept JSON with text and targetLanguage, and return translatedText.
+          </p>
+        )}
+        {config.provider === "openaiCompatible" && (
+          <p className={s.helpText}>
+            Start the LM Studio local server, then use its OpenAI-compatible chat completions endpoint.
           </p>
         )}
         {config.provider === "libretranslate" && (
