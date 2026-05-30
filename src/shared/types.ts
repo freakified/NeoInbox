@@ -58,6 +58,7 @@ export interface RawMessage {
   references?: string[];
   inReplyTo?: string[];
   attachments?: AttachmentSummary[];
+  detailsVersion?: number;
 }
 
 export interface Thread {

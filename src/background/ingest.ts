@@ -6,6 +6,8 @@ import { scanCidRefs } from "../spa/lib/srcdoc";
 import type { AttachmentSummary, Category, RawMessage } from "../shared/types";
 import { messageStillIn, resolveArchiveFolder } from "./archiveFolders";
 
+const MESSAGE_DETAILS_VERSION = 2;
+
 export class ArchiveFailedError extends Error {
   constructor(message: string, readonly cause?: unknown) {
     super(message);
@@ -203,6 +205,7 @@ export const applyMessageDetails = async (
     raw.attachments = cached.attachments;
     raw.references = cached.references;
     raw.inReplyTo = cached.inReplyTo;
+    raw.detailsVersion = cached.detailsVersion;
     return;
   }
 
@@ -210,6 +213,7 @@ export const applyMessageDetails = async (
   raw.attachments = details.attachments;
   raw.references = details.references;
   raw.inReplyTo = details.inReplyTo;
+  raw.detailsVersion = MESSAGE_DETAILS_VERSION;
 }
 
 export const applyMessageDetailsForOrigin = async (
@@ -221,16 +225,22 @@ export const applyMessageDetailsForOrigin = async (
     return;
   }
 
-  if (canReuseMessageDetails(cached, raw)) {
+  if (
+    canReuseMessageDetails(cached, raw)
+    && (cached.detailsVersion ?? 0) >= MESSAGE_DETAILS_VERSION
+  ) {
     raw.attachments = cached.attachments;
     raw.references = cached.references;
     raw.inReplyTo = cached.inReplyTo;
+    raw.detailsVersion = cached.detailsVersion;
     return;
   }
 
+  const details = await extractMessageDetails(raw.id);
   raw.attachments = [];
-  raw.references = [];
-  raw.inReplyTo = [];
+  raw.references = details.references;
+  raw.inReplyTo = details.inReplyTo;
+  raw.detailsVersion = MESSAGE_DETAILS_VERSION;
 }
 
 const isCidReferenced = (cidRefs: Set<string>, name: string): boolean => {

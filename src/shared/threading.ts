@@ -25,6 +25,29 @@ const cleanMessageId = (id: string | undefined): string => {
   return (id ?? "").replace(/[<>]/g, "").trim().toLowerCase();
 }
 
+const participantEmails = (
+  msg: RawMessage,
+  myEmails: ReadonlySet<string>,
+): Set<string> => {
+  const emails = [msg.author, ...msg.recipients]
+    .map(extractEmail)
+    .filter((email) => email && !myEmails.has(email));
+  return new Set(emails);
+}
+
+const subjectParticipantKey = (
+  accountId: string,
+  subject: string,
+  email: string,
+): string => {
+  return `${accountId}\0subject\0${subject}\0participant\0${email}`;
+}
+
+type FallbackAnchor = {
+  node: string;
+  date: number;
+};
+
 class DisjointSet {
   private parents = new Map<string, string>();
 
@@ -89,6 +112,7 @@ export function buildThreads(
   const separator = "\0";
   const ids = new DisjointSet();
   const messageNodes = new Map<number, string>();
+  const anchorNodesBySubjectParticipant = new Map<string, FallbackAnchor[]>();
 
   for (const m of messages) {
     const selfId = cleanMessageId(m.headerMessageId);
@@ -103,6 +127,42 @@ export function buildThreads(
       .filter(Boolean);
     for (const relatedId of relatedIds) {
       ids.union(selfNode, `${m.accountId}${separator}msg${separator}${relatedId}`);
+    }
+
+    if (anchorOrigins.has(m.origin)) {
+      const subject = normalizeSubject(m.subject);
+      if (!subject) continue;
+      for (const email of participantEmails(m, myEmails)) {
+        const key = subjectParticipantKey(m.accountId, subject, email);
+        const anchors = anchorNodesBySubjectParticipant.get(key) ?? [];
+        anchors.push({ node: selfNode, date: m.date });
+        anchorNodesBySubjectParticipant.set(key, anchors);
+      }
+    }
+  }
+
+  for (const m of messages) {
+    if (anchorOrigins.has(m.origin)) continue;
+    if (m.origin !== "sent") continue;
+    const subject = normalizeSubject(m.subject);
+    if (!subject) continue;
+    const selfNode = messageNodes.get(m.id);
+    if (!selfNode) continue;
+    const candidates = new Map<string, FallbackAnchor>();
+    for (const email of participantEmails(m, myEmails)) {
+      const key = subjectParticipantKey(m.accountId, subject, email);
+      const anchors = anchorNodesBySubjectParticipant.get(key);
+      if (!anchors) continue;
+      for (const anchor of anchors) candidates.set(anchor.node, anchor);
+    }
+    const best = [...candidates.values()].sort((a, b) => {
+      const aAfter = a.date > m.date;
+      const bAfter = b.date > m.date;
+      if (aAfter !== bAfter) return aAfter ? 1 : -1;
+      return Math.abs(a.date - m.date) - Math.abs(b.date - m.date);
+    })[0];
+    if (best) {
+      ids.union(selfNode, best.node);
     }
   }
 
