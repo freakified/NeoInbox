@@ -216,15 +216,12 @@ export const MessageBody = ({
           )}
           <iframe
             ref={iframeRef}
+            className={s.frame}
             sandbox="allow-same-origin"
             srcDoc={activeSrcdoc}
             onLoad={onLoad}
             style={{
-              width: "100%",
               height,
-              border: "none",
-              display: "block",
-              boxSizing: "border-box",
             }}
             title={m.subject}
           />

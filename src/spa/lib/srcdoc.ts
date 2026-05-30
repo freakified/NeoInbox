@@ -217,7 +217,8 @@ const renderTextWithQuoteToggle = (raw: string): string => {
 
 const BASE_CSS = `<style>
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-       font-size:14px;margin:0;padding:8px;color:#111;word-break:break-word}
+       font-size:14px;margin:0!important;padding:8px!important;
+       box-sizing:border-box;color:#111;word-break:break-word}
   img{max-width:100%;height:auto}a{color:#1a73e8}
   blockquote{border-left:3px solid #ddd;margin:0 0 0 8px;padding-left:8px;color:#555}
   table{border-collapse:collapse}

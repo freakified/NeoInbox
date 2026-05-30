@@ -1,6 +1,14 @@
 .body {
   background: #fff;
-  padding-bottom: 8px;
+  padding: 8px 0;
+}
+
+.frame {
+  display: block;
+  width: calc(100% - 8px);
+  margin-right: 8px;
+  border: none;
+  box-sizing: border-box;
 }
 
 .loading {
