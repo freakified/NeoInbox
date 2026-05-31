@@ -4,7 +4,12 @@ import { PINNED_KEY } from "../shared/categories";
 import { log } from "../shared/log";
 import { scanCidRefs } from "../spa/lib/srcdoc";
 import type { AttachmentSummary, Category, RawMessage } from "../shared/types";
-import { messageStillIn, resolveArchiveFolder } from "./archiveFolders";
+import {
+  findByHeaderMessageIdInFolder,
+  messageStillIn,
+  messageStillInFolderByHeader,
+  resolveArchiveFolder,
+} from "./archiveFolders";
 
 const MESSAGE_DETAILS_VERSION = 2;
 
@@ -22,15 +27,31 @@ export class TrashFailedError extends Error {
   }
 }
 
-const folderIdOf = async (id: number): Promise<string> => {
-  const msg = (await messenger.messages.get(id)) as messenger.messages.MessageHeader & {
-    folder?: { id?: string };
-  };
-  return msg.folder?.id ?? "";
-}
-
 const isMessageNotFound = (e: unknown): boolean =>
   String((e as Error)?.message ?? e).includes("Message not found");
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+const messageSettledOutOfFolder = async (
+  messageId: number,
+  sourceFolderId: string,
+  headerMessageId: string,
+): Promise<boolean> => {
+  for (const delay of [150, 350, 700, 1200]) {
+    if (
+      !(await messageStillIn(messageId, sourceFolderId)) &&
+      !(await messageStillInFolderByHeader(sourceFolderId, headerMessageId))
+    ) {
+      return true;
+    }
+    await sleep(delay);
+  }
+  return (
+    !(await messageStillIn(messageId, sourceFolderId)) &&
+    !(await messageStillInFolderByHeader(sourceFolderId, headerMessageId))
+  );
+}
 
 export const classifyMessage = async (
   header: messenger.messages.MessageHeader,
@@ -59,8 +80,13 @@ export const pinMessage = async (id: number, pinned: boolean): Promise<void> => 
 
 export const doneMessage = async (id: number): Promise<void> => {
   let sourceFolderId = "";
+  let headerMessageId = "";
   try {
-    sourceFolderId = await folderIdOf(id);
+    const msg = await messenger.messages.get(id);
+    sourceFolderId = (msg as messenger.messages.MessageHeader & {
+      folder?: { id?: string };
+    }).folder?.id ?? "";
+    headerMessageId = msg.headerMessageId ?? "";
   } catch (e) {
     if (isMessageNotFound(e)) {
       log.info("archive", "message already gone; treating archive as settled", { id });
@@ -81,14 +107,16 @@ export const doneMessage = async (id: number): Promise<void> => {
     log.warn("archive", "messages.archive threw", { id, sourceFolderId, e: String(e) });
   }
 
-  if (!(await messageStillIn(id, sourceFolderId))) return;
+  if (await messageSettledOutOfFolder(id, sourceFolderId, headerMessageId)) return;
 
   log.warn("archive", "archive() did not move the message; attempting fallback", {
     id,
     sourceFolderId,
   });
 
-  const resolved = await resolveArchiveFolder(id);
+  const sourceCopy = await findByHeaderMessageIdInFolder(sourceFolderId, headerMessageId);
+  const moveId = sourceCopy?.id ?? id;
+  const resolved = await resolveArchiveFolder(moveId);
   if (!resolved) {
     throw new ArchiveFailedError(
       "No Archives folder configured for this account",
@@ -98,12 +126,12 @@ export const doneMessage = async (id: number): Promise<void> => {
 
   try {
     await messenger.messages.move(
-      [id],
+      [moveId],
       resolved.archiveFolderId as unknown as messenger.folders.MailFolderId,
     );
   } catch (e) {
     log.warn("archive", "fallback move failed", {
-      id,
+      id: moveId,
       sourceFolderId,
       archiveFolderId: resolved.archiveFolderId,
       e: String(e),
@@ -111,7 +139,7 @@ export const doneMessage = async (id: number): Promise<void> => {
     throw new ArchiveFailedError("Move to Archives failed", e);
   }
 
-  if (await messageStillIn(id, sourceFolderId)) {
+  if (!(await messageSettledOutOfFolder(id, sourceFolderId, headerMessageId))) {
     throw new ArchiveFailedError(
       "Move appeared to succeed but message still in source folder",
       archiveError,
@@ -120,6 +148,22 @@ export const doneMessage = async (id: number): Promise<void> => {
 }
 
 export const trashMessage = async (id: number): Promise<void> => {
+  let sourceFolderId = "";
+  let headerMessageId = "";
+  try {
+    const msg = await messenger.messages.get(id);
+    sourceFolderId = (msg as messenger.messages.MessageHeader & {
+      folder?: { id?: string };
+    }).folder?.id ?? "";
+    headerMessageId = msg.headerMessageId ?? "";
+  } catch (e) {
+    if (isMessageNotFound(e)) {
+      log.info("trash", "message already gone; treating trash as settled", { id });
+      return;
+    }
+    throw e;
+  }
+
   try {
     const deleteMessages = messenger.messages.delete as unknown as (
       ids: number[],
@@ -127,8 +171,41 @@ export const trashMessage = async (id: number): Promise<void> => {
     ) => Promise<void>;
     await deleteMessages([id], { deletePermanently: false });
   } catch (e) {
+    if (isMessageNotFound(e)) {
+      log.info("trash", "message disappeared during delete; treating as settled", { id });
+      return;
+    }
     log.warn("trash", "delete threw", { id, e: String(e) });
     throw new TrashFailedError("Delete failed", e);
+  }
+
+  if (await messageSettledOutOfFolder(id, sourceFolderId, headerMessageId)) return;
+
+  log.warn("trash", "delete() did not move the message; retrying", {
+    id,
+    sourceFolderId,
+  });
+  const sourceCopy = await findByHeaderMessageIdInFolder(sourceFolderId, headerMessageId);
+  const retryId = sourceCopy?.id ?? id;
+  try {
+    const deleteMessages = messenger.messages.delete as unknown as (
+      ids: number[],
+      options?: { deletePermanently?: boolean },
+    ) => Promise<void>;
+    await deleteMessages([retryId], { deletePermanently: false });
+  } catch (e) {
+    if (!isMessageNotFound(e)) {
+      log.warn("trash", "retry delete threw", { id: retryId, e: String(e) });
+      throw new TrashFailedError("Delete retry failed", e);
+    }
+    log.warn("trash", "retry target disappeared before delete settled", {
+      id: retryId,
+      sourceFolderId,
+    });
+  }
+
+  if (!(await messageSettledOutOfFolder(id, sourceFolderId, headerMessageId))) {
+    throw new TrashFailedError("Delete appeared to succeed but message still in source folder");
   }
 }
 
