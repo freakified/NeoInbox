@@ -45,6 +45,8 @@ export interface RawMessage {
   subject: string;
   author: string;
   recipients: string[];
+  ccList: string[];
+  bccList: string[];
   date: number;
   resurfacedAt?: number;
   size: number;

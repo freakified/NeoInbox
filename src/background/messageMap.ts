@@ -1,10 +1,14 @@
 import { PINNED_KEY } from "../shared/categories";
+import { parseAddressList } from "../shared/senders";
 import type { Category, MessageOrigin, RawMessage } from "../shared/types";
 
 type FolderRef = { id?: string; accountId?: string };
 type HeaderWithFolder = messenger.messages.MessageHeader & {
   folder?: FolderRef;
 };
+
+const normalizeAddressList = (addresses: readonly string[] | undefined): string[] =>
+  (addresses ?? []).flatMap(parseAddressList);
 
 export const headerToRawMessage = (
   header: messenger.messages.MessageHeader,
@@ -22,7 +26,9 @@ export const headerToRawMessage = (
     headerMessageId: header.headerMessageId ?? "",
     subject: header.subject ?? "",
     author: header.author ?? "",
-    recipients: header.recipients ?? [],
+    recipients: normalizeAddressList(header.recipients),
+    ccList: normalizeAddressList(header.ccList),
+    bccList: normalizeAddressList(header.bccList),
     date: header.date ? new Date(header.date).getTime() : 0,
     size: header.size ?? 0,
     read: header.read ?? false,

@@ -43,7 +43,7 @@
 .metaLine {
   min-width: 0;
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 8px;
 }
 
@@ -58,24 +58,30 @@
   color: #171717;
 }
 
-.addressLine {
+.openHeaderAddresses {
   min-width: 0;
+  flex: 1;
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 2px 8px;
   color: #525252;
   font-size: 14px;
   line-height: 1.35;
-  overflow: hidden;
+}
+
+.addressLine {
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .senderOpen {
-  min-width: 0;
   color: #171717;
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .toLabel {
@@ -85,9 +91,7 @@
 
 .recipients {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .recipient {

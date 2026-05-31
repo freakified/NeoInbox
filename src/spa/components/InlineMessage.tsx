@@ -10,14 +10,46 @@ import { MessageBody } from "./MessageBody";
 import { ExpandableRegion } from "./Motion";
 import s from "./InlineMessage.module.css";
 
-const displayAddressName = (raw: string): { name: string; email: string } => {
+const displayAddressName = (raw: string): { name: string; email: string } | null => {
   const parsed = parseSender(raw);
+  if (!parsed.email) return null;
   const email = parsed.email;
   const localPart = email.includes("@") ? parsed.localPart || email.split("@")[0] : "";
   return {
-    name: parsed.name || localPart || raw,
+    name: parsed.name || localPart || email,
     email,
   };
+};
+
+const displayAddressList = (
+  addresses: readonly string[] | undefined,
+): { name: string; email: string }[] =>
+  (addresses ?? []).map(displayAddressName).filter((addr) => addr !== null);
+
+const AddressList = ({
+  label,
+  recipients,
+}: {
+  label: string;
+  recipients: { name: string; email: string }[];
+}) => {
+  if (!recipients.length) return null;
+
+  return (
+    <span className={s.addressLine}>
+      <span className={s.toLabel}>{label}</span>
+      <span className={s.recipients}>
+        {recipients.map((recipient, index) => (
+          <span key={`${recipient.email}-${index}`}>
+            <span className={s.recipient} title={recipient.email}>
+              {recipient.name}
+            </span>
+            {index < recipients.length - 1 && ", "}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
 };
 
 export const InlineMessage = ({
@@ -36,8 +68,10 @@ export const InlineMessage = ({
   onTranslatedSubject?: (subject: string) => void;
 }) => {
   const name = senderName(m.author);
-  const sender = displayAddressName(m.author);
-  const recipients = m.recipients.map(displayAddressName);
+  const sender = displayAddressName(m.author) ?? { name: name || "(unknown)", email: "" };
+  const recipients = displayAddressList(m.recipients);
+  const ccRecipients = displayAddressList(m.ccList);
+  const bccRecipients = displayAddressList(m.bccList);
   const color = avatarColor(name);
   const [preview, setPreview] = useState<string | null>(null);
   const isDraft = m.origin === "draft";
@@ -75,26 +109,14 @@ export const InlineMessage = ({
         <div className={s.meta}>
           <div className={s.metaLine}>
             {isOpen ? (
-              <span className={s.addressLine}>
+              <span className={s.openHeaderAddresses}>
                 {isDraft && <span className={s.draftBadge}>Draft</span>}
                 <span className={s.senderOpen} title={sender.email}>
                   {sender.name}
                 </span>
-                {recipients.length > 0 && (
-                  <>
-                    <span className={s.toLabel}>to</span>
-                    <span className={s.recipients}>
-                      {recipients.map((recipient, index) => (
-                        <span key={`${recipient.email}-${index}`}>
-                          <span className={s.recipient} title={recipient.email}>
-                            {recipient.name}
-                          </span>
-                          {index < recipients.length - 1 && ", "}
-                        </span>
-                      ))}
-                    </span>
-                  </>
-                )}
+                <AddressList label="to" recipients={recipients} />
+                <AddressList label="cc" recipients={ccRecipients} />
+                <AddressList label="bcc" recipients={bccRecipients} />
               </span>
             ) : (
               <span className={clsx(s.sender, !m.read && s.senderUnread)}>
