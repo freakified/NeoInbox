@@ -128,7 +128,7 @@
 
 .expandedThread {
   width: calc(var(--bundle-open-width) + 32px);
-  margin: 8px calc((100% - (var(--bundle-open-width) + 32px)) / 2);
+  margin: 32px calc((100% - (var(--bundle-open-width) + 32px)) / 2);
   background: #fff;
   box-shadow: var(--shadow-elevation-3);
   overflow: clip;
@@ -136,6 +136,14 @@
 
 .innerRows {
   width: var(--bundle-inner-width);
+}
+
+.innerRows.rowsBeforeOpen {
+  margin-bottom: 32px;
+}
+
+.innerRows.rowsAfterOpen {
+  margin-top: 32px;
 }
 
 .previewList {

@@ -211,7 +211,7 @@ export const BundleSliceRow = ({
                 {expandedIdx >= 0 ? (
                   <>
                     {expandedIdx > 0 && (
-                      <RowGroup layoutId={`${bucketKey}-before`} className={s.innerRows}>
+                      <RowGroup layoutId={`${bucketKey}-before`} className={clsx(s.innerRows, s.rowsBeforeOpen)}>
                         {items.slice(0, expandedIdx).map((t) => (
                           <ThreadRow
                             key={t.id}
@@ -232,7 +232,7 @@ export const BundleSliceRow = ({
                       />
                     </MotionSurface>
                     {expandedIdx < items.length - 1 && (
-                      <RowGroup layoutId={`${bucketKey}-after`} className={s.innerRows}>
+                      <RowGroup layoutId={`${bucketKey}-after`} className={clsx(s.innerRows, s.rowsAfterOpen)}>
                         {items.slice(expandedIdx + 1).map((t) => (
                           <ThreadRow
                             key={t.id}
