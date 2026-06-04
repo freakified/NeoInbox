@@ -247,9 +247,10 @@
 }
 
 .content {
-  max-width: 64rem;
+  box-sizing: border-box;
+  width: 80vw;
   margin: 0 auto;
-  padding: 24px 32px;
+  padding: 24px 48px;
   transition: padding-left 160ms ease;
 }
 
@@ -263,12 +264,10 @@
 }
 
 .sectionLabelWrap {
-  max-width: 48rem;
   margin: 0 auto;
 }
 
 .sectionHeader {
-  max-width: 48rem;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -307,7 +306,6 @@
 }
 
 .card {
-  max-width: 48rem;
   margin: 0 auto;
   background: #fff;
   box-shadow: var(--shadow-elevation-1);
@@ -319,16 +317,14 @@
 }
 
 .expandedThread {
-  max-width: calc(48rem + 96px);
-  width: 100%;
-  margin: 24px auto;
+  width: calc(100% + 64px);
+  margin: 24px -32px;
   background: #fff;
   box-shadow: var(--shadow-elevation-3);
   overflow: clip;
 }
 
 .loadMoreWrap {
-  max-width: 48rem;
   margin: 8px auto 32px;
   display: flex;
   justify-content: center;
@@ -402,7 +398,13 @@
   }
 
   .content {
+    width: auto;
     padding: 18px 12px;
+  }
+
+  .expandedThread {
+    width: 100%;
+    margin: 24px auto;
   }
 
   .drawer {

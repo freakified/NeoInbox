@@ -1,14 +1,7 @@
 .slice {
-  --thread-row-max: 48rem;
-  --bundle-side-gutter: 32px;
-  --bundle-open-width: min(
-    calc(100% + (var(--bundle-side-gutter) * 2)),
-    calc(var(--thread-row-max) + (var(--bundle-side-gutter) * 2))
-  );
-  --bundle-inner-width: min(
-    calc(100% - (var(--bundle-side-gutter) * 2)),
-    var(--thread-row-max)
-  );
+  --bundle-side-gutter: 24px;
+  --bundle-open-width: calc(100% + (var(--bundle-side-gutter) * 2));
+  --bundle-inner-width: calc(100% - (var(--bundle-side-gutter) * 2));
   width: 100%;
   overflow: hidden;
 }
@@ -45,7 +38,6 @@
 
 .openHeader {
   width: var(--bundle-inner-width);
-  max-width: var(--thread-row-max);
   margin: 0 auto;
   box-sizing: border-box;
   display: flex;
@@ -118,7 +110,6 @@
 
 .bucketHeader {
   width: var(--bundle-inner-width);
-  max-width: var(--thread-row-max);
   margin: 0 auto;
   padding: 16px 0 8px 12px;
   display: flex;
@@ -152,4 +143,15 @@
 
 .unreadSender {
   font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .slice {
+    --bundle-side-gutter: 0px;
+  }
+
+  .expandedThread {
+    width: 100%;
+    margin: 32px auto;
+  }
 }
