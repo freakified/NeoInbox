@@ -79,6 +79,50 @@ const QUOTE_HEADER_RE =
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+const escapeAttr = (s: string): string =>
+  escapeHtml(s).replace(/"/g, "&quot;");
+
+const URL_RE = /https?:\/\/[^\s<>"']+/gi;
+const TRAILING_URL_PUNCT_RE = /[.,!?;:]+$/;
+
+const splitTrailingUrlPunctuation = (url: string): [string, string] => {
+  let link = url;
+  let trailing = "";
+
+  const punct = link.match(TRAILING_URL_PUNCT_RE)?.[0] ?? "";
+  if (punct) {
+    link = link.slice(0, -punct.length);
+    trailing = punct + trailing;
+  }
+
+  while (/[)\]}]$/.test(link)) {
+    const close = link.at(-1)!;
+    const open = close === ")" ? "(" : close === "]" ? "[" : "{";
+    if (link.split(open).length >= link.split(close).length) break;
+    link = link.slice(0, -1);
+    trailing = close + trailing;
+  }
+
+  return [link, trailing];
+};
+
+const renderTextLinks = (raw: string): string => {
+  let html = "";
+  let lastIndex = 0;
+
+  raw.replace(URL_RE, (match, offset: number) => {
+    const [url, trailing] = splitTrailingUrlPunctuation(match);
+    if (!url) return match;
+    html += escapeHtml(raw.slice(lastIndex, offset));
+    html += `<a href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>`;
+    html += escapeHtml(trailing);
+    lastIndex = offset + match.length;
+    return match;
+  });
+
+  return html + escapeHtml(raw.slice(lastIndex));
+};
+
 const isWhitespaceText = (n: Node): boolean =>
   n.nodeType === Node.TEXT_NODE && !(n.textContent ?? "").trim();
 
@@ -174,7 +218,7 @@ const markQuotedHtml = (doc: Document): void => {
 const renderTextWithQuoteToggle = (raw: string): string => {
   const preStyle = "white-space:pre-wrap;font-family:inherit;margin:0";
   const wrap = (s: string, cls = "") =>
-    `<pre${cls ? ` class="${cls}"` : ""} style="${preStyle}">${escapeHtml(s)}</pre>`;
+    `<pre${cls ? ` class="${cls}"` : ""} style="${preStyle}">${renderTextLinks(s)}</pre>`;
 
   const lines = raw.split("\n");
   const isQuoted = (line: string) => /^\s*>/.test(line);

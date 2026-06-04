@@ -202,9 +202,9 @@ export const wireSyncEngine = (): void => {
       try {
         const fresh = await messenger.messages.get(header.id);
         const cached = await db.messages.get(header.id);
+        const folderId = folderIdOf(fresh);
         let origin = cached?.origin;
-        if (!origin) {
-          const folderId = folderIdOf(fresh);
+        if (!origin || cached?.folderId !== folderId) {
           origin = await originForFolder(folderId);
         }
         if (!origin) return;
