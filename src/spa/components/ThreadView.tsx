@@ -10,6 +10,8 @@ import { ReplyFooter } from "./ReplyFooter";
 import { SnoozeMenu } from "./SnoozeMenu";
 import s from "./ThreadView.module.css";
 
+const MIDDLE_COLLAPSE_THREAD_THRESHOLD = 8;
+
 export const ThreadView = ({
   thread: t,
 }: {
@@ -63,6 +65,7 @@ export const ThreadView = ({
       [latestMessage.id]: (prev[latestMessage.id] ?? 0) + 1,
     }));
   };
+  const shouldCollapseMiddleMessages = t.messages.length > MIDDLE_COLLAPSE_THREAD_THRESHOLD;
 
   return (
     <div>
@@ -97,7 +100,7 @@ export const ThreadView = ({
       </div>
 
       <div className={s.messages}>
-        {t.messages.length <= 2 ? (
+        {!shouldCollapseMiddleMessages ? (
           t.messages.map((m) => (
             <InlineMessage
               key={m.id}
