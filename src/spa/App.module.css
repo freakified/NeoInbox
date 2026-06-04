@@ -248,10 +248,10 @@
 
 .content {
   box-sizing: border-box;
-  width: 80vw;
+  width: min(calc(100vw - 96px), max(80vw, 960px));
   margin: 0 auto;
   padding: 24px 48px;
-  transition: padding-left 160ms ease;
+  transition: margin-left 160ms ease, width 160ms ease;
 }
 
 .emptyText {
@@ -359,7 +359,9 @@
 
 @media (min-width: 980px) {
   .drawerOpen .content {
-    padding-left: calc(var(--drawer-width) + 32px);
+    width: min(calc(100vw - var(--drawer-width) - 64px), max(80vw, 960px));
+    margin-left: calc(var(--drawer-width) + 32px);
+    margin-right: 32px;
   }
 }
 
