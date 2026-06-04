@@ -1,12 +1,22 @@
 .slice {
+  --thread-row-max: 48rem;
+  --bundle-side-gutter: 32px;
+  --bundle-open-width: min(
+    calc(100% + (var(--bundle-side-gutter) * 2)),
+    calc(var(--thread-row-max) + (var(--bundle-side-gutter) * 2))
+  );
+  --bundle-inner-width: min(
+    calc(100% - (var(--bundle-side-gutter) * 2)),
+    var(--thread-row-max)
+  );
   width: 100%;
   overflow: hidden;
 }
 
 .sliceOpen {
   background: #e5e5e5;
-  max-width: calc(48rem + 64px);
-  margin: 24px auto;
+  width: var(--bundle-open-width);
+  margin: 24px calc((100% - var(--bundle-open-width)) / 2);
   overflow: visible;
 }
 
@@ -34,7 +44,8 @@
 }
 
 .openHeader {
-  max-width: 48rem;
+  width: var(--bundle-inner-width);
+  max-width: var(--thread-row-max);
   margin: 0 auto;
   box-sizing: border-box;
   display: flex;
@@ -106,7 +117,8 @@
 }
 
 .bucketHeader {
-  max-width: 48rem;
+  width: var(--bundle-inner-width);
+  max-width: var(--thread-row-max);
   margin: 0 auto;
   padding: 16px 0 8px 12px;
   display: flex;
@@ -115,11 +127,15 @@
 }
 
 .expandedThread {
-  width: calc(100% + 32px);
-  margin: 8px -16px;
+  width: calc(var(--bundle-open-width) + 32px);
+  margin: 8px calc((100% - (var(--bundle-open-width) + 32px)) / 2);
   background: #fff;
   box-shadow: var(--shadow-elevation-3);
   overflow: clip;
+}
+
+.innerRows {
+  width: var(--bundle-inner-width);
 }
 
 .previewList {
