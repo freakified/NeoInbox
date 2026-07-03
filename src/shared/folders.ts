@@ -4,39 +4,70 @@ export interface InboxFolder {
   accountId: string;
 }
 
+interface FolderRoles {
+  inbox: InboxFolder[];
+  sent: InboxFolder[];
+  drafts: InboxFolder[];
+  archives: InboxFolder[];
+}
+
+/** TTL is a safety net for missed folder events; events invalidate eagerly. */
+const CACHE_TTL_MS = 5 * 60_000;
+
+let cache: { roles: FolderRoles; at: number } | null = null;
+let pending: Promise<FolderRoles> | null = null;
+
+export const invalidateFolderCache = (): void => {
+  cache = null;
+};
+
 export const collectInboxFolders = async (): Promise<InboxFolder[]> => {
-  return collectFolders(isInbox);
+  return (await getRoles()).inbox;
 }
 
 export const collectSentFolders = async (): Promise<InboxFolder[]> => {
-  return collectFolders(isSent);
+  return (await getRoles()).sent;
 }
 
 export const collectDraftFolders = async (): Promise<InboxFolder[]> => {
-  return collectFolders(isDraft);
+  return (await getRoles()).drafts;
 }
 
 export const collectArchiveFolders = async (): Promise<InboxFolder[]> => {
-  return collectFolders(isArchive);
+  return (await getRoles()).archives;
 }
 
-const collectFolders = async (
-  match: (f: messenger.folders.MailFolder) => boolean,
-): Promise<InboxFolder[]> => {
+const getRoles = async (): Promise<FolderRoles> => {
+  if (cache && Date.now() - cache.at < CACHE_TTL_MS) return cache.roles;
+  pending ??= loadRoles()
+    .then((roles) => {
+      cache = { roles, at: Date.now() };
+      return roles;
+    })
+    .finally(() => {
+      pending = null;
+    });
+  return pending;
+}
+
+const loadRoles = async (): Promise<FolderRoles> => {
   const accounts = await messenger.accounts.list();
-  const out: InboxFolder[] = [];
+  const roles: FolderRoles = { inbox: [], sent: [], drafts: [], archives: [] };
   for (const acc of accounts) {
     walk(acc.folders ?? [], (f) => {
       if (!f.id) return;
-      if (!match(f)) return;
-      out.push({
+      const entry: InboxFolder = {
         id: f.id,
         name: f.name ?? f.path,
         accountId: f.accountId ?? acc.id,
-      });
+      };
+      if (isInbox(f)) roles.inbox.push(entry);
+      if (isSent(f)) roles.sent.push(entry);
+      if (isDraft(f)) roles.drafts.push(entry);
+      if (isArchive(f)) roles.archives.push(entry);
     });
   }
-  return out;
+  return roles;
 }
 
 const isInbox = (f: messenger.folders.MailFolder): boolean => {

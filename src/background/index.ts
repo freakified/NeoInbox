@@ -7,12 +7,18 @@ import {
 } from "./ingest";
 import { headerToRawMessage } from "./messageMap";
 import { handleSnoozeAlarm, snoozeAlarmName, snoozeMessage } from "./snooze";
-import { getLastProgress, runBackfill, reclassifyAll } from "./backfill";
+import {
+  getLastProgress,
+  reclassifyAll,
+  runBackfill,
+  runIncrementalSync,
+  runStartupSync,
+} from "./backfill";
 import { pushMyEmails, wireSyncEngine } from "./sync";
 import { broadcast, onCommand, startPortServer } from "./port";
 import { setOverride } from "../classifier/overrides";
 import { db } from "../store/db";
-import { collectArchiveFolders } from "../shared/folders";
+import { collectArchiveFolders, invalidateFolderCache } from "../shared/folders";
 import { SNOOZED_KEY } from "../shared/categories";
 import { log } from "../shared/log";
 
@@ -125,12 +131,35 @@ messenger.runtime.onInstalled.addListener((details) => {
 
 messenger.runtime.onStartup.addListener(() => {
   void ensureSnoozeAlarmsRestored().catch((e) => log.warn("snooze", "restore alarms failed", e));
-  void runBackfill().catch((e) => log.warn("backfill", "failed", e));
+  void runStartupSync().catch((e) => log.warn("backfill", "startup sync failed", e));
 });
 
+const SYNC_ALARM = "neoinbox-periodic-sync";
+messenger.alarms.create(SYNC_ALARM, { periodInMinutes: 15, delayInMinutes: 15 });
+
 messenger.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === SYNC_ALARM) {
+    try {
+      await runIncrementalSync();
+    } catch (e) {
+      log.warn("backfill", "periodic sync failed", e);
+    }
+    return;
+  }
   await processSnoozeAlarm(alarm.name);
 });
+
+for (const event of [
+  messenger.folders.onCreated,
+  messenger.folders.onRenamed,
+  messenger.folders.onMoved,
+  messenger.folders.onDeleted,
+  messenger.folders.onUpdated,
+]) {
+  (event as { addListener?: (cb: () => void) => void } | undefined)?.addListener?.(
+    invalidateFolderCache,
+  );
+}
 
 wireSyncEngine();
 startPortServer();

@@ -1,3 +1,4 @@
+import { withTimeout } from "./backfill";
 import { applyMessageDetailsForOrigin, classifyMessage } from "./ingest";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
@@ -54,6 +55,21 @@ const getFolderIds = async (
   }
 };
 
+const cacheOne = async (
+  header: messenger.messages.MessageHeader,
+  origin: MessageOrigin,
+): Promise<RawMessage> => {
+  const fresh = await messenger.messages.get(header.id);
+  const logicalOrigin = origin === "done" && (fresh.tags ?? []).includes(SNOOZED_KEY)
+    ? "inbox"
+    : origin;
+  const cat = logicalOrigin === "inbox" ? await classifyMessage(fresh) : null;
+  const raw = headerToRawMessage(fresh, logicalOrigin, cat);
+  const cached = await db.messages.get(fresh.id);
+  await applyMessageDetailsForOrigin(raw, cached);
+  return raw;
+};
+
 const cacheMessages = async (
   headers: readonly messenger.messages.MessageHeader[],
   origin: MessageOrigin,
@@ -61,15 +77,7 @@ const cacheMessages = async (
   const out: RawMessage[] = [];
   for (const header of headers) {
     try {
-      const fresh = await messenger.messages.get(header.id);
-      const logicalOrigin = origin === "done" && (fresh.tags ?? []).includes(SNOOZED_KEY)
-        ? "inbox"
-        : origin;
-      const cat = logicalOrigin === "inbox" ? await classifyMessage(fresh) : null;
-      const raw = headerToRawMessage(fresh, logicalOrigin, cat);
-      const cached = await db.messages.get(fresh.id);
-      await applyMessageDetailsForOrigin(raw, cached);
-      out.push(raw);
+      out.push(await withTimeout(cacheOne(header, origin), `cache message ${header.id}`));
     } catch (e) {
       log.warn("sync", "cacheMessages per-msg failed", {
         id: header.id,

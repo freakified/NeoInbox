@@ -91,8 +91,10 @@ export interface OverrideRecord {
 
 export interface FolderCursorRecord {
   folderId: string;
-  lastMessageId: number;
-  done: boolean;
+  /** Newest message date (ms) seen in this folder; incremental scans query from here minus an overlap. */
+  maxDate: number;
+  /** When the last full scan of this folder completed (ms); 0 = never. */
+  fullScanAt: number;
 }
 
 export interface TranslationRecord {

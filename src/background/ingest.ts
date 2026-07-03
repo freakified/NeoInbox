@@ -11,7 +11,7 @@ import {
   resolveArchiveFolder,
 } from "./archiveFolders";
 
-const MESSAGE_DETAILS_VERSION = 2;
+export const MESSAGE_DETAILS_VERSION = 2;
 
 export class ArchiveFailedError extends Error {
   constructor(message: string, readonly cause?: unknown) {
@@ -274,6 +274,16 @@ export const extractMessageDetails = async (
 
   return { attachments, references, inReplyTo };
 }
+
+/**
+ * True for rows ingested headers-first (detailsVersion 0) or predating the
+ * details fields entirely; fillMissingDetails hydrates these in the background.
+ */
+export const needsMessageDetails = (m: RawMessage): boolean =>
+  !Array.isArray(m.attachments) ||
+  !Array.isArray(m.references) ||
+  !Array.isArray(m.inReplyTo) ||
+  (m.detailsVersion ?? 0) === 0;
 
 export const canReuseMessageDetails = (
   cached: RawMessage | undefined,
