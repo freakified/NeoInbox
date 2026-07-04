@@ -9,26 +9,51 @@ import { headerToRawMessage } from "./messageMap";
 import { handleSnoozeAlarm, snoozeAlarmName, snoozeMessage } from "./snooze";
 import {
   getLastProgress,
-  reclassifyAll,
   runBackfill,
   runIncrementalSync,
   runStartupSync,
 } from "./backfill";
 import { pushMyEmails, wireSyncEngine } from "./sync";
 import { broadcast, onCommand, startPortServer } from "./port";
-import { setOverride } from "../classifier/overrides";
+import { invalidateRouteRules } from "../classifier/routeRules";
+import { domainMatches } from "../classifier/features";
 import { db } from "../store/db";
 import { collectArchiveFolders, invalidateFolderCache } from "../shared/folders";
 import { SNOOZED_KEY } from "../shared/categories";
+import { parseSender } from "../shared/senders";
 import { log } from "../shared/log";
+import type { RouteRuleRecord } from "../shared/types";
 
 const INBOX_URL = "inbox.html";
 
-const extractDomain = (author: string): string => {
-  const m = author.match(/<([^>]+)>/);
-  const email = (m?.[1] ?? author).toLowerCase();
-  const at = email.lastIndexOf("@");
-  return at >= 0 ? email.slice(at + 1) : "";
+/**
+ * Re-run the full classify pipeline for cached inbox messages that match a
+ * rule's key. Adding, reassigning, or deleting a rule can only change the
+ * category of messages its key matches, so this candidate set is sufficient.
+ */
+const reclassifyRuleMatches = async (rule: RouteRuleRecord): Promise<void> => {
+  const cached = (await db.messages.toArray()).filter((m) => {
+    if (m.origin !== "inbox") return false;
+    if (rule.type === "subject_keyword") return m.subject.toLowerCase().includes(rule.value);
+    const sender = parseSender(m.author);
+    if (rule.type === "email") return sender.email === rule.value;
+    return domainMatches(sender.domain, [rule.value]);
+  });
+  const updated = [];
+  for (const cmsg of cached) {
+    try {
+      const header = await messenger.messages.get(cmsg.id);
+      const cat = await classifyMessage(header);
+      const fresh = await messenger.messages.get(cmsg.id);
+      const raw = headerToRawMessage(fresh, "inbox", cat);
+      await applyMessageDetails(raw, cmsg);
+      await db.messages.put(raw);
+      updated.push(raw);
+    } catch (e) {
+      log.warn("route-rule", "reclassify failed", { id: cmsg.id, e });
+    }
+  }
+  if (updated.length) broadcast({ type: "delta", updated });
 }
 
 const openOrFocusInbox = async (): Promise<void> => {
@@ -267,52 +292,39 @@ onCommand(async (msg) => {
       }
       return;
     }
-    case "override": {
-      await setOverride(msg.senderDomain, msg.category);
-      const wantedDomain = msg.senderDomain.toLowerCase();
-      const cached = (await db.messages.toArray()).filter(
-        (m) => m.origin === "inbox" && extractDomain(m.author) === wantedDomain,
-      );
-      const updated = [];
-      for (const cmsg of cached) {
-        try {
-          const header = await messenger.messages.get(cmsg.id);
-          const cat = await classifyMessage(header);
-          const fresh = await messenger.messages.get(cmsg.id);
-          const raw = headerToRawMessage(fresh, "inbox", cat);
-          await applyMessageDetails(raw, cmsg);
-          await db.messages.put(raw);
-          updated.push(raw);
-        } catch (e) {
-          log.warn("override", "reclassify failed", { id: cmsg.id, e });
-        }
-      }
-      if (updated.length) broadcast({ type: "delta", updated });
-      return;
-    }
-    case "set-bundle-rule": {
-      await db.bundleRules.put(msg.rule);
-      void reclassifyAll().catch((e) =>
-        log.warn("reclassify", "after set-bundle-rule failed", e),
+    case "set-route-rule": {
+      // One destination per (type, value) key: reassign rather than duplicate.
+      const existing = await db.routeRules
+        .where("[type+value]")
+        .equals([msg.rule.type, msg.rule.value])
+        .first();
+      if (existing && existing.id !== msg.rule.id) await db.routeRules.delete(existing.id);
+      await db.routeRules.put(msg.rule);
+      invalidateRouteRules();
+      void reclassifyRuleMatches(msg.rule).catch((e) =>
+        log.warn("reclassify", "after set-route-rule failed", e),
       );
       return;
     }
-    case "delete-bundle-rule": {
-      await db.bundleRules.delete(msg.id);
-      void reclassifyAll().catch((e) =>
-        log.warn("reclassify", "after delete-bundle-rule failed", e),
+    case "delete-route-rule": {
+      const rule = await db.routeRules.get(msg.id);
+      if (!rule) return;
+      await db.routeRules.delete(msg.id);
+      invalidateRouteRules();
+      void reclassifyRuleMatches(rule).catch((e) =>
+        log.warn("reclassify", "after delete-route-rule failed", e),
       );
       return;
     }
     case "set-custom-bundle": {
+      // Bundle records are display metadata only; rules arrive separately.
       await db.customBundles.put(msg.bundle);
-      void reclassifyAll().catch((e) =>
-        log.warn("reclassify", "after set-custom-bundle failed", e),
-      );
       return;
     }
     case "delete-custom-bundle": {
       await db.customBundles.delete(msg.id);
+      await db.routeRules.where("target").equals(msg.id).delete();
+      invalidateRouteRules();
       const affected = (await db.messages.toArray()).filter(
         (m) => m.origin === "inbox" && m.category === msg.id,
       );

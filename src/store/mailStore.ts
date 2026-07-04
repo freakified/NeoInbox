@@ -9,7 +9,7 @@ import {
   type ClientMsg,
   type ServerMsg,
 } from "../shared/messaging";
-import type { BuiltinCategory, BundleRuleRecord, CustomBundleRecord, OverrideRecord, RawMessage, SnoozeRecord } from "../shared/types";
+import type { Category, CustomBundleRecord, RawMessage, RouteRuleRecord, SnoozeRecord } from "../shared/types";
 
 export type { Stream, StreamItem, StreamSection, StreamView } from "./stream";
 
@@ -37,11 +37,17 @@ type PendingOp =
   | { kind: "snooze"; message: RawMessage; wakeAt: number }
   | { kind: "trash"; message: RawMessage };
 
+export interface ToastAction {
+  label: string;
+  run: () => void;
+}
+
 export interface ToastRecord {
   id: string;
   message: string;
   retry?: { kind: "done" | "snooze" | "trash"; messageId: number; wakeAt?: number };
   undo?: { messageIds: number[]; kind: "done" | "trash" };
+  actions?: ToastAction[];
 }
 
 interface MailStore {
@@ -50,8 +56,7 @@ interface MailStore {
   hydrated: boolean;
   syncProgress: SyncProgress | null;
   customBundles: CustomBundleRecord[];
-  bundleRules: BundleRuleRecord[];
-  overrides: OverrideRecord[];
+  routeRules: RouteRuleRecord[];
   connectionState: ConnectionState;
   pendingOps: Record<number, PendingOp>;
   snoozesByMessageId: Record<number, SnoozeRecord>;
@@ -62,16 +67,16 @@ interface MailStore {
   doneThread: (messageIds: number[]) => void;
   snoozeThread: (messageIds: number[], wakeAt: number) => void;
   trashThread: (messageIds: number[]) => void;
-  setOverride: (senderDomain: string, category: BuiltinCategory | null) => void;
-  setBundleRule: (rule: BundleRuleRecord) => void;
-  deleteBundleRule: (id: string) => void;
+  setRouteRule: (rule: RouteRuleRecord) => void;
+  deleteRouteRule: (id: string) => void;
+  applyCategoryLocally: (messageIds: number[], category: Category | null) => void;
   setCustomBundle: (bundle: CustomBundleRecord) => void;
   deleteCustomBundle: (id: string) => void;
   retryBackfill: () => void;
   retryToast: (toastId: string) => void;
   undoToast: (toastId: string) => void;
   dismissToast: (toastId: string) => void;
-  notify: (message: string) => void;
+  notify: (message: string, actions?: ToastAction[]) => void;
 }
 
 const UNDO_TIMEOUT_MS = 5000;
@@ -126,8 +131,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   hydrated: false,
   syncProgress: null,
   customBundles: [],
-  bundleRules: [],
-  overrides: [],
+  routeRules: [],
   connectionState: "connected",
   pendingOps: {},
   snoozesByMessageId: {},
@@ -135,11 +139,10 @@ export const useMailStore = create<MailStore>((set, get) => ({
 
   init: async () => {
     if (get().hydrated) return;
-    const [all, rawBundles, bundleRules, overrides, snoozes] = await Promise.all([
+    const [all, rawBundles, routeRules, snoozes] = await Promise.all([
       db.messages.toArray(),
       db.customBundles.toArray(),
-      db.bundleRules.toArray(),
-      db.overrides.toArray(),
+      db.routeRules.toArray(),
       db.snoozes.toArray(),
     ]);
     const customBundles = rawBundles.sort((a, b) => a.order - b.order);
@@ -147,7 +150,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
     for (const m of all) byId[m.id] = m;
     const snoozesByMessageId: Record<number, SnoozeRecord> = {};
     for (const snooze of snoozes) snoozesByMessageId[snooze.messageId] = snooze;
-    set({ messagesById: byId, hydrated: true, customBundles, bundleRules, overrides, snoozesByMessageId });
+    set({ messagesById: byId, hydrated: true, customBundles, routeRules, snoozesByMessageId });
 
     const runtime = messenger.runtime as unknown as RuntimeWithConnect;
     if (!runtime.connect) {
@@ -274,24 +277,28 @@ export const useMailStore = create<MailStore>((set, get) => ({
     undoTimers.set(toastId, timer);
   },
 
-  setOverride: (senderDomain, category) => {
-    const key = senderDomain.toLowerCase();
-    const filtered = get().overrides.filter((o) => o.senderDomain !== key);
-    const overrides = category ? [...filtered, { senderDomain: key, category }] : filtered;
-    set({ overrides });
-    send({ type: "override", senderDomain, category });
-  },
-
-  setBundleRule: (rule) => {
-    const rules = get().bundleRules.filter((r) => r.id !== rule.id);
+  setRouteRule: (rule) => {
+    // Mirror the background's invariant: one destination per (type, value) key.
+    const rules = get().routeRules.filter(
+      (r) => r.id !== rule.id && !(r.type === rule.type && r.value === rule.value),
+    );
     rules.push(rule);
-    set({ bundleRules: rules });
-    send({ type: "set-bundle-rule", rule });
+    set({ routeRules: rules });
+    send({ type: "set-route-rule", rule });
   },
 
-  deleteBundleRule: (id) => {
-    set({ bundleRules: get().bundleRules.filter((r) => r.id !== id) });
-    send({ type: "delete-bundle-rule", id });
+  deleteRouteRule: (id) => {
+    set({ routeRules: get().routeRules.filter((r) => r.id !== id) });
+    send({ type: "delete-route-rule", id });
+  },
+
+  applyCategoryLocally: (messageIds, category) => {
+    const map = { ...get().messagesById };
+    for (const id of messageIds) {
+      const m = map[id];
+      if (m) map[id] = { ...m, category };
+    }
+    set({ messagesById: map });
   },
 
   setCustomBundle: (bundle) => {
@@ -303,7 +310,10 @@ export const useMailStore = create<MailStore>((set, get) => ({
   },
 
   deleteCustomBundle: (id) => {
-    set({ customBundles: get().customBundles.filter((b) => b.id !== id) });
+    set({
+      customBundles: get().customBundles.filter((b) => b.id !== id),
+      routeRules: get().routeRules.filter((r) => r.target !== id),
+    });
     send({ type: "delete-custom-bundle", id });
   },
 
@@ -360,8 +370,8 @@ export const useMailStore = create<MailStore>((set, get) => ({
     }
   },
 
-  notify: (message) => {
-    const toast: ToastRecord = { id: nextToastId(), message };
+  notify: (message, actions) => {
+    const toast: ToastRecord = { id: nextToastId(), message, actions };
     set({ toasts: [...get().toasts, toast].slice(-TOAST_LIMIT) });
   },
 }));
@@ -483,12 +493,8 @@ export const useCustomBundles = (): CustomBundleRecord[] => {
   return useMailStore((s) => s.customBundles);
 }
 
-export const useOverrides = (): OverrideRecord[] => {
-  return useMailStore((s) => s.overrides);
-}
-
-export const useBundleRules = (): BundleRuleRecord[] => {
-  return useMailStore((s) => s.bundleRules);
+export const useRouteRules = (): RouteRuleRecord[] => {
+  return useMailStore((s) => s.routeRules);
 }
 
 export const useToasts = (): ToastRecord[] => {

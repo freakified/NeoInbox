@@ -1,4 +1,4 @@
-import type { BuiltinCategory, BundleRuleRecord, CustomBundleRecord, Delta } from "./types";
+import type { CustomBundleRecord, Delta, RouteRuleRecord } from "./types";
 
 export const PORT_NAME = "neoinbox";
 
@@ -8,9 +8,8 @@ export type ClientMsg =
   | { type: "done"; messageId: number }
   | { type: "snooze"; messageId: number; wakeAt: number }
   | { type: "trash"; messageId: number }
-  | { type: "override"; senderDomain: string; category: BuiltinCategory | null }
-  | { type: "set-bundle-rule"; rule: BundleRuleRecord }
-  | { type: "delete-bundle-rule"; id: string }
+  | { type: "set-route-rule"; rule: RouteRuleRecord }
+  | { type: "delete-route-rule"; id: string }
   | { type: "set-custom-bundle"; bundle: CustomBundleRecord }
   | { type: "delete-custom-bundle"; id: string }
   | { type: "retry-backfill" };

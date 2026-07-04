@@ -1,8 +1,6 @@
 import type { Category } from "../shared/types";
 import type { Features } from "./features";
-import { matchesBundleRules } from "./bundleRules";
-import { lookupOverride } from "./overrides";
-import { matchesCustomBundles } from "./customBundles";
+import { matchRouteRules } from "./routeRules";
 import { matchesForums } from "./rules/forums";
 import { matchesTravel } from "./rules/travel";
 import { matchesPurchases } from "./rules/purchases";
@@ -23,13 +21,9 @@ export const classifyByRules = (f: Features): Category | null => {
 }
 
 export const classify = async (f: Features): Promise<Category | null> => {
-  const specificBundleRule = await matchesBundleRules(f, ["subject_keyword", "email"]);
-  if (specificBundleRule) return specificBundleRule;
-  const override = await lookupOverride(f.senderDomain);
-  if (override) return override;
-  const bundleRule = await matchesBundleRules(f, ["domain"]);
-  if (bundleRule) return bundleRule;
-  const custom = await matchesCustomBundles(f);
-  if (custom) return custom;
+  const routed = await matchRouteRules(f);
+  // "personal" is an explicit route to the unbundled inbox; it also suppresses
+  // the heuristics below.
+  if (routed) return routed === "personal" ? null : routed;
   return classifyByRules(f);
 }

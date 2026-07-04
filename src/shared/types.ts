@@ -11,9 +11,19 @@ export type BuiltinCategory =
 export type Category = string;
 export type MessageOrigin = "inbox" | "sent" | "draft" | "done";
 
-export interface CustomBundleRule {
-  type: "domain" | "email" | "subject_keyword";
+export type RouteRuleType = "domain" | "email" | "subject_keyword";
+
+/**
+ * A routing key: one (type, value) pair maps to exactly one target.
+ * `target` is a builtin category name, a custom bundle id, or "personal"
+ * (explicitly routed to the unbundled inbox).
+ */
+export interface RouteRuleRecord {
+  id: string;
+  target: Category;
+  type: RouteRuleType;
   value: string;
+  createdAt: number;
 }
 
 export interface CustomBundleRecord {
@@ -22,14 +32,6 @@ export interface CustomBundleRecord {
   color: string;
   icon: string;
   order: number;
-  rules: CustomBundleRule[];
-}
-
-export interface BundleRuleRecord {
-  id: string;
-  category: BuiltinCategory;
-  rule: CustomBundleRule;
-  createdAt: number;
 }
 
 export interface AttachmentSummary {
@@ -82,11 +84,6 @@ export interface SnoozeRecord {
   wakeAt: number;
   originFolderId: string;
   originAccountId: string;
-}
-
-export interface OverrideRecord {
-  senderDomain: string;
-  category: BuiltinCategory;
 }
 
 export interface FolderCursorRecord {

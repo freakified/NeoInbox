@@ -2,9 +2,10 @@ import { clsx } from "clsx";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { CATEGORIES, getCategoryMeta } from "../../shared/categories";
+import { findRouteRule, normalizeRuleValue, ruleTypeLabel } from "../../shared/routeRules";
 import { parseSender } from "../../shared/senders";
-import type { BuiltinCategory, Category, CustomBundleRule, Thread } from "../../shared/types";
-import { useBundleRules, useCustomBundles, useMailStore, useOverrides } from "../../store/mailStore";
+import type { BuiltinCategory, Category, RouteRuleType, Thread } from "../../shared/types";
+import { useCustomBundles, useMailStore, useRouteRules } from "../../store/mailStore";
 import {
   getRemoteImagePolicy,
   listTrustedImageSenders,
@@ -25,7 +26,11 @@ import {
 import { Icon } from "./Icon";
 import s from "./BundleManagerModal.module.css";
 
-type RuleType = CustomBundleRule["type"];
+type RuleType = RouteRuleType;
+interface DraftRule {
+  type: RuleType;
+  value: string;
+}
 type SelectedBundle = { kind: "builtin"; id: BuiltinCategory } | { kind: "custom"; id: string } | { kind: "new" };
 type SelectedPane = { kind: "general" } | { kind: "remoteImages" } | { kind: "translation" } | SelectedBundle;
 
@@ -34,12 +39,12 @@ interface BundleFormState {
   name: string;
   color: string;
   icon: string;
-  rules: CustomBundleRule[];
+  draftRules: DraftRule[];
   order: number;
 }
 
+/** Includes "personal" (the unbundled Inbox), sorted last, so its rules stay manageable. */
 const BUNDLE_CATEGORIES = Object.entries(CATEGORIES)
-  .filter(([cat]) => cat !== "personal")
   .sort(([, a], [, b]) => a.order - b.order)
   .map(([cat]) => cat as BuiltinCategory);
 
@@ -137,26 +142,6 @@ const CUSTOM_BUNDLE_ICONS: readonly string[] = [
   ...new Set(CUSTOM_BUNDLE_ICON_GROUPS.flatMap((group) => group.icons)),
 ];
 
-const ruleTypeLabel: Record<RuleType, string> = {
-  domain: "Domain",
-  email: "Email",
-  subject_keyword: "Subject contains",
-};
-
-const normalizeRule = (type: RuleType, value: string): string => {
-  let trimmed = value.trim().toLowerCase();
-  if (type === "subject_keyword") {
-    trimmed = trimmed
-      .replace(/^\/\.\*/, "")
-      .replace(/\.\*\/$/, "")
-      .replace(/^\.\*/, "")
-      .replace(/\.\*$/, "")
-      .trim();
-  }
-  if (type === "domain") return trimmed.replace(/^@/, "");
-  return trimmed;
-};
-
 const ruleDescription = (type: RuleType): string => {
   if (type === "domain") return "Matches any sender at this domain.";
   if (type === "email") return "Matches this exact sender address.";
@@ -164,19 +149,19 @@ const ruleDescription = (type: RuleType): string => {
 };
 
 const rulePreview = (type: RuleType, value: string): string => {
-  const normalized = normalizeRule(type, value);
+  const normalized = normalizeRuleValue(type, value);
   if (!normalized) return ruleDescription(type);
   if (type === "domain") return `Sender domain is ${normalized}`;
   if (type === "email") return `Sender is ${normalized}`;
   return `Subject contains "${normalized}"`;
 };
 
-const emptyForm = (order: number, seedRule?: CustomBundleRule): BundleFormState => ({
+const emptyForm = (order: number, seedRule?: DraftRule): BundleFormState => ({
   id: crypto.randomUUID(),
   name: "",
   color: PRESET_COLORS[0]!,
   icon: "label",
-  rules: seedRule ? [seedRule] : [],
+  draftRules: seedRule ? [seedRule] : [],
   order,
 });
 
@@ -188,23 +173,23 @@ const paneKey = (selected: SelectedPane): string =>
     ? selected.kind
     : bundleKey(selected);
 
-const hasRule = (rules: readonly CustomBundleRule[], rule: CustomBundleRule): boolean =>
-  rules.some((r) => r.type === rule.type && r.value.toLowerCase() === rule.value.toLowerCase());
+const hasDraftRule = (rules: readonly DraftRule[], rule: DraftRule): boolean =>
+  rules.some((r) => r.type === rule.type && r.value === rule.value);
 
 export const BundleManagerModal = ({
   onClose,
   thread,
   initialCategory,
+  startNewBundle,
 }: {
   onClose: () => void;
   thread?: Thread;
   initialCategory?: Category | null;
+  startNewBundle?: boolean;
 }) => {
   const customBundles = useCustomBundles();
-  const bundleRules = useBundleRules();
-  const overrides = useOverrides();
-  const setOverride = useMailStore((st) => st.setOverride);
-  const setBundleRule = useMailStore((st) => st.setBundleRule);
+  const routeRules = useRouteRules();
+  const setRouteRule = useMailStore((st) => st.setRouteRule);
   const setCustomBundle = useMailStore((st) => st.setCustomBundle);
   const deleteCustomBundle = useMailStore((st) => st.deleteCustomBundle);
   const notify = useMailStore((st) => st.notify);
@@ -219,20 +204,22 @@ export const BundleManagerModal = ({
     subject_keyword: thread?.subject ?? "",
   };
   const initialRuleType: RuleType = sender.domain ? "domain" : sender.email ? "email" : "subject_keyword";
-  const initialRuleValue = thread ? normalizeRule(initialRuleType, threadRuleDefaults[initialRuleType]) : "";
+  const initialRuleValue = thread ? normalizeRuleValue(initialRuleType, threadRuleDefaults[initialRuleType]) : "";
   const seededRule = initialRuleValue ? { type: initialRuleType, value: initialRuleValue } : undefined;
 
   const initialSelected = (): SelectedBundle => {
+    if (startNewBundle) return { kind: "new" };
     if (initialCategory && BUNDLE_CATEGORIES.includes(initialCategory as BuiltinCategory)) {
       return { kind: "builtin", id: initialCategory as BuiltinCategory };
     }
     if (initialCategory && customBundles.some((b) => b.id === initialCategory)) {
       return { kind: "custom", id: initialCategory };
     }
-    return { kind: "builtin", id: "updates" };
+    return { kind: "builtin", id: thread ? "personal" : "updates" };
   };
 
-  const selectedAtOpen: SelectedPane = thread || initialCategory ? initialSelected() : { kind: "general" };
+  const selectedAtOpen: SelectedPane =
+    thread || initialCategory || startNewBundle ? initialSelected() : { kind: "general" };
   const initialForm = (): BundleFormState => {
     if (selectedAtOpen.kind === "custom") {
       const bundle = customBundles.find((b) => b.id === selectedAtOpen.id);
@@ -242,7 +229,7 @@ export const BundleManagerModal = ({
           name: bundle.name,
           color: bundle.color,
           icon: bundle.icon,
-          rules: bundle.rules,
+          draftRules: [],
           order: bundle.order,
         };
       }
@@ -270,21 +257,53 @@ export const BundleManagerModal = ({
           name: bundle.name,
           color: bundle.color,
           icon: bundle.icon,
-          rules: bundle.rules,
+          draftRules: [],
           order: bundle.order,
         });
       }
     } else if (next.kind === "new") {
-      const activeRuleValue = normalizeRule(ruleType, ruleValue);
+      const activeRuleValue = normalizeRuleValue(ruleType, ruleValue);
       const activeRule = activeRuleValue ? { type: ruleType, value: activeRuleValue } : seededRule;
       setForm(emptyForm(10 + customBundles.length, activeRule));
     }
   };
 
+  const targetName = (target: Category): string => getCategoryMeta(target, customBundles).name;
+
+  /** The destination the composer's rules would go to; null while drafting a new bundle. */
+  const selectedTarget: Category | null =
+    selected.kind === "builtin" ? selected.id : selected.kind === "custom" ? selected.id : null;
+
+  const composerValue = normalizeRuleValue(ruleType, ruleValue);
+  const composerConflict = composerValue
+    ? findRouteRule(routeRules, ruleType, composerValue)
+    : undefined;
+  const conflictNote =
+    composerConflict && composerConflict.target !== selectedTarget
+      ? `Currently routed to ${targetName(composerConflict.target)} — adding it here will move it.`
+      : undefined;
+
   const saveForm = () => {
     const name = currentForm.name.trim();
     if (!name) return;
-    setCustomBundle({ ...currentForm, name });
+    setCustomBundle({
+      id: currentForm.id,
+      name,
+      color: currentForm.color,
+      icon: currentForm.icon,
+      order: currentForm.order,
+    });
+    if (selected.kind === "new") {
+      for (const draft of currentForm.draftRules) {
+        setRouteRule({
+          id: crypto.randomUUID(),
+          target: currentForm.id,
+          type: draft.type,
+          value: draft.value,
+          createdAt: Date.now(),
+        });
+      }
+    }
     notify(selected.kind === "new" ? `Created ${name}` : `Updated ${name}`);
     if (selected.kind === "new") setSelected({ kind: "custom", id: currentForm.id });
   };
@@ -300,52 +319,41 @@ export const BundleManagerModal = ({
     setForm((prev) => ({ ...prev, ...patch }));
   };
 
-  const addCustomRule = (rule: CustomBundleRule) => {
-    if (hasRule(currentForm.rules, rule)) {
-      notify(`${currentForm.name || "This bundle"} already has that rule`);
-      return;
-    }
-    setForm((prev) => ({ ...prev, rules: [...prev.rules, rule] }));
-  };
-
-  const removeCustomRule = (idx: number) => {
-    setForm((prev) => ({ ...prev, rules: prev.rules.filter((_, i) => i !== idx) }));
-  };
-
-  const addBuiltinRule = (category: BuiltinCategory, rule: CustomBundleRule) => {
-    const meta = CATEGORIES[category];
-    if (rule.type === "domain") {
-      const existing = overrides.find((o) => o.senderDomain === rule.value);
-      if (existing?.category === category) {
-        notify(`${rule.value} is already routed to ${meta.name}`);
-        return;
-      }
-      setOverride(rule.value, category);
-      notify(`Rule added to ${meta.name}`);
-      return;
-    }
-
-    const exists = bundleRules.some(
-      (row) =>
-        row.category === category &&
-        row.rule.type === rule.type &&
-        row.rule.value.toLowerCase() === rule.value,
-    );
-    if (exists) {
-      notify(`${meta.name} already has that rule`);
-      return;
-    }
-    setBundleRule({ id: crypto.randomUUID(), category, rule, createdAt: Date.now() });
-    notify(`Rule added to ${meta.name}`);
+  const removeDraftRule = (idx: number) => {
+    setForm((prev) => ({ ...prev, draftRules: prev.draftRules.filter((_, i) => i !== idx) }));
   };
 
   const addRule = () => {
-    const value = normalizeRule(ruleType, ruleValue);
+    const value = normalizeRuleValue(ruleType, ruleValue);
     if (!value) return;
-    const rule = { type: ruleType, value };
-    if (selected.kind === "builtin") addBuiltinRule(selected.id, rule);
-    else if (selected.kind === "custom" || selected.kind === "new") addCustomRule(rule);
-    setRuleValue(thread ? normalizeRule(ruleType, threadRuleDefaults[ruleType]) : "");
+    if (selected.kind === "new") {
+      const draft = { type: ruleType, value };
+      if (hasDraftRule(currentForm.draftRules, draft)) {
+        notify("This bundle already has that rule");
+      } else {
+        setForm((prev) => ({ ...prev, draftRules: [...prev.draftRules, draft] }));
+      }
+    } else if (selectedTarget) {
+      const previous = findRouteRule(routeRules, ruleType, value);
+      const name = targetName(selectedTarget);
+      if (previous?.target === selectedTarget) {
+        notify(`${value} is already routed to ${name}`);
+        return;
+      }
+      setRouteRule({
+        id: crypto.randomUUID(),
+        target: selectedTarget,
+        type: ruleType,
+        value,
+        createdAt: Date.now(),
+      });
+      notify(
+        previous
+          ? `Moved ${value} from ${targetName(previous.target)} to ${name}`
+          : `Rule added to ${name}`,
+      );
+    }
+    setRuleValue(thread ? normalizeRuleValue(ruleType, threadRuleDefaults[ruleType]) : "");
   };
 
   const setThreadRule = (type: RuleType) => {
@@ -403,8 +411,7 @@ export const BundleManagerModal = ({
             {BUNDLE_CATEGORIES.map((cat) => {
               const meta = CATEGORIES[cat];
               const selectedKey = paneKey(selected);
-              const count = overrides.filter((o) => o.category === cat).length +
-                bundleRules.filter((r) => r.category === cat).length;
+              const count = routeRules.filter((r) => r.target === cat).length;
               return (
                 <button
                   key={cat}
@@ -431,7 +438,7 @@ export const BundleManagerModal = ({
                 >
                   <Icon name={meta.icon} className={s.navIcon} style={{ color: meta.color }} />
                   <span className={s.navName}>{meta.name}</span>
-                  <span className={s.navCount}>{bundle.rules.length}</span>
+                  <span className={s.navCount}>{routeRules.filter((r) => r.target === bundle.id).length}</span>
                 </button>
               );
             })}
@@ -462,12 +469,14 @@ export const BundleManagerModal = ({
                 onRuleTypeChange={setThreadRule}
                 onRuleValueChange={setRuleValue}
                 onAddRule={addRule}
-                saveHint="Built-in bundle rules are saved immediately."
+                conflict={conflictNote}
+                saveHint="Rules are saved immediately."
               />
             ) : (
               <CustomBundleEditor
                 title={selected.kind === "new" ? "New custom bundle" : "Custom bundle"}
                 form={currentForm}
+                isNew={selected.kind === "new"}
                 thread={thread}
                 ruleType={ruleType}
                 ruleValue={ruleValue}
@@ -476,10 +485,15 @@ export const BundleManagerModal = ({
                 onRuleTypeChange={setThreadRule}
                 onRuleValueChange={setRuleValue}
                 onAddRule={addRule}
-                onRemoveRule={removeCustomRule}
+                onRemoveDraftRule={removeDraftRule}
                 onSave={saveForm}
                 onDelete={selected.kind === "custom" ? removeCustom : undefined}
-                saveHint="Custom bundle rules are added to this draft. Save the bundle to apply them."
+                conflict={conflictNote}
+                saveHint={
+                  selected.kind === "new"
+                    ? "Rules will be created when you save the bundle."
+                    : "Rules are saved immediately."
+                }
               />
             )}
           </main>
@@ -809,6 +823,7 @@ const RuleComposer = ({
   onRuleTypeChange,
   onRuleValueChange,
   onAddRule,
+  conflict,
   saveHint,
 }: {
   ruleType: RuleType;
@@ -818,6 +833,7 @@ const RuleComposer = ({
   onRuleTypeChange: (type: RuleType) => void;
   onRuleValueChange: (value: string) => void;
   onAddRule: () => void;
+  conflict?: string;
   saveHint: string;
 }) => (
   <div className={s.ruleComposer}>
@@ -832,6 +848,12 @@ const RuleComposer = ({
       <span>{rulePreview(ruleType, ruleValue)}</span>
       <span>{saveHint}</span>
     </div>
+    {conflict && (
+      <div className={s.ruleConflict}>
+        <Icon name="info" className={s.ruleConflictIcon} />
+        <span>{conflict}</span>
+      </div>
+    )}
     <div className={s.ruleInputRow}>
       {!thread && (
         <select
@@ -852,12 +874,15 @@ const RuleComposer = ({
         onChange={(e) => onRuleValueChange(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && onAddRule()}
       />
-      <button type="button" className={s.primaryBtn} disabled={!normalizeRule(ruleType, ruleValue)} onClick={onAddRule}>
+      <button type="button" className={s.primaryBtn} disabled={!normalizeRuleValue(ruleType, ruleValue)} onClick={onAddRule}>
         Add rule
       </button>
     </div>
   </div>
 );
+
+const PRECEDENCE_NOTE =
+  "When rules overlap, the most specific wins: exact sender, then sender domain, then subject.";
 
 const BuiltinBundleEditor = ({
   category,
@@ -868,6 +893,7 @@ const BuiltinBundleEditor = ({
   onRuleTypeChange,
   onRuleValueChange,
   onAddRule,
+  conflict,
   saveHint,
 }: {
   category: BuiltinCategory;
@@ -878,15 +904,13 @@ const BuiltinBundleEditor = ({
   onRuleTypeChange: (type: RuleType) => void;
   onRuleValueChange: (value: string) => void;
   onAddRule: () => void;
+  conflict?: string;
   saveHint: string;
 }) => {
   const meta = CATEGORIES[category];
-  const overrides = useOverrides();
-  const bundleRules = useBundleRules();
-  const setOverride = useMailStore((st) => st.setOverride);
-  const deleteBundleRule = useMailStore((st) => st.deleteBundleRule);
-  const domains = overrides.filter((o) => o.category === category).map((o) => o.senderDomain);
-  const rules = bundleRules.filter((r) => r.category === category);
+  const routeRules = useRouteRules();
+  const deleteRouteRule = useMailStore((st) => st.deleteRouteRule);
+  const rules = routeRules.filter((r) => r.target === category);
 
   return (
     <div className={s.editor}>
@@ -894,21 +918,22 @@ const BuiltinBundleEditor = ({
         <Icon name={meta.icon} className={s.editorIcon} style={{ color: meta.color }} />
         <div>
           <h3 className={s.editorTitle}>{meta.name}</h3>
-          <p className={s.editorDesc}>Rules here always route matching messages into this built-in bundle.</p>
+          <p className={s.editorDesc}>
+            {category === "personal"
+              ? `Rules here keep matching messages in the main inbox, unbundled. ${PRECEDENCE_NOTE}`
+              : `Rules here route matching messages into this bundle. ${PRECEDENCE_NOTE}`}
+          </p>
         </div>
       </div>
 
       <section className={s.section}>
         <h4 className={s.sectionTitle}>Rules</h4>
-        {domains.length === 0 && rules.length === 0 ? (
+        {rules.length === 0 ? (
           <p className={s.emptyText}>No custom rules yet.</p>
         ) : (
           <div className={s.ruleList}>
-            {domains.map((domain) => (
-              <RuleRow key={`domain:${domain}`} rule={{ type: "domain", value: domain }} onRemove={() => setOverride(domain, null)} />
-            ))}
             {rules.map((row) => (
-              <RuleRow key={row.id} rule={row.rule} onRemove={() => deleteBundleRule(row.id)} />
+              <RuleRow key={row.id} rule={row} onRemove={() => deleteRouteRule(row.id)} />
             ))}
           </div>
         )}
@@ -924,6 +949,7 @@ const BuiltinBundleEditor = ({
           onRuleTypeChange={onRuleTypeChange}
           onRuleValueChange={onRuleValueChange}
           onAddRule={onAddRule}
+          conflict={conflict}
           saveHint={saveHint}
         />
       </section>
@@ -934,6 +960,7 @@ const BuiltinBundleEditor = ({
 const CustomBundleEditor = ({
   title,
   form,
+  isNew,
   thread,
   ruleType,
   ruleValue,
@@ -942,13 +969,15 @@ const CustomBundleEditor = ({
   onRuleTypeChange,
   onRuleValueChange,
   onAddRule,
-  onRemoveRule,
+  onRemoveDraftRule,
   onSave,
   onDelete,
+  conflict,
   saveHint,
 }: {
   title: string;
   form: BundleFormState;
+  isNew: boolean;
   thread?: Thread;
   ruleType: RuleType;
   ruleValue: string;
@@ -957,11 +986,15 @@ const CustomBundleEditor = ({
   onRuleTypeChange: (type: RuleType) => void;
   onRuleValueChange: (value: string) => void;
   onAddRule: () => void;
-  onRemoveRule: (idx: number) => void;
+  onRemoveDraftRule: (idx: number) => void;
   onSave: () => void;
   onDelete?: () => void;
+  conflict?: string;
   saveHint: string;
 }) => {
+  const routeRules = useRouteRules();
+  const deleteRouteRule = useMailStore((st) => st.deleteRouteRule);
+  const savedRules = routeRules.filter((r) => r.target === form.id);
   const [iconQuery, setIconQuery] = useState("");
   const normalizedIconQuery = iconQuery.trim().toLowerCase();
   const iconGroups = useMemo(() => {
@@ -986,7 +1019,7 @@ const CustomBundleEditor = ({
         <Icon name={form.icon} className={s.editorIcon} style={{ color: form.color }} />
         <div>
           <h3 className={s.editorTitle}>{title}</h3>
-          <p className={s.editorDesc}>Custom bundle rules are checked before built-in bundle rules.</p>
+          <p className={s.editorDesc}>{PRECEDENCE_NOTE}</p>
         </div>
       </div>
 
@@ -1056,12 +1089,22 @@ const CustomBundleEditor = ({
 
       <section className={s.section}>
         <h4 className={s.sectionTitle}>Rules</h4>
-        {form.rules.length === 0 ? (
+        {isNew ? (
+          form.draftRules.length === 0 ? (
+            <p className={s.emptyText}>No rules yet.</p>
+          ) : (
+            <div className={s.ruleList}>
+              {form.draftRules.map((rule, idx) => (
+                <RuleRow key={`${rule.type}:${rule.value}`} rule={rule} onRemove={() => onRemoveDraftRule(idx)} />
+              ))}
+            </div>
+          )
+        ) : savedRules.length === 0 ? (
           <p className={s.emptyText}>No rules yet.</p>
         ) : (
           <div className={s.ruleList}>
-            {form.rules.map((rule, idx) => (
-              <RuleRow key={`${rule.type}:${rule.value}:${idx}`} rule={rule} onRemove={() => onRemoveRule(idx)} />
+            {savedRules.map((row) => (
+              <RuleRow key={row.id} rule={row} onRemove={() => deleteRouteRule(row.id)} />
             ))}
           </div>
         )}
@@ -1073,6 +1116,7 @@ const CustomBundleEditor = ({
           onRuleTypeChange={onRuleTypeChange}
           onRuleValueChange={onRuleValueChange}
           onAddRule={onAddRule}
+          conflict={conflict}
           saveHint={saveHint}
         />
       </section>
@@ -1091,7 +1135,7 @@ const CustomBundleEditor = ({
   );
 };
 
-const RuleRow = ({ rule, onRemove }: { rule: CustomBundleRule; onRemove: () => void }) => (
+const RuleRow = ({ rule, onRemove }: { rule: DraftRule; onRemove: () => void }) => (
   <div className={s.ruleRow}>
     <span className={s.ruleType}>{ruleTypeLabel[rule.type]}</span>
     <span className={s.ruleValue}>{rule.value}</span>

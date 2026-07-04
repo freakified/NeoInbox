@@ -46,6 +46,19 @@ export const Toaster = () => {
               Retry
             </button>
           )}
+          {t.actions?.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              className={s.action}
+              onClick={() => {
+                action.run();
+                dismissToast(t.id);
+              }}
+            >
+              {action.label}
+            </button>
+          ))}
           <button
             type="button"
             className={s.dismiss}
