@@ -77,6 +77,8 @@ export interface Thread {
   accountId: string;
   hasMe: boolean;
   snoozeDueAt?: number;
+  /** Set when the thread's stream position comes from a snooze wake rather than a new message. */
+  resurfacedAt?: number;
 }
 
 export interface SnoozeRecord {

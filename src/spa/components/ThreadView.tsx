@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { SNOOZED_KEY } from "../../shared/categories";
 import type { Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
@@ -19,12 +20,17 @@ export const ThreadView = ({
 }) => {
   const { doneMessages, trashMessages } = useBulkActions();
   const snoozeThread = useMailStore((st) => st.snoozeThread);
+  const unsnoozeThread = useMailStore((st) => st.unsnoozeThread);
   const notify = useMailStore((st) => st.notify);
   const inboxMessageIds = useMemo(
     () => t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
     [t],
   );
   const hasInboxMessages = inboxMessageIds.length > 0;
+  const snoozedMessageIds = useMemo(
+    () => t.messages.filter((m) => m.tags.includes(SNOOZED_KEY)).map((m) => m.id),
+    [t],
+  );
 
   const latestInbox = useMemo(() => {
     const inbox = t.messages.filter((m) => m.origin === "inbox");
@@ -58,6 +64,10 @@ export const ThreadView = ({
     snoozeThread(inboxMessageIds, wakeAt);
     notify(`Snoozed until ${formatSnoozeToastTime(wakeAt)}`);
   };
+  const onUnsnooze = () => {
+    unsnoozeThread(snoozedMessageIds);
+    notify("Moved back to inbox");
+  };
   const onTrash = () => trashMessages(t.messages.map((m) => m.id));
   const translateLatest = () => {
     setTranslationRequests((prev) => ({
@@ -74,6 +84,18 @@ export const ThreadView = ({
         <div className={s.headerActions}>
           <BundleMenu thread={t} onTranslateToEnglish={translateLatest} />
           {hasInboxMessages && <SnoozeMenu onChoose={onSnooze} />}
+          {snoozedMessageIds.length > 0 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onUnsnooze();
+              }}
+              title="Unsnooze"
+              className={s.iconBtn}
+            >
+              <Icon name="alarm_off" className={s.iconBtnIcon} />
+            </button>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();

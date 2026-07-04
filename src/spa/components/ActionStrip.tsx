@@ -1,4 +1,5 @@
 import { clsx } from "clsx";
+import { SNOOZED_KEY } from "../../shared/categories";
 import type { Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
@@ -10,10 +11,14 @@ import s from "./ActionStrip.module.css";
 export const ActionStrip = ({ thread }: { thread: Thread }) => {
   const pin = useMailStore((st) => st.pin);
   const snoozeThread = useMailStore((st) => st.snoozeThread);
+  const unsnoozeThread = useMailStore((st) => st.unsnoozeThread);
   const notify = useMailStore((st) => st.notify);
   const { doneMessages, trashMessages } = useBulkActions();
   const inboxMessageIds = thread.messages.filter((m) => m.origin === "inbox").map((m) => m.id);
   const hasInboxMessages = inboxMessageIds.length > 0;
+  const snoozedMessageIds = thread.messages
+    .filter((m) => m.tags.includes(SNOOZED_KEY))
+    .map((m) => m.id);
 
   const togglePin = () => {
     const next = !thread.pinned;
@@ -23,6 +28,10 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
   const onSnooze = (wakeAt: number) => {
     snoozeThread(inboxMessageIds, wakeAt);
     notify(`Snoozed until ${formatSnoozeToastTime(wakeAt)}`);
+  };
+  const onUnsnooze = () => {
+    unsnoozeThread(snoozedMessageIds);
+    notify("Moved back to inbox");
   };
   const onTrash = () => trashMessages(thread.messages.map((m) => m.id));
 
@@ -35,6 +44,11 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
         />
       </ActionBtn>
       {hasInboxMessages && <SnoozeMenu onChoose={onSnooze} />}
+      {snoozedMessageIds.length > 0 && (
+        <ActionBtn title="Unsnooze" onClick={onUnsnooze}>
+          <Icon name="alarm_off" className={clsx(s.iconBase, s.iconMuted)} />
+        </ActionBtn>
+      )}
       <ActionBtn title="Trash" onClick={onTrash}>
         <Icon name="delete" className={clsx(s.iconBase, s.iconMuted)} />
       </ActionBtn>

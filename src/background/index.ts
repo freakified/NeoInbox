@@ -6,7 +6,12 @@ import {
   trashMessage,
 } from "./ingest";
 import { headerToRawMessage } from "./messageMap";
-import { handleSnoozeAlarm, snoozeAlarmName, snoozeMessage } from "./snooze";
+import {
+  handleSnoozeAlarm,
+  snoozeAlarmName,
+  snoozeMessage,
+  wakeSnoozedMessage,
+} from "./snooze";
 import {
   getLastProgress,
   runBackfill,
@@ -80,59 +85,18 @@ const isArchiveFolder = async (folderId: string): Promise<boolean> => {
   return folders.some((folder) => folder.id === folderId);
 }
 
-const removeCachedSnoozedCopies = async (raw: { id: number; headerMessageId: string }): Promise<void> => {
-  if (!raw.headerMessageId) return;
-  const staleIds = (await db.messages.toArray())
-    .filter((m) =>
-      m.id !== raw.id &&
-      m.headerMessageId === raw.headerMessageId &&
-      m.tags.includes(SNOOZED_KEY)
-    )
-    .map((m) => m.id);
-  if (!staleIds.length) return;
-  await db.messages.bulkDelete(staleIds);
-  broadcast({ type: "delta", removedIds: staleIds });
-}
-
-const inFlightSnoozeAlarms = new Set<string>();
 let restoreSnoozeAlarmsPromise: Promise<void> | null = null;
-
-const processSnoozeAlarm = async (alarmName: string): Promise<void> => {
-  if (inFlightSnoozeAlarms.has(alarmName)) return;
-  inFlightSnoozeAlarms.add(alarmName);
-  try {
-    const result = await handleSnoozeAlarm(alarmName);
-    if (!result) return;
-    if (result.restoredHeader) {
-      const cat = await classifyMessage(result.restoredHeader);
-      const raw = headerToRawMessage(result.restoredHeader, "inbox", cat);
-      if (result.wakeAt !== undefined) raw.resurfacedAt = result.wakeAt;
-      await applyMessageDetails(raw);
-      if (result.originalId !== raw.id) {
-        await db.messages.delete(result.originalId);
-        broadcast({ type: "delta", removedIds: [result.originalId] });
-      }
-      await removeCachedSnoozedCopies(raw);
-      await db.messages.put(raw);
-      broadcast({ type: "delta", added: [raw] });
-    } else {
-      await db.messages.delete(result.originalId);
-      broadcast({ type: "delta", removedIds: [result.originalId] });
-    }
-  } finally {
-    inFlightSnoozeAlarms.delete(alarmName);
-  }
-}
 
 const restoreSnoozeAlarms = async (): Promise<void> => {
   const now = Date.now();
   const snoozes = await db.snoozes.toArray();
   for (const snooze of snoozes) {
-    const alarmName = snoozeAlarmName(snooze.messageId);
     if (snooze.wakeAt <= now) {
-      await processSnoozeAlarm(alarmName);
+      await wakeSnoozedMessage(snooze.messageId, "alarm");
     } else {
-      await messenger.alarms.create(alarmName, { when: snooze.wakeAt });
+      await messenger.alarms.create(snoozeAlarmName(snooze.messageId), {
+        when: snooze.wakeAt,
+      });
     }
   }
 }
@@ -171,7 +135,7 @@ messenger.alarms.onAlarm.addListener(async (alarm) => {
     }
     return;
   }
-  await processSnoozeAlarm(alarm.name);
+  await handleSnoozeAlarm(alarm.name);
 });
 
 for (const event of [
@@ -289,6 +253,20 @@ onCommand(async (msg) => {
       } else {
         await db.messages.delete(removedId);
         broadcast({ type: "delta", removedIds: [removedId] });
+      }
+      return;
+    }
+    case "unsnooze": {
+      try {
+        await wakeSnoozedMessage(msg.messageId, "unsnooze");
+      } catch (e) {
+        log.warn("command", "unsnooze failed", { id: msg.messageId, e: String(e) });
+        broadcast({
+          type: "command-failed",
+          command: "unsnooze",
+          messageId: msg.messageId,
+          reason: String((e as Error)?.message ?? e),
+        });
       }
       return;
     }

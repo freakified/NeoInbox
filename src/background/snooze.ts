@@ -1,9 +1,11 @@
 import { db } from "../store/db";
 import { SNOOZED_KEY } from "../shared/categories";
 import { log } from "../shared/log";
-import type { SnoozeRecord } from "../shared/types";
+import type { RawMessage, SnoozeRecord } from "../shared/types";
 import { archiveFolderIdsForAccount } from "./archiveFolders";
-import { doneMessage } from "./ingest";
+import { applyMessageDetails, classifyMessage, doneMessage } from "./ingest";
+import { headerToRawMessage } from "./messageMap";
+import { broadcast } from "./port";
 
 const ALARM_PREFIX = "neoinbox-snooze-";
 const SEARCH_PAGE_LIMIT = 20;
@@ -70,56 +72,152 @@ export const snoozeMessage = async (
   return { removedId: messageId };
 }
 
-export interface SnoozeWakeResult {
-  originalId: number;
-  wakeAt?: number;
-  restoredHeader?: messenger.messages.MessageHeader;
-}
+export type WakeReason = "alarm" | "unsnooze" | "reply";
 
-export const handleSnoozeAlarm = async (
-  alarmName: string,
-): Promise<SnoozeWakeResult | null> => {
-  if (!alarmName.startsWith(ALARM_PREFIX)) return null;
-  const originalId = parseInt(alarmName.slice(ALARM_PREFIX.length), 10);
-  if (isNaN(originalId)) return null;
+const inFlightWakes = new Set<number>();
 
-  const record = (await db.snoozes.get(originalId)) as
-    | SnoozeRecordWithHeader
-    | undefined;
-  if (!record) return { originalId };
+/**
+ * Bring a snoozed message back to the inbox: untag, move to its origin
+ * folder, refresh the cache, and notify the UI. `reason` controls where the
+ * thread lands in the stream: an alarm wake resurfaces it at its wake time,
+ * a manual unsnooze resurfaces it now, and a reply wake keeps natural date
+ * order because the new reply already carries the thread.
+ */
+export const wakeSnoozedMessage = async (
+  originalId: number,
+  reason: WakeReason,
+): Promise<void> => {
+  if (inFlightWakes.has(originalId)) return;
+  inFlightWakes.add(originalId);
+  try {
+    await messenger.alarms.clear(snoozeAlarmName(originalId));
+    const record = (await db.snoozes.get(originalId)) as
+      | SnoozeRecordWithHeader
+      | undefined;
+    if (!record) return;
 
-  const restored = await findByHeaderMessageId(
-    record.headerMessageId,
-    record.originAccountId,
-  );
-  let restoredHeader = restored;
+    const restored = await findByHeaderMessageId(
+      record.headerMessageId,
+      record.originAccountId,
+    );
+    let restoredHeader = restored;
 
-  if (restored) {
-    try {
-      await messenger.messages.update(restored.id, {
-        tags: (restored.tags ?? []).filter((t) => t !== SNOOZED_KEY),
-      });
-    } catch (e) {
-      log.warn("snooze", "untag on wake failed", e);
-    }
-    if (record.originFolderId) {
+    if (restored) {
       try {
-        const moved = await messenger.messages.move(
-          [restored.id],
-          record.originFolderId as unknown as messenger.folders.MailFolderId,
-        ) as MessageListLike | undefined;
-        restoredHeader = moved?.messages?.[0] ?? await findByHeaderMessageIdInFolder(
-          record.originFolderId,
-          record.headerMessageId,
-        ) ?? restored;
+        await messenger.messages.update(restored.id, {
+          tags: (restored.tags ?? []).filter((t) => t !== SNOOZED_KEY),
+        });
       } catch (e) {
-        log.warn("snooze", "move-back on wake failed", e);
+        log.warn("snooze", "untag on wake failed", e);
+      }
+      if (record.originFolderId) {
+        try {
+          const moved = await messenger.messages.move(
+            [restored.id],
+            record.originFolderId as unknown as messenger.folders.MailFolderId,
+          ) as MessageListLike | undefined;
+          restoredHeader = moved?.messages?.[0] ?? await findByHeaderMessageIdInFolder(
+            record.originFolderId,
+            record.headerMessageId,
+          ) ?? restored;
+        } catch (e) {
+          log.warn("snooze", "move-back on wake failed", e);
+        }
       }
     }
-  }
 
-  await db.snoozes.delete(originalId);
-  return { originalId, wakeAt: record.wakeAt, restoredHeader };
+    await db.snoozes.delete(originalId);
+
+    if (!restoredHeader) {
+      await db.messages.delete(originalId);
+      broadcast({ type: "delta", removedIds: [originalId] });
+      return;
+    }
+
+    const cat = await classifyMessage(restoredHeader);
+    const raw = headerToRawMessage(restoredHeader, "inbox", cat);
+    if (reason === "alarm") raw.resurfacedAt = record.wakeAt;
+    else if (reason === "unsnooze") raw.resurfacedAt = Date.now();
+    await applyMessageDetails(raw);
+    if (originalId !== raw.id) {
+      await db.messages.delete(originalId);
+      broadcast({ type: "delta", removedIds: [originalId] });
+    }
+    await removeCachedSnoozedCopies(raw);
+    await db.messages.put(raw);
+    broadcast({ type: "delta", added: [raw] });
+  } finally {
+    inFlightWakes.delete(originalId);
+  }
+}
+
+export const handleSnoozeAlarm = async (alarmName: string): Promise<void> => {
+  if (!alarmName.startsWith(ALARM_PREFIX)) return;
+  const originalId = parseInt(alarmName.slice(ALARM_PREFIX.length), 10);
+  if (isNaN(originalId)) return;
+  await wakeSnoozedMessage(originalId, "alarm");
+}
+
+const normalizeMid = (id: string | undefined): string =>
+  (id ?? "").replace(/[<>]/g, "").trim().toLowerCase();
+
+const messageIdChain = (m: RawMessage): string[] =>
+  [m.headerMessageId, ...(m.references ?? []), ...(m.inReplyTo ?? [])]
+    .map(normalizeMid)
+    .filter(Boolean);
+
+/**
+ * Gmail-style early wake: a new message arriving in a snoozed conversation
+ * cancels the snooze and returns the thread to the inbox immediately.
+ */
+export const wakeSnoozesForNewMail = async (
+  added: readonly RawMessage[],
+): Promise<void> => {
+  const records = (await db.snoozes.toArray()) as SnoozeRecordWithHeader[];
+  if (!records.length) return;
+
+  const newIdsByAccount = new Map<string, Set<string>>();
+  for (const m of added) {
+    if (m.origin !== "inbox") continue;
+    const set = newIdsByAccount.get(m.accountId) ?? new Set<string>();
+    for (const id of messageIdChain(m)) set.add(id);
+    newIdsByAccount.set(m.accountId, set);
+  }
+  if (!newIdsByAccount.size) return;
+
+  for (const record of records) {
+    const newIds = newIdsByAccount.get(record.originAccountId);
+    if (!newIds) continue;
+    const cached = await db.messages.get(record.messageId);
+    const recordIds = cached
+      ? messageIdChain(cached)
+      : [normalizeMid(record.headerMessageId)];
+    if (!recordIds.some((id) => id && newIds.has(id))) continue;
+    try {
+      await wakeSnoozedMessage(record.messageId, "reply");
+    } catch (e) {
+      log.warn("snooze", "wake on reply failed", {
+        messageId: record.messageId,
+        e: String(e),
+      });
+    }
+  }
+}
+
+const removeCachedSnoozedCopies = async (
+  raw: { id: number; headerMessageId: string },
+): Promise<void> => {
+  if (!raw.headerMessageId) return;
+  const staleIds = (await db.messages.toArray())
+    .filter((m) =>
+      m.id !== raw.id &&
+      m.headerMessageId === raw.headerMessageId &&
+      m.tags.includes(SNOOZED_KEY)
+    )
+    .map((m) => m.id);
+  if (!staleIds.length) return;
+  await db.messages.bulkDelete(staleIds);
+  broadcast({ type: "delta", removedIds: staleIds });
 }
 
 const findByHeaderMessageId = async (

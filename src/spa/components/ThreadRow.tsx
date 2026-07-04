@@ -1,6 +1,7 @@
 import type { Thread } from "../../shared/types";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate } from "../lib/dateBucket";
+import { formatSnoozeToastTime } from "../lib/snoozePresets";
 import { ActionStrip } from "./ActionStrip";
 import { Icon } from "./Icon";
 import { MessageAttachments, collectAttachments } from "./MessageAttachments";
@@ -29,6 +30,14 @@ export const ThreadRow = ({
   const date = t.snoozeDueAt ? (
     <span className={s.snoozeDue}>
       <span>{formatDate(t.snoozeDueAt)}</span>
+      <Icon name="schedule" className={s.snoozeIcon} />
+    </span>
+  ) : t.resurfacedAt ? (
+    <span
+      className={s.snoozeDue}
+      title={`Snoozed until ${formatSnoozeToastTime(t.resurfacedAt)}`}
+    >
+      <span>{formatDate(t.resurfacedAt)}</span>
       <Icon name="schedule" className={s.snoozeIcon} />
     </span>
   ) : formatDate(t.latestDate);

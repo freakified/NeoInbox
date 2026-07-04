@@ -7,6 +7,7 @@ export type ClientMsg =
   | { type: "pin"; messageId: number; pinned: boolean }
   | { type: "done"; messageId: number }
   | { type: "snooze"; messageId: number; wakeAt: number }
+  | { type: "unsnooze"; messageId: number }
   | { type: "trash"; messageId: number }
   | { type: "set-route-rule"; rule: RouteRuleRecord }
   | { type: "delete-route-rule"; id: string }
@@ -14,7 +15,7 @@ export type ClientMsg =
   | { type: "delete-custom-bundle"; id: string }
   | { type: "retry-backfill" };
 
-export type FailedCommand = "done" | "snooze" | "trash";
+export type FailedCommand = "done" | "snooze" | "unsnooze" | "trash";
 
 export type ServerMsg =
   | ({ type: "delta" } & Delta)

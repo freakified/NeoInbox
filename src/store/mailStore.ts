@@ -7,6 +7,7 @@ import { log } from "../shared/log";
 import {
   PORT_NAME,
   type ClientMsg,
+  type FailedCommand,
   type ServerMsg,
 } from "../shared/messaging";
 import type { Category, CustomBundleRecord, RawMessage, RouteRuleRecord, SnoozeRecord } from "../shared/types";
@@ -35,6 +36,7 @@ export type ConnectionState = "connected" | "reconnecting";
 type PendingOp =
   | { kind: "done"; message: RawMessage }
   | { kind: "snooze"; message: RawMessage; wakeAt: number }
+  | { kind: "unsnooze"; message: RawMessage; snooze?: SnoozeRecord }
   | { kind: "trash"; message: RawMessage };
 
 export interface ToastAction {
@@ -45,7 +47,7 @@ export interface ToastAction {
 export interface ToastRecord {
   id: string;
   message: string;
-  retry?: { kind: "done" | "snooze" | "trash"; messageId: number; wakeAt?: number };
+  retry?: { kind: FailedCommand; messageId: number; wakeAt?: number };
   undo?: { messageIds: number[]; kind: "done" | "trash" };
   actions?: ToastAction[];
 }
@@ -66,6 +68,7 @@ interface MailStore {
   pin: (messageId: number, pinned: boolean) => void;
   doneThread: (messageIds: number[]) => void;
   snoozeThread: (messageIds: number[], wakeAt: number) => void;
+  unsnoozeThread: (messageIds: number[]) => void;
   trashThread: (messageIds: number[]) => void;
   setRouteRule: (rule: RouteRuleRecord) => void;
   deleteRouteRule: (id: string) => void;
@@ -251,6 +254,28 @@ export const useMailStore = create<MailStore>((set, get) => ({
     for (const id of messageIds) send({ type: "snooze", messageId: id, wakeAt });
   },
 
+  unsnoozeThread: (messageIds) => {
+    if (messageIds.length === 0) return;
+    const prev = get().messagesById;
+    const map = { ...prev };
+    const pending = { ...get().pendingOps };
+    const snoozesByMessageId = { ...get().snoozesByMessageId };
+    const now = Date.now();
+    for (const id of messageIds) {
+      const m = prev[id];
+      if (!m) continue;
+      pending[id] = { kind: "unsnooze", message: m, snooze: snoozesByMessageId[id] };
+      map[id] = {
+        ...m,
+        tags: m.tags.filter((t) => t !== SNOOZED_KEY),
+        resurfacedAt: now,
+      };
+      delete snoozesByMessageId[id];
+    }
+    set({ messagesById: map, pendingOps: pending, snoozesByMessageId });
+    for (const id of messageIds) send({ type: "unsnooze", messageId: id });
+  },
+
   trashThread: (messageIds) => {
     if (messageIds.length === 0) return;
     const prev = get().messagesById;
@@ -334,6 +359,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
     const { kind, messageId, wakeAt } = toast.retry;
     if (kind === "done") get().doneThread([messageId]);
     else if (kind === "trash") get().trashThread([messageId]);
+    else if (kind === "unsnooze") get().unsnoozeThread([messageId]);
     else if (kind === "snooze" && wakeAt !== undefined) {
       get().snoozeThread([messageId], wakeAt);
     }
@@ -378,9 +404,10 @@ export const useMailStore = create<MailStore>((set, get) => ({
 
 const TOAST_LIMIT = 3;
 
-const failureLabel = (command: "done" | "snooze" | "trash"): string => {
+const failureLabel = (command: FailedCommand): string => {
   if (command === "done") return "Couldn't archive";
   if (command === "snooze") return "Couldn't snooze";
+  if (command === "unsnooze") return "Couldn't unsnooze";
   return "Couldn't move to trash";
 }
 
@@ -397,6 +424,12 @@ const applyServerMsg = (
       if (msg.removedIds) for (const id of msg.removedIds) delete map[id];
       const snoozesByMessageId = { ...get().snoozesByMessageId };
       if (msg.removedIds) for (const id of msg.removedIds) delete snoozesByMessageId[id];
+      // A message that comes back without the snoozed tag has woken; drop any stale record.
+      for (const m of [...(msg.added ?? []), ...(msg.updated ?? [])]) {
+        if (snoozesByMessageId[m.id] && !m.tags.includes(SNOOZED_KEY)) {
+          delete snoozesByMessageId[m.id];
+        }
+      }
       set({ messagesById: map, snoozesByMessageId });
       const settledIds = [
         ...(msg.removedIds ?? []),
@@ -440,6 +473,9 @@ const applyServerMsg = (
       const wakeAt = op?.kind === "snooze" ? op.wakeAt : undefined;
       const snoozesByMessageId = { ...get().snoozesByMessageId };
       if (msg.command === "snooze") delete snoozesByMessageId[msg.messageId];
+      if (msg.command === "unsnooze" && op?.kind === "unsnooze" && op.snooze) {
+        snoozesByMessageId[msg.messageId] = op.snooze;
+      }
       const toast: ToastRecord = {
         id: nextToastId(),
         message: `${failureLabel(msg.command)} — ${msg.reason}`,

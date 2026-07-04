@@ -193,6 +193,13 @@ export function buildThreads(
     const latest = msgs[msgs.length - 1];
     if (!latest) continue;
     const latestDate = msgs.reduce((max, msg) => Math.max(max, messageSortDate(msg)), 0);
+    const resurfacedAt = msgs.reduce(
+      (max, msg) =>
+        msg.origin === "inbox" && msg.resurfacedAt !== undefined
+          ? Math.max(max, msg.resurfacedAt)
+          : max,
+      0,
+    );
     threads.push({
       id: stableThreadId(msgs, messageNodes, anchorOrigins) || key,
       subject: latest.subject || "(no subject)",
@@ -204,6 +211,7 @@ export function buildThreads(
       category: threadCategory(msgs),
       accountId: latest.accountId,
       hasMe: msgs.some((m) => myEmails.has(extractEmail(m.author))),
+      resurfacedAt: resurfacedAt > 0 && resurfacedAt >= latestDate ? resurfacedAt : undefined,
     });
   }
 

@@ -2,6 +2,7 @@ import { withTimeout } from "./backfill";
 import { applyMessageDetailsForOrigin, classifyMessage } from "./ingest";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
+import { wakeSnoozesForNewMail } from "./snooze";
 import { db } from "../store/db";
 import { SNOOZED_KEY } from "../shared/categories";
 import { collectArchiveFolders, collectDraftFolders, collectInboxFolders, collectSentFolders } from "../shared/folders";
@@ -134,6 +135,7 @@ export const wireSyncEngine = (): void => {
       const added = await cacheMessages(list.messages, "inbox");
       if (!added.length) return;
       broadcast({ type: "delta", added });
+      await wakeSnoozesForNewMail(added);
     } catch (e) {
       log.error("sync", "onNewMail flush failed", e);
     }
