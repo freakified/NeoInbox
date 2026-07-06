@@ -2,6 +2,7 @@ import { clsx } from "clsx";
 import { SNOOZED_KEY } from "../../shared/categories";
 import type { Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
+import { useShowDeleteActions } from "../lib/deleteActionPrefs";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
 import { useBulkActions } from "./BulkActionConfirm";
 import { Icon } from "./Icon";
@@ -13,6 +14,7 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
   const snoozeThread = useMailStore((st) => st.snoozeThread);
   const unsnoozeThread = useMailStore((st) => st.unsnoozeThread);
   const notify = useMailStore((st) => st.notify);
+  const showDeleteActions = useShowDeleteActions();
   const { doneMessages, trashMessages } = useBulkActions();
   const inboxMessageIds = thread.messages.filter((m) => m.origin === "inbox").map((m) => m.id);
   const hasInboxMessages = inboxMessageIds.length > 0;
@@ -49,9 +51,11 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
           <Icon name="alarm_off" className={clsx(s.iconBase, s.iconMuted)} />
         </ActionBtn>
       )}
-      <ActionBtn title="Trash" onClick={onTrash}>
-        <Icon name="delete" className={clsx(s.iconBase, s.iconMuted)} />
-      </ActionBtn>
+      {showDeleteActions && (
+        <ActionBtn title="Trash" onClick={onTrash}>
+          <Icon name="delete" className={clsx(s.iconBase, s.iconMuted)} />
+        </ActionBtn>
+      )}
       {hasInboxMessages && (
         <ActionBtn title="Done" onClick={onDone}>
           <Icon name="check" className={clsx(s.iconBase, s.iconMuted)} />

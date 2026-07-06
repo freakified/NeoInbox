@@ -13,7 +13,9 @@ export type ClientMsg =
   | { type: "delete-route-rule"; id: string }
   | { type: "set-custom-bundle"; bundle: CustomBundleRecord }
   | { type: "delete-custom-bundle"; id: string }
-  | { type: "retry-backfill" };
+  | { type: "retry-backfill" }
+  /** Re-run the classify pipeline; all cached inbox messages when no ids given. */
+  | { type: "reclassify"; messageIds?: number[] };
 
 export type FailedCommand = "done" | "snooze" | "unsnooze" | "trash";
 
@@ -33,4 +35,5 @@ export type ServerMsg =
       messageId: number;
       reason: string;
     }
+  | { type: "reclassify-done"; scanned: number; moved: number }
   | { type: "error"; message: string };

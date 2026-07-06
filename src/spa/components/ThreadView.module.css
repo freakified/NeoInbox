@@ -46,6 +46,10 @@
   font-size: 20px;
 }
 
+.iconBtnIconActive {
+  color: var(--color-md-primary);
+}
+
 .messages > * + * {
   border-top: 1px solid var(--color-md-divider);
 }

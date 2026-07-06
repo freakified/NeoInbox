@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CATEGORIES, getCategoryMeta } from "../../shared/categories";
-import { findRouteRule, normalizeRuleValue } from "../../shared/routeRules";
+import {
+  findRouteRule,
+  matchingRouteRules,
+  normalizeRuleValue,
+  ruleTypeLabel,
+} from "../../shared/routeRules";
 import { parseSender } from "../../shared/senders";
 import type { BuiltinCategory, Category, RouteRuleRecord, Thread } from "../../shared/types";
 import { useCustomBundles, useMailStore, useRouteRules } from "../../store/mailStore";
-import { BundleManagerModal } from "./BundleManagerModal";
 import { Icon } from "./Icon";
 import s from "./BundleMenu.module.css";
 
@@ -16,11 +20,6 @@ const MOVE_DESTINATIONS: BuiltinCategory[] = [
     .map(([cat]) => cat as BuiltinCategory)),
 ];
 
-type ModalState =
-  | { kind: "closed" }
-  | { kind: "bundle"; category: Category | null }
-  | { kind: "new" };
-
 export const BundleMenu = ({
   thread,
   onTranslateToEnglish,
@@ -30,7 +29,6 @@ export const BundleMenu = ({
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [view, setView] = useState<"root" | "move">("root");
-  const [modal, setModal] = useState<ModalState>({ kind: "closed" });
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const customBundles = useCustomBundles();
@@ -39,6 +37,7 @@ export const BundleMenu = ({
   const deleteRouteRule = useMailStore((st) => st.deleteRouteRule);
   const applyCategoryLocally = useMailStore((st) => st.applyCategoryLocally);
   const notify = useMailStore((st) => st.notify);
+  const openBundleSettings = useMailStore((st) => st.openBundleSettings);
 
   const sender = useMemo(
     () => parseSender(thread.messages[0]?.author ?? ""),
@@ -67,7 +66,7 @@ export const BundleMenu = ({
     const type = sender.domain ? "domain" : sender.email ? "email" : null;
     if (!type) {
       // No sender to build a rule from; let the user add a subject rule instead.
-      setModal({ kind: "bundle", category: target });
+      openBundleSettings({ category: target, thread });
       return;
     }
     const value = normalizeRuleValue(type, type === "domain" ? sender.domain : sender.email);
@@ -85,9 +84,23 @@ export const BundleMenu = ({
     applyCategoryLocally(messageIds, target === "personal" ? null : target);
     setRouteRule(rule);
 
+    // A more specific existing rule (e.g. exact sender vs. this domain rule)
+    // can still claim this sender's future mail; warn instead of promising.
+    const rulesAfter = [
+      ...routeRules.filter((r) => r.id !== rule.id && !(r.type === rule.type && r.value === rule.value)),
+      rule,
+    ];
+    const winner = matchingRouteRules(rulesAfter, {
+      senderEmail: sender.email,
+      senderDomain: sender.domain,
+      subject: thread.subject,
+    })[0];
+    const outranking = winner && winner.id !== rule.id && winner.target !== target ? winner : undefined;
+
     const name = destinationName(target);
-    const message =
-      previous && previous.target !== target
+    const message = outranking
+      ? `Rule added, but your ${ruleTypeLabel[outranking.type].toLowerCase()} rule for “${outranking.value}” outranks it and keeps this sender in ${destinationName(outranking.target)}`
+      : previous && previous.target !== target
         ? `Future mail from ${value} goes to ${name} instead of ${destinationName(previous.target)}`
         : `Future mail from ${value} goes to ${name}`;
     notify(message, [
@@ -99,7 +112,15 @@ export const BundleMenu = ({
           applyCategoryLocally(messageIds, previousCategory);
         },
       },
-      { label: "Edit rule", run: () => setModal({ kind: "bundle", category: target }) },
+      {
+        label: "Edit rule",
+        run: () =>
+          openBundleSettings({
+            category: outranking ? outranking.target : target,
+            thread,
+            highlightRuleId: (outranking ?? rule).id,
+          }),
+      },
     ]);
   };
 
@@ -149,7 +170,7 @@ export const BundleMenu = ({
                 className={s.menuItem}
                 role="menuitem"
                 onClick={() => {
-                  setModal({ kind: "bundle", category: thread.category });
+                  openBundleSettings({ category: thread.category, thread });
                   setMenuOpen(false);
                 }}
               >
@@ -194,7 +215,7 @@ export const BundleMenu = ({
                 className={s.menuItem}
                 role="menuitem"
                 onClick={() => {
-                  setModal({ kind: "new" });
+                  openBundleSettings({ thread, startNewBundle: true });
                   setMenuOpen(false);
                 }}
               >
@@ -204,14 +225,6 @@ export const BundleMenu = ({
             </>
           )}
         </div>
-      )}
-      {modal.kind !== "closed" && (
-        <BundleManagerModal
-          thread={thread}
-          initialCategory={modal.kind === "bundle" ? modal.category : null}
-          startNewBundle={modal.kind === "new"}
-          onClose={() => setModal({ kind: "closed" })}
-        />
       )}
     </div>
   );

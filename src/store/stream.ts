@@ -26,7 +26,6 @@ export interface StreamSection {
 }
 
 export interface Stream {
-  pinned: Thread[];
   sections: StreamSection[];
   threadCount: number;
   view: StreamView;
@@ -56,6 +55,7 @@ export const deriveStream = (
   myEmails: ReadonlySet<string>,
   view: StreamView = { type: "inbox" },
   snoozesByMessageId: Record<number, SnoozeRecord> = {},
+  pinnedOnly = false,
 ): Stream => {
   const allMessages = Object.values(messagesById);
   const anchorOrigins: ReadonlySet<MessageOrigin> = new Set(
@@ -95,15 +95,16 @@ export const deriveStream = (
       })
       .filter((thread) => typeof thread.snoozeDueAt === "number");
   }
+  if (pinnedOnly && view.type === "inbox") {
+    threads = threads.filter((t) => t.pinned);
+  }
   const showInboxBundles = view.type === "inbox";
-  const showPinned = view.type === "inbox";
-  const pinned = showPinned ? threads.filter((t) => t.pinned) : [];
-  const unpinned = showPinned ? threads.filter((t) => !t.pinned) : threads;
 
   const byCategory = new Map<Category, Thread[]>();
   const personal: Thread[] = [];
-  for (const t of unpinned) {
-    if (showInboxBundles && t.category) {
+  for (const t of threads) {
+    // Pinned threads never hide inside a bundle; they surface individually.
+    if (showInboxBundles && t.category && !t.pinned) {
       let arr = byCategory.get(t.category);
       if (!arr) {
         arr = [];
@@ -156,5 +157,5 @@ export const deriveStream = (
     return view.type === "snoozed" ? aDate - bDate : bDate - aDate;
   });
 
-  return { pinned, sections, threadCount: threads.length, view };
+  return { sections, threadCount: threads.length, view };
 }

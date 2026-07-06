@@ -1,5 +1,7 @@
 import { parseSender } from "../shared/senders";
 
+export { domainMatches } from "../shared/routeRules";
+
 export interface Features {
   senderEmail: string;
   senderDomain: string;
@@ -38,6 +40,3 @@ export const extractFeatures = (
   };
 }
 
-export const domainMatches = (domain: string, list: readonly string[]): boolean => {
-  return list.some((d) => domain === d || domain.endsWith("." + d));
-}

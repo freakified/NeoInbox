@@ -1,4 +1,4 @@
-import { CATEGORIES } from "../shared/categories";
+import { CATEGORIES, PINNED_KEY, SNOOZED_KEY } from "../shared/categories";
 import { log } from "../shared/log";
 
 type ListFn = () => Promise<messenger.messages.tags.MessageTag[]>;
@@ -10,7 +10,20 @@ interface TagApi {
 }
 
 let cachedApi: TagApi | null = null;
-let registered = false;
+let registration: Promise<void> | null = null;
+
+/**
+ * Every tag key we ever write with messages.update. Thunderbird drops tag
+ * keys that aren't in its registry (and filters them out of reads), so an
+ * unregistered key makes the write a silent no-op.
+ */
+const TAG_SPECS: ReadonlyArray<{ key: string; name: string; color: string }> = [
+  ...Object.values(CATEGORIES)
+    .filter((m) => m.key)
+    .map((m) => ({ key: m.key, name: m.name, color: m.color })),
+  { key: PINNED_KEY, name: "Pinned", color: "#4285F4" },
+  { key: SNOOZED_KEY, name: "Snoozed", color: "#DF742C" },
+];
 
 const resolveTagApi = (): TagApi => {
   if (cachedApi) return cachedApi;
@@ -34,16 +47,14 @@ const resolveTagApi = (): TagApi => {
   return cachedApi;
 };
 
-export const ensureTagsRegistered = async (): Promise<void> => {
-  if (registered) return;
+const registerTags = async (): Promise<void> => {
   const { list, create } = resolveTagApi();
 
   if (!create) {
     log.warn(
       "tags",
-      "tag registration skipped — create unavailable; classification will still apply tag keys but native UI won't show names/colors",
+      "tag registration skipped — create unavailable; tag writes for unregistered keys will be dropped by Thunderbird",
     );
-    registered = true;
     return;
   }
 
@@ -57,17 +68,19 @@ export const ensureTagsRegistered = async (): Promise<void> => {
     }
   }
 
-  for (const meta of Object.values(CATEGORIES)) {
-    if (!meta.key) continue;
-    if (existingKeys?.has(meta.key)) continue;
+  for (const spec of TAG_SPECS) {
+    if (existingKeys?.has(spec.key)) continue;
     try {
-      await create(meta.key, meta.name, meta.color);
-      log.debug("tags", "created", meta.key);
+      await create(spec.key, spec.name, spec.color);
+      log.debug("tags", "created", spec.key);
     } catch (e) {
       // When list() is unavailable we expect "already exists" errors; swallow.
-      if (existingKeys) log.warn("tags", "failed to create", { key: meta.key, e });
+      if (existingKeys) log.warn("tags", "failed to create", { key: spec.key, e });
     }
   }
+};
 
-  registered = true;
+export const ensureTagsRegistered = (): Promise<void> => {
+  registration ??= registerTags();
+  return registration;
 };

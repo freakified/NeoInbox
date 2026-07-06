@@ -5,6 +5,7 @@ import { getCategoryMeta } from "../../shared/categories";
 import { useCustomBundles } from "../../store/mailStore";
 import { senderName } from "../lib/avatar";
 import { formatDate, groupByBucket } from "../lib/dateBucket";
+import { useShowDeleteActions } from "../lib/deleteActionPrefs";
 import { useBulkActions } from "./BulkActionConfirm";
 import { Icon } from "./Icon";
 import { MessageAttachments, collectAttachments } from "./MessageAttachments";
@@ -35,6 +36,7 @@ export const BundleSliceRow = ({
 }) => {
   const customBundles = useCustomBundles();
   const meta = getCategoryMeta(category, customBundles);
+  const showDeleteActions = useShowDeleteActions();
   const { doneMessages, trashMessages } = useBulkActions();
 
   const threadCountLabel = threads.length > 25 ? "(25+)" : `(${threads.length})`;
@@ -157,13 +159,15 @@ export const BundleSliceRow = ({
             {meta.name}
           </button>
           <div className={s.actions}>
-            <button
-              onClick={handleTrashAll}
-              title="Delete all"
-              className={s.actionBtn}
-            >
-              <Icon name="delete" className={s.actionIcon} />
-            </button>
+            {showDeleteActions && (
+              <button
+                onClick={handleTrashAll}
+                title="Delete all"
+                className={s.actionBtn}
+              >
+                <Icon name="delete" className={s.actionIcon} />
+              </button>
+            )}
             <button
               onClick={handleDoneAll}
               title="Archive all"
@@ -192,13 +196,15 @@ export const BundleSliceRow = ({
                 <div className={s.bucketHeader}>
                   <p className={s.bucketLabel}>{label}</p>
                   <div className={s.actions}>
-                    <button
-                      onClick={handleBucketTrashAll(items)}
-                      title="Delete all"
-                      className={s.actionBtn}
-                    >
-                      <Icon name="delete" className={s.actionIcon} />
-                    </button>
+                    {showDeleteActions && (
+                      <button
+                        onClick={handleBucketTrashAll(items)}
+                        title="Delete all"
+                        className={s.actionBtn}
+                      >
+                        <Icon name="delete" className={s.actionIcon} />
+                      </button>
+                    )}
                     <button
                       onClick={handleBucketDoneAll(items)}
                       title="Done all"

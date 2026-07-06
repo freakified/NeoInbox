@@ -1,11 +1,23 @@
 import { clsx } from "clsx";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CATEGORIES, getCategoryMeta } from "../../shared/categories";
-import { findRouteRule, normalizeRuleValue, ruleTypeLabel } from "../../shared/routeRules";
+import {
+  findRouteRule,
+  matchingRouteRules,
+  normalizeRuleValue,
+  ruleTypeLabel,
+} from "../../shared/routeRules";
 import { parseSender } from "../../shared/senders";
-import type { BuiltinCategory, Category, RouteRuleType, Thread } from "../../shared/types";
+import type {
+  BuiltinCategory,
+  Category,
+  RouteRuleRecord,
+  RouteRuleType,
+  Thread,
+} from "../../shared/types";
 import { useCustomBundles, useMailStore, useRouteRules } from "../../store/mailStore";
+import { setShowDeleteActions, useShowDeleteActions } from "../lib/deleteActionPrefs";
 import {
   getRemoteImagePolicy,
   listTrustedImageSenders,
@@ -176,16 +188,30 @@ const paneKey = (selected: SelectedPane): string =>
 const hasDraftRule = (rules: readonly DraftRule[], rule: DraftRule): boolean =>
   rules.some((r) => r.type === rule.type && r.value === rule.value);
 
+/** Winner-first thread matches → per-rule badge; undefined when the rule doesn't match. */
+type RuleBadge = "wins" | "outranked";
+const threadBadge = (
+  matches: readonly RouteRuleRecord[],
+  ruleId: string,
+): RuleBadge | undefined =>
+  matches[0]?.id === ruleId
+    ? "wins"
+    : matches.some((r) => r.id === ruleId)
+      ? "outranked"
+      : undefined;
+
 export const BundleManagerModal = ({
   onClose,
   thread,
   initialCategory,
   startNewBundle,
+  highlightRuleId,
 }: {
   onClose: () => void;
   thread?: Thread;
   initialCategory?: Category | null;
   startNewBundle?: boolean;
+  highlightRuleId?: string;
 }) => {
   const customBundles = useCustomBundles();
   const routeRules = useRouteRules();
@@ -197,6 +223,18 @@ export const BundleManagerModal = ({
   const sender = useMemo(
     () => parseSender(thread?.messages[0]?.author ?? ""),
     [thread],
+  );
+  /** Every rule matching this thread, winner first; drives badges and the summary. */
+  const threadMatches = useMemo(
+    () =>
+      thread
+        ? matchingRouteRules(routeRules, {
+            senderEmail: sender.email,
+            senderDomain: sender.domain,
+            subject: thread.subject,
+          })
+        : [],
+    [thread, routeRules, sender],
   );
   const threadRuleDefaults: Record<RuleType, string> = {
     domain: sender.domain,
@@ -459,42 +497,57 @@ export const BundleManagerModal = ({
               <RemoteImagesSettings />
             ) : selected.kind === "translation" ? (
               <TranslationSettings />
-            ) : selected.kind === "builtin" ? (
-              <BuiltinBundleEditor
-                category={selected.id}
-                ruleType={ruleType}
-                ruleValue={ruleValue}
-                thread={thread}
-                threadDefaults={threadRuleDefaults}
-                onRuleTypeChange={setThreadRule}
-                onRuleValueChange={setRuleValue}
-                onAddRule={addRule}
-                conflict={conflictNote}
-                saveHint="Rules are saved immediately."
-              />
             ) : (
-              <CustomBundleEditor
-                title={selected.kind === "new" ? "New custom bundle" : "Custom bundle"}
-                form={currentForm}
-                isNew={selected.kind === "new"}
-                thread={thread}
-                ruleType={ruleType}
-                ruleValue={ruleValue}
-                threadDefaults={threadRuleDefaults}
-                onFormChange={updateForm}
-                onRuleTypeChange={setThreadRule}
-                onRuleValueChange={setRuleValue}
-                onAddRule={addRule}
-                onRemoveDraftRule={removeDraftRule}
-                onSave={saveForm}
-                onDelete={selected.kind === "custom" ? removeCustom : undefined}
-                conflict={conflictNote}
-                saveHint={
-                  selected.kind === "new"
-                    ? "Rules will be created when you save the bundle."
-                    : "Rules are saved immediately."
-                }
-              />
+              <>
+                {thread && (
+                  <ThreadRouteSummary
+                    thread={thread}
+                    matches={threadMatches}
+                    targetName={targetName}
+                  />
+                )}
+                {selected.kind === "builtin" ? (
+                  <BuiltinBundleEditor
+                    category={selected.id}
+                    ruleType={ruleType}
+                    ruleValue={ruleValue}
+                    thread={thread}
+                    threadDefaults={threadRuleDefaults}
+                    threadMatches={threadMatches}
+                    highlightRuleId={highlightRuleId}
+                    onRuleTypeChange={setThreadRule}
+                    onRuleValueChange={setRuleValue}
+                    onAddRule={addRule}
+                    conflict={conflictNote}
+                    saveHint="Rules are saved immediately."
+                  />
+                ) : (
+                  <CustomBundleEditor
+                    title={selected.kind === "new" ? "New custom bundle" : "Custom bundle"}
+                    form={currentForm}
+                    isNew={selected.kind === "new"}
+                    thread={thread}
+                    ruleType={ruleType}
+                    ruleValue={ruleValue}
+                    threadDefaults={threadRuleDefaults}
+                    threadMatches={threadMatches}
+                    highlightRuleId={highlightRuleId}
+                    onFormChange={updateForm}
+                    onRuleTypeChange={setThreadRule}
+                    onRuleValueChange={setRuleValue}
+                    onAddRule={addRule}
+                    onRemoveDraftRule={removeDraftRule}
+                    onSave={saveForm}
+                    onDelete={selected.kind === "custom" ? removeCustom : undefined}
+                    conflict={conflictNote}
+                    saveHint={
+                      selected.kind === "new"
+                        ? "Rules will be created when you save the bundle."
+                        : "Rules are saved immediately."
+                    }
+                  />
+                )}
+              </>
             )}
           </main>
         </div>
@@ -505,20 +558,56 @@ export const BundleManagerModal = ({
   return createPortal(modal, document.body);
 };
 
-const GeneralSettings = () => (
-  <div className={s.editor}>
-    <div className={s.editorHeader}>
-      <Icon name="settings" className={s.editorIcon} />
-      <div>
-        <h3 className={s.editorTitle}>General</h3>
-        <p className={s.editorDesc}>Configure app-wide behavior.</p>
+const GeneralSettings = () => {
+  const reclassify = useMailStore((st) => st.reclassify);
+  const reclassifying = useMailStore((st) => st.reclassifying);
+  const showDeleteActions = useShowDeleteActions();
+  return (
+    <div className={s.editor}>
+      <div className={s.editorHeader}>
+        <Icon name="settings" className={s.editorIcon} />
+        <div>
+          <h3 className={s.editorTitle}>General</h3>
+          <p className={s.editorDesc}>Configure app-wide behavior.</p>
+        </div>
       </div>
+      <section className={s.section}>
+        <h4 className={s.sectionTitle}>Actions</h4>
+        <label className={s.policyChoice}>
+          <input
+            type="checkbox"
+            checked={showDeleteActions}
+            onChange={(e) => setShowDeleteActions(e.target.checked)}
+            className={s.policyInput}
+          />
+          <span>Show delete actions in the mail stream</span>
+        </label>
+        <p className={s.helpText}>
+          Adds Trash to row hover actions and “Delete all” sweeps to sections
+          and bundles. Turn this off for the faithful Google Inbox experience —
+          pin, snooze, and done only. Moving a single conversation to trash
+          stays available inside the opened conversation either way.
+        </p>
+      </section>
+      <section className={s.section}>
+        <h4 className={s.sectionTitle}>Bundling</h4>
+        <p className={s.helpText}>
+          Rules are applied as mail arrives, so messages bundled before a rule
+          change can be left in the wrong place. Re-run all rules and built-in
+          detection across the inbox to fix them.
+        </p>
+        <button
+          type="button"
+          className={s.primaryBtn}
+          disabled={reclassifying}
+          onClick={() => reclassify()}
+        >
+          {reclassifying ? "Reclassifying…" : "Reclassify inbox"}
+        </button>
+      </section>
     </div>
-    <section className={s.section}>
-      <p className={s.emptyText}>No general settings yet.</p>
-    </section>
-  </div>
-);
+  );
+};
 
 const sameTranslationConfig = (a: TranslationConfig, b: TranslationConfig): boolean =>
   a.provider === b.provider &&
@@ -884,12 +973,68 @@ const RuleComposer = ({
 const PRECEDENCE_NOTE =
   "When rules overlap, the most specific wins: exact sender, then sender domain, then subject.";
 
+const ThreadRouteSummary = ({
+  thread,
+  matches,
+  targetName,
+}: {
+  thread: Thread;
+  matches: readonly RouteRuleRecord[];
+  targetName: (target: Category) => string;
+}) => {
+  const reclassify = useMailStore((st) => st.reclassify);
+  const reclassifying = useMailStore((st) => st.reclassifying);
+  // The thread prop is a snapshot; read the category live so the banner
+  // settles once a reclassify lands.
+  const liveCategory = useMailStore((st) => {
+    for (const m of thread.messages) {
+      const live = st.messagesById[m.id];
+      if (live) return live.category;
+    }
+    return thread.category;
+  });
+
+  const winner = matches[0];
+  const expected = winner && winner.target !== "personal" ? winner.target : null;
+  const stale = winner !== undefined && liveCategory !== expected;
+
+  const precedence =
+    matches.length > 1
+      ? ` ${matches.length} rules match this thread — the most specific one wins.`
+      : "";
+  const text = winner
+    ? stale
+      ? `Your ${ruleTypeLabel[winner.type].toLowerCase()} rule “${winner.value}” routes mail like this to ${targetName(winner.target)}, but this thread was bundled before the rule and hasn't moved.${precedence}`
+      : `Your ${ruleTypeLabel[winner.type].toLowerCase()} rule “${winner.value}” routes this thread to ${targetName(winner.target)}.${precedence}`
+    : liveCategory
+      ? `This thread is in ${targetName(liveCategory)} because it matches the built-in detection. Rules you add always override built-in detection.`
+      : "No rules match this thread, so it stays in the inbox.";
+  return (
+    <div className={s.threadSummary}>
+      <Icon name="alt_route" className={s.threadSummaryIcon} />
+      <span>{text}</span>
+      {stale && (
+        <button
+          type="button"
+          className={s.threadSummaryAction}
+          disabled={reclassifying}
+          onClick={() => reclassify(thread.messages.map((m) => m.id))}
+        >
+          {reclassifying ? "Applying…" : "Apply now"}
+        </button>
+      )}
+    </div>
+  );
+};
+
 const BuiltinBundleEditor = ({
   category,
   ruleType,
   ruleValue,
   thread,
   threadDefaults,
+  threadMatches,
+  highlightRuleId,
   onRuleTypeChange,
   onRuleValueChange,
   onAddRule,
@@ -901,6 +1046,8 @@ const BuiltinBundleEditor = ({
   ruleValue: string;
   thread?: Thread;
   threadDefaults: Record<RuleType, string>;
+  threadMatches: readonly RouteRuleRecord[];
+  highlightRuleId?: string;
   onRuleTypeChange: (type: RuleType) => void;
   onRuleValueChange: (value: string) => void;
   onAddRule: () => void;
@@ -929,11 +1076,21 @@ const BuiltinBundleEditor = ({
       <section className={s.section}>
         <h4 className={s.sectionTitle}>Rules</h4>
         {rules.length === 0 ? (
-          <p className={s.emptyText}>No custom rules yet.</p>
+          <p className={s.emptyText}>
+            {category === "personal"
+              ? "No custom rules yet."
+              : `No custom rules yet — messages land here when they match the built-in ${meta.name} detection.`}
+          </p>
         ) : (
           <div className={s.ruleList}>
             {rules.map((row) => (
-              <RuleRow key={row.id} rule={row} onRemove={() => deleteRouteRule(row.id)} />
+              <RuleRow
+                key={row.id}
+                rule={row}
+                badge={threadBadge(threadMatches, row.id)}
+                highlighted={row.id === highlightRuleId}
+                onRemove={() => deleteRouteRule(row.id)}
+              />
             ))}
           </div>
         )}
@@ -965,6 +1122,8 @@ const CustomBundleEditor = ({
   ruleType,
   ruleValue,
   threadDefaults,
+  threadMatches,
+  highlightRuleId,
   onFormChange,
   onRuleTypeChange,
   onRuleValueChange,
@@ -982,6 +1141,8 @@ const CustomBundleEditor = ({
   ruleType: RuleType;
   ruleValue: string;
   threadDefaults: Record<RuleType, string>;
+  threadMatches: readonly RouteRuleRecord[];
+  highlightRuleId?: string;
   onFormChange: (patch: Partial<BundleFormState>) => void;
   onRuleTypeChange: (type: RuleType) => void;
   onRuleValueChange: (value: string) => void;
@@ -1104,7 +1265,13 @@ const CustomBundleEditor = ({
         ) : (
           <div className={s.ruleList}>
             {savedRules.map((row) => (
-              <RuleRow key={row.id} rule={row} onRemove={() => deleteRouteRule(row.id)} />
+              <RuleRow
+                key={row.id}
+                rule={row}
+                badge={threadBadge(threadMatches, row.id)}
+                highlighted={row.id === highlightRuleId}
+                onRemove={() => deleteRouteRule(row.id)}
+              />
             ))}
           </div>
         )}
@@ -1135,15 +1302,47 @@ const CustomBundleEditor = ({
   );
 };
 
-const RuleRow = ({ rule, onRemove }: { rule: DraftRule; onRemove: () => void }) => (
-  <div className={s.ruleRow}>
-    <span className={s.ruleType}>{ruleTypeLabel[rule.type]}</span>
-    <span className={s.ruleValue}>{rule.value}</span>
-    <button type="button" className={s.ruleRemove} onClick={onRemove} title="Remove rule">
-      <Icon name="delete" className={clsx(s.ruleRemoveIcon, s.ruleDeleteIcon)} />
-    </button>
-  </div>
-);
+const RuleRow = ({
+  rule,
+  onRemove,
+  badge,
+  highlighted,
+}: {
+  rule: DraftRule;
+  onRemove: () => void;
+  badge?: RuleBadge;
+  highlighted?: boolean;
+}) => {
+  const rowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (highlighted) rowRef.current?.scrollIntoView({ block: "center" });
+  }, [highlighted]);
+  return (
+    <div ref={rowRef} className={clsx(s.ruleRow, highlighted && s.ruleRowHighlight)}>
+      <span className={s.ruleType}>{ruleTypeLabel[rule.type]}</span>
+      <span className={s.ruleValue}>{rule.value}</span>
+      {badge === "wins" && (
+        <span
+          className={clsx(s.ruleBadge, s.ruleBadgeWins)}
+          title="Of the rules matching the open thread, this is the most specific — it decides where the thread goes."
+        >
+          Matches this thread
+        </span>
+      )}
+      {badge === "outranked" && (
+        <span
+          className={clsx(s.ruleBadge, s.ruleBadgeOutranked)}
+          title="This rule also matches the open thread, but a more specific rule wins: exact sender beats domain beats subject."
+        >
+          Outranked
+        </span>
+      )}
+      <button type="button" className={s.ruleRemove} onClick={onRemove} title="Remove rule">
+        <Icon name="delete" className={clsx(s.ruleRemoveIcon, s.ruleDeleteIcon)} />
+      </button>
+    </div>
+  );
+};
 
 const RuleChoice = ({
   active,

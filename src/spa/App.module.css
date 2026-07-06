@@ -139,6 +139,58 @@
   font-style: italic;
 }
 
+.pinToggle {
+  position: relative;
+  width: 42px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.pinToggleTrack {
+  position: absolute;
+  inset: 4px 1px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.35);
+  transition: background-color 160ms ease;
+}
+
+.pinToggleOn .pinToggleTrack {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.pinToggleKnob {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 160ms ease;
+}
+
+.pinToggleOn .pinToggleKnob {
+  transform: translateX(20px);
+}
+
+.pinToggleIcon {
+  font-size: 14px;
+  color: #9aa0a6;
+  transition: color 160ms ease;
+}
+
+.pinToggleOn .pinToggleIcon {
+  color: var(--color-md-primary);
+}
+
 .settingsBtn {
   color: rgba(255, 255, 255, 0.8);
   background: none;

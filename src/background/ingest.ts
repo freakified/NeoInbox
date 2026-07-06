@@ -10,6 +10,7 @@ import {
   messageStillInFolderByHeader,
   resolveArchiveFolder,
 } from "./archiveFolders";
+import { ensureTagsRegistered } from "./tags";
 
 export const MESSAGE_DETAILS_VERSION = 2;
 
@@ -70,6 +71,7 @@ export const classifyMessage = async (
 }
 
 export const pinMessage = async (id: number, pinned: boolean): Promise<void> => {
+  await ensureTagsRegistered();
   const msg = await messenger.messages.get(id);
   const tags = msg.tags ?? [];
   const next = pinned

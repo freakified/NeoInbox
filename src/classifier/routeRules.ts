@@ -1,6 +1,6 @@
 import { db } from "../store/db";
+import { matchingRouteRules } from "../shared/routeRules";
 import type { Category, RouteRuleRecord } from "../shared/types";
-import { domainMatches } from "./features";
 import type { Features } from "./features";
 
 let cache: RouteRuleRecord[] | null = null;
@@ -14,32 +14,8 @@ const loadRules = async (): Promise<RouteRuleRecord[]> => {
   return cache;
 };
 
-const newestFirst = (a: RouteRuleRecord, b: RouteRuleRecord): number =>
-  b.createdAt - a.createdAt;
-
-/**
- * Deterministic precedence: exact sender email, then sender domain (a rule for
- * mail.example.com beats one for example.com), then subject keyword. Ties go
- * to the most recently created rule.
- */
+/** Precedence lives in matchingRouteRules so the SPA can explain it. */
 export const matchRouteRules = async (f: Features): Promise<Category | null> => {
   const rules = await loadRules();
-
-  const email = rules
-    .filter((r) => r.type === "email" && r.value === f.senderEmail)
-    .sort(newestFirst)[0];
-  if (email) return email.target;
-
-  const domain = rules
-    .filter((r) => r.type === "domain" && domainMatches(f.senderDomain, [r.value]))
-    .sort((a, b) => b.value.length - a.value.length || newestFirst(a, b))[0];
-  if (domain) return domain.target;
-
-  const subject = f.subject.toLowerCase();
-  const keyword = rules
-    .filter((r) => r.type === "subject_keyword" && subject.includes(r.value))
-    .sort(newestFirst)[0];
-  if (keyword) return keyword.target;
-
-  return null;
+  return matchingRouteRules(rules, f)[0]?.target ?? null;
 };

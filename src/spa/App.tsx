@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LayoutGroup, useReducedMotion } from "framer-motion";
 import {
+  useBundleSettings,
   useConnectionState,
   useHydrated,
   useMailStore,
@@ -11,12 +12,12 @@ import {
   type StreamView,
 } from "../store/mailStore";
 import { CATEGORIES, getCategoryMeta } from "../shared/categories";
+import { useShowDeleteActions } from "./lib/deleteActionPrefs";
 import { BundleSliceRow } from "./components/BundleSliceRow";
 import { BundleManagerModal } from "./components/BundleManagerModal";
 import { useBulkActions } from "./components/BulkActionConfirm";
 import { Icon } from "./components/Icon";
 import { MotionSurface } from "./components/Motion";
-import { RowGroup } from "./components/RowGroup";
 import { SectionLabel } from "./components/SectionLabel";
 import { ThreadRow } from "./components/ThreadRow";
 import { Toaster } from "./components/Toaster";
@@ -46,7 +47,8 @@ const viewHash = (view: StreamView): string => {
 const isSameView = (a: StreamView, b: StreamView): boolean =>
   a.type === b.type && (a.type !== "bundle" || b.type !== "bundle" || a.category === b.category);
 
-const emptyTextForView = (view: StreamView): string => {
+const emptyTextForView = (view: StreamView, pinnedOnly: boolean): string => {
+  if (view.type === "inbox" && pinnedOnly) return "No pinned messages.";
   if (view.type === "snoozed") return "No snoozed messages.";
   if (view.type === "draft") return "No drafts.";
   if (view.type === "sent") return "No sent messages.";
@@ -70,10 +72,11 @@ const headerForView = (
   return { title: "Inbox", color: "var(--color-md-primary)" };
 };
 
+// Sweeps skip pinned threads, so a section of only pinned mail has nothing to sweep.
 const canDoneSection = (items: StreamItem[]): boolean =>
   items.some((item) => {
     const threads = item.type === "thread" ? [item.thread] : item.threads;
-    return threads.some((t) => t.messages.some((m) => m.origin === "inbox"));
+    return threads.some((t) => !t.pinned && t.messages.some((m) => m.origin === "inbox"));
   });
 
 const limitSections = (
@@ -105,15 +108,17 @@ export const App = () => {
   const connectionState = useConnectionState();
   const retryBackfill = useMailStore((st) => st.retryBackfill);
   const customBundles = useMailStore((st) => st.customBundles);
+  const showDeleteActions = useShowDeleteActions();
 
   const { doneMessages, trashMessages } = useBulkActions();
 
+  // Bulk sweeps never touch pinned threads — that's the point of pinning.
   const sectionDoneAll = (items: StreamItem[]) => {
     const ids = items.flatMap((item) => {
       const threads = item.type === "thread" ? [item.thread] : item.threads;
-      return threads.flatMap((t) =>
-        t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
-      );
+      return threads
+        .filter((t) => !t.pinned)
+        .flatMap((t) => t.messages.filter((m) => m.origin === "inbox").map((m) => m.id));
     });
     doneMessages(ids);
   };
@@ -121,7 +126,7 @@ export const App = () => {
   const sectionTrashAll = (items: StreamItem[]) => {
     const ids = items.flatMap((item) => {
       const threads = item.type === "thread" ? [item.thread] : item.threads;
-      return threads.flatMap((t) => t.messages.map((m) => m.id));
+      return threads.filter((t) => !t.pinned).flatMap((t) => t.messages.map((m) => m.id));
     });
     trashMessages(ids);
   };
@@ -129,9 +134,12 @@ export const App = () => {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [openBundleThreadId, setOpenBundleThreadId] = useState<string | null>(null);
   const expandedRef = useRef<HTMLDivElement | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const bundleSettings = useBundleSettings();
+  const openBundleSettings = useMailStore((st) => st.openBundleSettings);
+  const closeBundleSettings = useMailStore((st) => st.closeBundleSettings);
   const [activeView, setActiveView] = useState<StreamView>(parseHashView);
-  const stream = useStreamForView(activeView);
+  const [pinnedOnly, setPinnedOnly] = useState(false);
+  const stream = useStreamForView(activeView, pinnedOnly);
   const [visibleItemLimit, setVisibleItemLimit] = useState(STREAM_PAGE_SIZE);
   const [drawerOpen, setDrawerOpen] = useState(() =>
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 980px)").matches,
@@ -219,7 +227,15 @@ export const App = () => {
         }
       }}
     >
-      {settingsOpen && <BundleManagerModal onClose={() => setSettingsOpen(false)} />}
+      {bundleSettings && (
+        <BundleManagerModal
+          onClose={closeBundleSettings}
+          thread={bundleSettings.thread}
+          initialCategory={bundleSettings.category}
+          startNewBundle={bundleSettings.startNewBundle}
+          highlightRuleId={bundleSettings.highlightRuleId}
+        />
+      )}
 
       <header className={s.header} style={{ backgroundColor: header.color }}>
         <div className={s.headerLeft}>
@@ -252,8 +268,24 @@ export const App = () => {
             </button>
           )}
           {reconnecting && <span className={s.reconnectText}>Reconnecting…</span>}
+          {activeView.type === "inbox" && (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={pinnedOnly}
+              aria-label={pinnedOnly ? "Show all mail" : "Show pinned only"}
+              title={pinnedOnly ? "Show all mail" : "Show pinned only"}
+              className={`${s.pinToggle} ${pinnedOnly ? s.pinToggleOn : ""}`}
+              onClick={() => setPinnedOnly((v) => !v)}
+            >
+              <span className={s.pinToggleTrack} />
+              <span className={s.pinToggleKnob}>
+                <Icon name="push_pin" className={s.pinToggleIcon} />
+              </span>
+            </button>
+          )}
           <button
-            onClick={() => setSettingsOpen(true)}
+            onClick={() => openBundleSettings({})}
             title="Settings"
             className={s.settingsBtn}
           >
@@ -343,77 +375,7 @@ export const App = () => {
         )}
 
         {hydrated && stream.threadCount === 0 && !syncing && (
-          <p className={s.emptyText}>{emptyTextForView(activeView)}</p>
-        )}
-
-        {stream.pinned.length > 0 && (
-          <section className={s.section}>
-            <div className={s.sectionLabelWrap}>
-              <SectionLabel>Pinned</SectionLabel>
-            </div>
-            <LayoutGroup>
-              {(() => {
-                const expandedPinnedIdx = expandedKey?.startsWith("thread:")
-                  ? stream.pinned.findIndex((t) => expandedKey === `thread:${t.id}`)
-                  : -1;
-                if (expandedPinnedIdx >= 0) {
-                  const expanded = stream.pinned[expandedPinnedIdx]!;
-                  return (
-                    <>
-                      {expandedPinnedIdx > 0 && (
-                        <RowGroup layoutId="pinned-before">
-                          {stream.pinned.slice(0, expandedPinnedIdx).map((t) => (
-                            <ThreadRow
-                              key={t.id}
-                              thread={t}
-                              isExpanded={false}
-                              onToggle={() => toggleKey(`thread:${t.id}`)}
-                              expandedRef={expandedRef}
-                            />
-                          ))}
-                        </RowGroup>
-                      )}
-                      <MotionSurface className={s.expandedThread}>
-                        <ThreadRow
-                          key={expanded.id}
-                          thread={expanded}
-                          isExpanded={true}
-                          onToggle={() => toggleKey(`thread:${expanded.id}`)}
-                          expandedRef={expandedRef}
-                        />
-                      </MotionSurface>
-                      {expandedPinnedIdx < stream.pinned.length - 1 && (
-                        <RowGroup layoutId="pinned-after">
-                          {stream.pinned.slice(expandedPinnedIdx + 1).map((t) => (
-                            <ThreadRow
-                              key={t.id}
-                              thread={t}
-                              isExpanded={false}
-                              onToggle={() => toggleKey(`thread:${t.id}`)}
-                              expandedRef={expandedRef}
-                            />
-                          ))}
-                        </RowGroup>
-                      )}
-                    </>
-                  );
-                }
-                return (
-                  <RowGroup>
-                    {stream.pinned.map((t) => (
-                      <ThreadRow
-                        key={t.id}
-                        thread={t}
-                        isExpanded={expandedKey === `thread:${t.id}`}
-                        onToggle={() => toggleKey(`thread:${t.id}`)}
-                        expandedRef={expandedRef}
-                      />
-                    ))}
-                  </RowGroup>
-                );
-              })()}
-            </LayoutGroup>
-          </section>
+          <p className={s.emptyText}>{emptyTextForView(activeView, pinnedOnly)}</p>
         )}
 
         {visibleStream.sections.map((group) => {
@@ -462,13 +424,15 @@ export const App = () => {
                 <SectionLabel>{group.label}</SectionLabel>
                 {showDoneAll && canDoneSection(group.items) && (
                   <div className={s.sectionActions}>
-                    <button
-                      onClick={() => sectionTrashAll(group.items)}
-                      title="Delete all"
-                      className={s.sectionActionBtn}
-                    >
-                      <Icon name="delete" className={s.sectionActionIcon} />
-                    </button>
+                    {showDeleteActions && (
+                      <button
+                        onClick={() => sectionTrashAll(group.items)}
+                        title="Delete all"
+                        className={s.sectionActionBtn}
+                      >
+                        <Icon name="delete" className={s.sectionActionIcon} />
+                      </button>
+                    )}
                     <button
                       onClick={() => sectionDoneAll(group.items)}
                       title="Done all"

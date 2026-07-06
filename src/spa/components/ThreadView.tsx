@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { clsx } from "clsx";
 import { SNOOZED_KEY } from "../../shared/categories";
 import type { Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
@@ -19,6 +20,7 @@ export const ThreadView = ({
   thread: Thread;
 }) => {
   const { doneMessages, trashMessages } = useBulkActions();
+  const pin = useMailStore((st) => st.pin);
   const snoozeThread = useMailStore((st) => st.snoozeThread);
   const unsnoozeThread = useMailStore((st) => st.unsnoozeThread);
   const notify = useMailStore((st) => st.notify);
@@ -59,6 +61,10 @@ export const ThreadView = ({
       return next;
     });
 
+  const onTogglePin = () => {
+    const next = !t.pinned;
+    for (const m of t.messages) pin(m.id, next);
+  };
   const onDone = () => doneMessages(inboxMessageIds);
   const onSnooze = (wakeAt: number) => {
     snoozeThread(inboxMessageIds, wakeAt);
@@ -83,6 +89,19 @@ export const ThreadView = ({
         <h2 className={s.title}>{translatedSubject || t.subject || "(no subject)"}</h2>
         <div className={s.headerActions}>
           <BundleMenu thread={t} onTranslateToEnglish={translateLatest} />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePin();
+            }}
+            title={t.pinned ? "Unpin" : "Pin"}
+            className={s.iconBtn}
+          >
+            <Icon
+              name="push_pin"
+              className={clsx(s.iconBtnIcon, t.pinned && s.iconBtnIconActive)}
+            />
+          </button>
           {hasInboxMessages && <SnoozeMenu onChoose={onSnooze} />}
           {snoozedMessageIds.length > 0 && (
             <button

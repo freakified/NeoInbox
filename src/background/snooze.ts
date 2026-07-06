@@ -6,6 +6,7 @@ import { archiveFolderIdsForAccount } from "./archiveFolders";
 import { applyMessageDetails, classifyMessage, doneMessage } from "./ingest";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
+import { ensureTagsRegistered } from "./tags";
 
 const ALARM_PREFIX = "neoinbox-snooze-";
 const SEARCH_PAGE_LIMIT = 20;
@@ -47,6 +48,7 @@ export const snoozeMessage = async (
     ...(msg.tags ?? []).filter((t) => t !== SNOOZED_KEY),
     SNOOZED_KEY,
   ];
+  await ensureTagsRegistered();
   await messenger.messages.update(messageId, { tags: nextTags });
 
   try {

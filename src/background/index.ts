@@ -19,6 +19,7 @@ import {
   runStartupSync,
 } from "./backfill";
 import { pushMyEmails, wireSyncEngine } from "./sync";
+import { ensureTagsRegistered } from "./tags";
 import { broadcast, onCommand, startPortServer } from "./port";
 import { invalidateRouteRules } from "../classifier/routeRules";
 import { domainMatches } from "../classifier/features";
@@ -27,24 +28,17 @@ import { collectArchiveFolders, invalidateFolderCache } from "../shared/folders"
 import { SNOOZED_KEY } from "../shared/categories";
 import { parseSender } from "../shared/senders";
 import { log } from "../shared/log";
-import type { RouteRuleRecord } from "../shared/types";
+import type { RawMessage, RouteRuleRecord } from "../shared/types";
 
 const INBOX_URL = "inbox.html";
 
 /**
- * Re-run the full classify pipeline for cached inbox messages that match a
- * rule's key. Adding, reassigning, or deleting a rule can only change the
- * category of messages its key matches, so this candidate set is sufficient.
+ * Re-run the full classify pipeline for these cached inbox messages, persist
+ * the results, and broadcast one delta. Returns how many changed category.
  */
-const reclassifyRuleMatches = async (rule: RouteRuleRecord): Promise<void> => {
-  const cached = (await db.messages.toArray()).filter((m) => {
-    if (m.origin !== "inbox") return false;
-    if (rule.type === "subject_keyword") return m.subject.toLowerCase().includes(rule.value);
-    const sender = parseSender(m.author);
-    if (rule.type === "email") return sender.email === rule.value;
-    return domainMatches(sender.domain, [rule.value]);
-  });
+const reclassifyMessages = async (cached: RawMessage[]): Promise<{ scanned: number; moved: number }> => {
   const updated = [];
+  let moved = 0;
   for (const cmsg of cached) {
     try {
       const header = await messenger.messages.get(cmsg.id);
@@ -54,11 +48,29 @@ const reclassifyRuleMatches = async (rule: RouteRuleRecord): Promise<void> => {
       await applyMessageDetails(raw, cmsg);
       await db.messages.put(raw);
       updated.push(raw);
+      if ((raw.category ?? null) !== (cmsg.category ?? null)) moved++;
     } catch (e) {
-      log.warn("route-rule", "reclassify failed", { id: cmsg.id, e });
+      log.warn("reclassify", "failed", { id: cmsg.id, e });
     }
   }
   if (updated.length) broadcast({ type: "delta", updated });
+  return { scanned: cached.length, moved };
+}
+
+/**
+ * Reclassify cached inbox messages that match a rule's key. Adding,
+ * reassigning, or deleting a rule can only change the category of messages
+ * its key matches, so this candidate set is sufficient.
+ */
+const reclassifyRuleMatches = async (rule: RouteRuleRecord): Promise<void> => {
+  const cached = (await db.messages.toArray()).filter((m) => {
+    if (m.origin !== "inbox") return false;
+    if (rule.type === "subject_keyword") return m.subject.toLowerCase().includes(rule.value);
+    const sender = parseSender(m.author);
+    if (rule.type === "email") return sender.email === rule.value;
+    return domainMatches(sender.domain, [rule.value]);
+  });
+  await reclassifyMessages(cached);
 }
 
 const openOrFocusInbox = async (): Promise<void> => {
@@ -152,6 +164,7 @@ for (const event of [
 
 wireSyncEngine();
 startPortServer();
+void ensureTagsRegistered().catch((e) => log.warn("tags", "registration failed", e));
 void ensureSnoozeAlarmsRestored().catch((e) => log.warn("snooze", "restore alarms failed", e));
 
 onCommand(async (msg) => {
@@ -167,7 +180,13 @@ onCommand(async (msg) => {
       return;
     }
     case "pin": {
-      await pinMessage(msg.messageId, msg.pinned);
+      try {
+        await pinMessage(msg.messageId, msg.pinned);
+      } catch (e) {
+        // Fall through to the echo below: it rebroadcasts the message's real
+        // state, which reverts the UI's optimistic pin instead of stranding it.
+        log.warn("command", "pin failed", { id: msg.messageId, e: String(e) });
+      }
       const header = await messenger.messages.get(msg.messageId);
       const cached = await db.messages.get(msg.messageId);
       const raw = headerToRawMessage(
@@ -306,21 +325,17 @@ onCommand(async (msg) => {
       const affected = (await db.messages.toArray()).filter(
         (m) => m.origin === "inbox" && m.category === msg.id,
       );
-      const updated = [];
-      for (const cachedMsg of affected) {
-        try {
-          const header = await messenger.messages.get(cachedMsg.id);
-          const cat = await classifyMessage(header);
-          const fresh = await messenger.messages.get(cachedMsg.id);
-          const raw = headerToRawMessage(fresh, "inbox", cat);
-          await applyMessageDetails(raw, cachedMsg);
-          await db.messages.put(raw);
-          updated.push(raw);
-        } catch (e) {
-          log.warn("delete-custom-bundle", "reclassify failed", { id: cachedMsg.id, e });
-        }
-      }
-      if (updated.length) broadcast({ type: "delta", updated });
+      await reclassifyMessages(affected);
+      return;
+    }
+    case "reclassify": {
+      invalidateRouteRules();
+      const wanted = msg.messageIds ? new Set(msg.messageIds) : null;
+      const cached = (await db.messages.toArray()).filter(
+        (m) => m.origin === "inbox" && (!wanted || wanted.has(m.id)),
+      );
+      const result = await reclassifyMessages(cached);
+      broadcast({ type: "reclassify-done", ...result });
       return;
     }
   }

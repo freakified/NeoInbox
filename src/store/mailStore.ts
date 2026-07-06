@@ -10,7 +10,7 @@ import {
   type FailedCommand,
   type ServerMsg,
 } from "../shared/messaging";
-import type { Category, CustomBundleRecord, RawMessage, RouteRuleRecord, SnoozeRecord } from "../shared/types";
+import type { Category, CustomBundleRecord, RawMessage, RouteRuleRecord, SnoozeRecord, Thread } from "../shared/types";
 
 export type { Stream, StreamItem, StreamSection, StreamView } from "./stream";
 
@@ -52,6 +52,18 @@ export interface ToastRecord {
   actions?: ToastAction[];
 }
 
+/**
+ * A request to open the bundle settings modal. Lives in the store (not
+ * component state) so toast actions can open it after the originating thread
+ * row has unmounted; `thread` is a snapshot for seeding rules from it.
+ */
+export interface BundleSettingsRequest {
+  category?: Category | null;
+  thread?: Thread;
+  highlightRuleId?: string;
+  startNewBundle?: boolean;
+}
+
 interface MailStore {
   messagesById: Record<number, RawMessage>;
   myEmails: ReadonlySet<string>;
@@ -63,6 +75,8 @@ interface MailStore {
   pendingOps: Record<number, PendingOp>;
   snoozesByMessageId: Record<number, SnoozeRecord>;
   toasts: ToastRecord[];
+  bundleSettings: BundleSettingsRequest | null;
+  reclassifying: boolean;
 
   init: () => Promise<void>;
   pin: (messageId: number, pinned: boolean) => void;
@@ -80,6 +94,10 @@ interface MailStore {
   undoToast: (toastId: string) => void;
   dismissToast: (toastId: string) => void;
   notify: (message: string, actions?: ToastAction[]) => void;
+  openBundleSettings: (request: BundleSettingsRequest) => void;
+  closeBundleSettings: () => void;
+  /** Re-run bundling rules in the background; whole inbox when no ids given. */
+  reclassify: (messageIds?: number[]) => void;
 }
 
 const UNDO_TIMEOUT_MS = 5000;
@@ -139,6 +157,8 @@ export const useMailStore = create<MailStore>((set, get) => ({
   pendingOps: {},
   snoozesByMessageId: {},
   toasts: [],
+  bundleSettings: null,
+  reclassifying: false,
 
   init: async () => {
     if (get().hydrated) return;
@@ -171,7 +191,8 @@ export const useMailStore = create<MailStore>((set, get) => ({
       });
       next.onDisconnect.addListener(() => {
         if (port === next) port = null;
-        set({ connectionState: "reconnecting" });
+        // A reclassify in flight died with the port; unstick the button.
+        set({ connectionState: "reconnecting", reclassifying: false });
         setTimeout(() => {
           backoff = Math.min(backoff * 2, 10_000);
           connect();
@@ -400,6 +421,20 @@ export const useMailStore = create<MailStore>((set, get) => ({
     const toast: ToastRecord = { id: nextToastId(), message, actions };
     set({ toasts: [...get().toasts, toast].slice(-TOAST_LIMIT) });
   },
+
+  openBundleSettings: (request) => {
+    set({ bundleSettings: request });
+  },
+
+  closeBundleSettings: () => {
+    set({ bundleSettings: null });
+  },
+
+  reclassify: (messageIds) => {
+    if (get().reclassifying) return;
+    set({ reclassifying: true });
+    send({ type: "reclassify", messageIds });
+  },
 }));
 
 const TOAST_LIMIT = 3;
@@ -486,6 +521,15 @@ const applyServerMsg = (
       log.warn("store", "command failed", msg);
       return;
     }
+    case "reclassify-done": {
+      const message =
+        msg.moved === 0
+          ? `Checked ${msg.scanned} ${msg.scanned === 1 ? "message" : "messages"} — everything already in place`
+          : `Checked ${msg.scanned} ${msg.scanned === 1 ? "message" : "messages"} — ${msg.moved} moved`;
+      const toast: ToastRecord = { id: nextToastId(), message };
+      set({ reclassifying: false, toasts: [...get().toasts, toast].slice(-TOAST_LIMIT) });
+      return;
+    }
     case "error":
       log.warn("store", "server error", msg.message);
       return;
@@ -503,13 +547,13 @@ export const useStream = (): Stream => {
   );
 }
 
-export const useStreamForView = (view: StreamView): Stream => {
+export const useStreamForView = (view: StreamView, pinnedOnly = false): Stream => {
   const messagesById = useMailStore((s) => s.messagesById);
   const myEmails = useMailStore((s) => s.myEmails);
   const snoozesByMessageId = useMailStore((s) => s.snoozesByMessageId);
   return useMemo(
-    () => deriveStream(messagesById, myEmails, view, snoozesByMessageId),
-    [messagesById, myEmails, view, snoozesByMessageId],
+    () => deriveStream(messagesById, myEmails, view, snoozesByMessageId, pinnedOnly),
+    [messagesById, myEmails, view, snoozesByMessageId, pinnedOnly],
   );
 }
 
@@ -535,4 +579,8 @@ export const useRouteRules = (): RouteRuleRecord[] => {
 
 export const useToasts = (): ToastRecord[] => {
   return useMailStore((s) => s.toasts);
+}
+
+export const useBundleSettings = (): BundleSettingsRequest | null => {
+  return useMailStore((s) => s.bundleSettings);
 }

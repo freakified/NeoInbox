@@ -1,4 +1,6 @@
 import type { Thread } from "../../shared/types";
+import { getCategoryMeta } from "../../shared/categories";
+import { useCustomBundles } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate } from "../lib/dateBucket";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
@@ -21,13 +23,16 @@ export const ThreadRow = ({
   onToggle: () => void;
   expandedRef?: React.RefObject<HTMLDivElement | null>;
 }) => {
+  const customBundles = useCustomBundles();
   const firstSender = t.messages[0];
   const name = firstSender ? senderName(firstSender.author) : "";
   const avatarBg = avatarColor(name);
   const initial = firstSender ? senderInitial(firstSender.author) : "?";
   const attachmentRefs = collectAttachments(t.messages);
   const hasDraft = t.messages.some((m) => m.origin === "draft");
-  const date = t.snoozeDueAt ? (
+  // A pinned thread escapes its bundle in the stream, so the chip keeps its origin visible.
+  const bundleMeta = t.pinned && t.category ? getCategoryMeta(t.category, customBundles) : null;
+  const baseDate = t.snoozeDueAt ? (
     <span className={s.snoozeDue}>
       <span>{formatDate(t.snoozeDueAt)}</span>
       <Icon name="schedule" className={s.snoozeIcon} />
@@ -41,6 +46,12 @@ export const ThreadRow = ({
       <Icon name="schedule" className={s.snoozeIcon} />
     </span>
   ) : formatDate(t.latestDate);
+  const date = t.pinned ? (
+    <span className={s.pinnedDate}>
+      <Icon name="push_pin" className={s.pinIndicator} />
+      {baseDate}
+    </span>
+  ) : baseDate;
 
   return (
     <MotionRow
@@ -58,13 +69,15 @@ export const ThreadRow = ({
           }
           primary={t.participantsLabel}
           secondary={
-            hasDraft ? (
-              <>
-                <span className={s.draftLabel}>Draft</span> {t.subject || "(no subject)"}
-              </>
-            ) : (
-              t.subject || "(no subject)"
-            )
+            <>
+              {bundleMeta && (
+                <span className={s.bundleChip} style={{ color: bundleMeta.color }}>
+                  {bundleMeta.name}
+                </span>
+              )}
+              {hasDraft && <span className={s.draftLabel}>Draft </span>}
+              {t.subject || "(no subject)"}
+            </>
           }
           trailing={
             attachmentRefs.length > 0 ? (
