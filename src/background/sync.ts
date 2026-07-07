@@ -1,10 +1,10 @@
 import { withTimeout } from "./backfill";
 import { applyMessageDetailsForOrigin, classifyMessage } from "./ingest";
+import { applyLocalState, isSnoozedHeader } from "./localState";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
 import { wakeSnoozesForNewMail } from "./snooze";
 import { db } from "../store/db";
-import { SNOOZED_KEY } from "../shared/categories";
 import { collectArchiveFolders, collectDraftFolders, collectInboxFolders, collectSentFolders } from "../shared/folders";
 import { log } from "../shared/log";
 import type { MessageOrigin, RawMessage } from "../shared/types";
@@ -61,11 +61,12 @@ const cacheOne = async (
   origin: MessageOrigin,
 ): Promise<RawMessage> => {
   const fresh = await messenger.messages.get(header.id);
-  const logicalOrigin = origin === "done" && (fresh.tags ?? []).includes(SNOOZED_KEY)
+  const logicalOrigin = origin === "done" && (await isSnoozedHeader(fresh))
     ? "inbox"
     : origin;
   const cat = logicalOrigin === "inbox" ? await classifyMessage(fresh) : null;
   const raw = headerToRawMessage(fresh, logicalOrigin, cat);
+  await applyLocalState(raw);
   const cached = await db.messages.get(fresh.id);
   await applyMessageDetailsForOrigin(raw, cached);
   return raw;
@@ -218,7 +219,7 @@ export const wireSyncEngine = (): void => {
           origin = await originForFolder(folderId);
         }
         if (!origin) return;
-        const logicalOrigin = origin === "done" && (fresh.tags ?? []).includes(SNOOZED_KEY)
+        const logicalOrigin = origin === "done" && (await isSnoozedHeader(fresh))
           ? "inbox"
           : origin;
         const category = cached
@@ -227,6 +228,7 @@ export const wireSyncEngine = (): void => {
             ? await classifyMessage(fresh)
             : null;
         const raw = headerToRawMessage(fresh, logicalOrigin, category);
+        await applyLocalState(raw);
         await applyMessageDetailsForOrigin(raw, cached);
         await db.messages.put(raw);
         broadcast({ type: "delta", updated: [raw] });
@@ -278,7 +280,7 @@ export const wireSyncEngine = (): void => {
             continue;
           }
           const fresh = await messenger.messages.get(moved.id);
-          if ((fresh.tags ?? []).includes(SNOOZED_KEY)) {
+          if (await isSnoozedHeader(fresh)) {
             if (originalId !== undefined) snoozedOriginalIds.add(originalId);
             continue;
           }

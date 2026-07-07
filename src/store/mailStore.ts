@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { db } from "./db";
 import { deriveStream, type Stream, type StreamView } from "./stream";
-import { PINNED_KEY, SNOOZED_KEY } from "../shared/categories";
 import { log } from "../shared/log";
 import {
   PORT_NAME,
@@ -209,10 +208,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
     const map = { ...get().messagesById };
     const m = map[messageId];
     if (m) {
-      const tags = pinned
-        ? [...m.tags.filter((t) => t !== PINNED_KEY), PINNED_KEY]
-        : m.tags.filter((t) => t !== PINNED_KEY);
-      map[messageId] = { ...m, tags, pinned };
+      map[messageId] = { ...m, pinned };
       set({ messagesById: map });
     }
     send({ type: "pin", messageId, pinned });
@@ -253,11 +249,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
       const m = prev[id];
       if (m) pending[id] = { kind: "snooze", message: m, wakeAt };
       if (m) {
-        map[id] = {
-          ...m,
-          tags: [...m.tags.filter((t) => t !== SNOOZED_KEY), SNOOZED_KEY],
-          origin: "inbox",
-        };
+        map[id] = { ...m, snoozed: true, origin: "inbox" };
       }
     }
     const snoozesByMessageId = { ...get().snoozesByMessageId };
@@ -269,6 +261,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
         wakeAt,
         originFolderId: m.folderId,
         originAccountId: m.accountId,
+        headerMessageId: m.headerMessageId,
       };
     }
     set({ messagesById: map, pendingOps: pending, snoozesByMessageId });
@@ -286,11 +279,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
       const m = prev[id];
       if (!m) continue;
       pending[id] = { kind: "unsnooze", message: m, snooze: snoozesByMessageId[id] };
-      map[id] = {
-        ...m,
-        tags: m.tags.filter((t) => t !== SNOOZED_KEY),
-        resurfacedAt: now,
-      };
+      map[id] = { ...m, snoozed: false, resurfacedAt: now };
       delete snoozesByMessageId[id];
     }
     set({ messagesById: map, pendingOps: pending, snoozesByMessageId });
@@ -459,9 +448,9 @@ const applyServerMsg = (
       if (msg.removedIds) for (const id of msg.removedIds) delete map[id];
       const snoozesByMessageId = { ...get().snoozesByMessageId };
       if (msg.removedIds) for (const id of msg.removedIds) delete snoozesByMessageId[id];
-      // A message that comes back without the snoozed tag has woken; drop any stale record.
+      // A message that comes back unsnoozed has woken; drop any stale record.
       for (const m of [...(msg.added ?? []), ...(msg.updated ?? [])]) {
-        if (snoozesByMessageId[m.id] && !m.tags.includes(SNOOZED_KEY)) {
+        if (snoozesByMessageId[m.id] && !m.snoozed) {
           delete snoozesByMessageId[m.id];
         }
       }

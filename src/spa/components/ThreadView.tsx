@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { clsx } from "clsx";
-import { SNOOZED_KEY } from "../../shared/categories";
 import type { Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
@@ -30,7 +29,7 @@ export const ThreadView = ({
   );
   const hasInboxMessages = inboxMessageIds.length > 0;
   const snoozedMessageIds = useMemo(
-    () => t.messages.filter((m) => m.tags.includes(SNOOZED_KEY)).map((m) => m.id),
+    () => t.messages.filter((m) => m.snoozed).map((m) => m.id),
     [t],
   );
 

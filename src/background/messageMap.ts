@@ -1,4 +1,4 @@
-import { PINNED_KEY } from "../shared/categories";
+import { sanitizeTags } from "../shared/categories";
 import { parseAddressList } from "../shared/senders";
 import type { Category, MessageOrigin, RawMessage } from "../shared/types";
 
@@ -16,9 +16,9 @@ export const headerToRawMessage = (
   appliedCategory?: Category | null,
 ): RawMessage => {
   const folder = (header as HeaderWithFolder).folder;
-  const baseTags = header.tags ?? [];
-
-  const tags = baseTags;
+  // Legacy neoinbox-* keys may linger on the server until cleanupLegacyTags
+  // finishes; never let them back into the cache.
+  const tags = sanitizeTags(header.tags);
   const category = appliedCategory ?? null;
 
   return {
@@ -36,7 +36,9 @@ export const headerToRawMessage = (
     accountId: folder?.accountId ?? "",
     tags,
     category,
-    pinned: tags.includes(PINNED_KEY),
+    // Local-only state; callers stamp the real values via applyLocalState.
+    pinned: false,
+    snoozed: false,
     origin,
   };
 }

@@ -67,30 +67,26 @@ export const CATEGORIES: Record<BuiltinCategory, CategoryMeta> = {
   },
 };
 
-export const PINNED_KEY = "neoinbox-pinned";
-export const SNOOZED_KEY = "neoinbox-snoozed";
+/**
+ * Legacy Thunderbird tag keys. Older NeoInbox versions stored pin/snooze
+ * state as real message tags; that state now lives only in the extension's
+ * own database. These keys remain so the one-time cleanup can find and strip
+ * them from the user's mailbox — never write them again.
+ */
+export const LEGACY_PINNED_KEY = "neoinbox-pinned";
+export const LEGACY_SNOOZED_KEY = "neoinbox-snoozed";
 
 export const NEO_TAG_KEYS: ReadonlySet<string> = new Set(
   [
     ...Object.values(CATEGORIES).map((m) => m.key).filter(Boolean),
-    PINNED_KEY,
-    SNOOZED_KEY,
+    LEGACY_PINNED_KEY,
+    LEGACY_SNOOZED_KEY,
   ],
 );
 
-const TAG_TO_CATEGORY: ReadonlyMap<string, BuiltinCategory> = new Map(
-  Object.entries(CATEGORIES)
-    .filter(([, m]) => m.key)
-    .map(([cat, m]) => [m.key, cat as BuiltinCategory]),
-);
-
-export const categoryFromTags = (tags: readonly string[]): BuiltinCategory | null => {
-  for (const t of tags) {
-    const cat = TAG_TO_CATEGORY.get(t);
-    if (cat) return cat;
-  }
-  return null;
-}
+/** Drops NeoInbox's legacy tag keys, leaving only the user's real tags. */
+export const sanitizeTags = (tags: readonly string[] | undefined): string[] =>
+  (tags ?? []).filter((t) => !NEO_TAG_KEYS.has(t));
 
 export const getCategoryMeta = (
   category: Category,

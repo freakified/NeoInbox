@@ -1,5 +1,4 @@
 import { clsx } from "clsx";
-import { SNOOZED_KEY } from "../../shared/categories";
 import type { Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
 import { useShowDeleteActions } from "../lib/deleteActionPrefs";
@@ -19,7 +18,7 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
   const inboxMessageIds = thread.messages.filter((m) => m.origin === "inbox").map((m) => m.id);
   const hasInboxMessages = inboxMessageIds.length > 0;
   const snoozedMessageIds = thread.messages
-    .filter((m) => m.tags.includes(SNOOZED_KEY))
+    .filter((m) => m.snoozed)
     .map((m) => m.id);
 
   const togglePin = () => {

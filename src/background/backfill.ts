@@ -5,11 +5,12 @@ import {
   MESSAGE_DETAILS_VERSION,
   needsMessageDetails,
 } from "./ingest";
+import { applyLocalState } from "./localState";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
 import { beginScan, endScan, wasCachedDuringScan, wasRemovedDuringScan } from "./scanGuard";
 import { db } from "../store/db";
-import { SNOOZED_KEY } from "../shared/categories";
+import { sanitizeTags } from "../shared/categories";
 import {
   collectDraftFolders,
   collectInboxFolders,
@@ -117,7 +118,7 @@ const isUnchanged = (
   cached.date === (header.date ? new Date(header.date).getTime() : 0) &&
   cached.read === (header.read ?? false) &&
   cached.size === (header.size ?? 0) &&
-  tagsEqual(cached.tags, header.tags ?? []) &&
+  tagsEqual(cached.tags, sanitizeTags(header.tags)) &&
   Array.isArray(cached.attachments) &&
   Array.isArray(cached.references) &&
   Array.isArray(cached.inReplyTo);
@@ -156,6 +157,7 @@ const ingestHeader = async (
     }
   }
   const raw = headerToRawMessage(header, origin, category);
+  await applyLocalState(raw);
   if (origin === "inbox") {
     await applyMessageDetails(raw, cached);
   } else {
@@ -236,7 +238,7 @@ const visitFolder = async (
         (m) =>
           !liveIds.has(m.id) &&
           m.origin !== "done" &&
-          !m.tags.includes(SNOOZED_KEY) &&
+          !m.snoozed &&
           !wasCachedDuringScan(m.id) &&
           (sentCutoff === 0 || m.date >= sentCutoff),
       )
@@ -269,7 +271,7 @@ const folderDrifted = async (folder: InboxFolder, origin: MessageOrigin): Promis
     );
     if (typeof info.totalMessageCount !== "number") return false;
     const cachedRows = await db.messages.where("folderId").equals(folder.id).toArray();
-    const cachedCount = cachedRows.filter((m) => !m.tags.includes(SNOOZED_KEY)).length;
+    const cachedCount = cachedRows.filter((m) => !m.snoozed).length;
     if (cachedCount === info.totalMessageCount) return false;
     log.info("backfill", "folder drift detected", {
       folder: folder.name,
@@ -292,7 +294,7 @@ const pruneUnknownFolders = async (knownFolderIds: readonly string[]): Promise<v
         m.folderId !== "" &&
         !known.has(m.folderId) &&
         m.origin !== "done" &&
-        !m.tags.includes(SNOOZED_KEY) &&
+        !m.snoozed &&
         !wasCachedDuringScan(m.id),
     )
     .map((m) => m.id);
@@ -482,6 +484,7 @@ export const reclassifyAll = (): Promise<{ scanned: number; updated: number }> =
           const cat = await classifyMessage(header);
           if (cat !== cachedMsg.category) updated++;
           const raw = headerToRawMessage(header, "inbox", cat);
+          await applyLocalState(raw);
           await applyMessageDetails(raw, cachedMsg);
           batch.push(raw);
           if (batch.length >= BATCH_FLUSH) await flush();

@@ -1,8 +1,9 @@
 import { classify } from "../classifier/pipeline";
 import { extractFeatures } from "../classifier/features";
-import { PINNED_KEY } from "../shared/categories";
 import { log } from "../shared/log";
+import { pinKeyOf } from "../shared/pinKey";
 import { scanCidRefs } from "../spa/lib/srcdoc";
+import { db } from "../store/db";
 import type { AttachmentSummary, Category, RawMessage } from "../shared/types";
 import {
   findByHeaderMessageIdInFolder,
@@ -10,7 +11,7 @@ import {
   messageStillInFolderByHeader,
   resolveArchiveFolder,
 } from "./archiveFolders";
-import { ensureTagsRegistered } from "./tags";
+import { setPinned } from "./localState";
 
 export const MESSAGE_DETAILS_VERSION = 2;
 
@@ -71,13 +72,11 @@ export const classifyMessage = async (
 }
 
 export const pinMessage = async (id: number, pinned: boolean): Promise<void> => {
-  await ensureTagsRegistered();
-  const msg = await messenger.messages.get(id);
-  const tags = msg.tags ?? [];
-  const next = pinned
-    ? [...tags.filter((t) => t !== PINNED_KEY), PINNED_KEY]
-    : tags.filter((t) => t !== PINNED_KEY);
-  await messenger.messages.update(id, { tags: next });
+  const cached = await db.messages.get(id);
+  const headerMessageId = cached?.headerMessageId
+    ?? (await messenger.messages.get(id)).headerMessageId
+    ?? "";
+  await setPinned(pinKeyOf({ headerMessageId, id }), pinned);
 }
 
 export const doneMessage = async (id: number): Promise<void> => {

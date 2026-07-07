@@ -1,4 +1,3 @@
-import { SNOOZED_KEY } from "../shared/categories";
 import { buildThreads } from "../shared/threading";
 import type { Category, MessageOrigin, RawMessage, SnoozeRecord, Thread } from "../shared/types";
 import { dateBucket, futureDateBucket } from "../spa/lib/dateBucket";
@@ -69,10 +68,10 @@ export const deriveStream = (
   );
   const visible = allMessages.filter((m) => {
     if (view.type === "inbox") {
-      return m.origin === "sent" || m.origin === "draft" || (m.origin === "inbox" && !m.tags.includes(SNOOZED_KEY));
+      return m.origin === "sent" || m.origin === "draft" || (m.origin === "inbox" && !m.snoozed);
     }
     if (view.type === "snoozed") {
-      return m.origin === "sent" || m.origin === "draft" || (m.origin === "inbox" && m.tags.includes(SNOOZED_KEY));
+      return m.origin === "sent" || m.origin === "draft" || (m.origin === "inbox" && m.snoozed);
     }
     if (view.type === "draft") return m.origin === "draft";
     if (view.type === "sent") return m.origin === "sent";
@@ -80,7 +79,7 @@ export const deriveStream = (
     return (
       m.origin === "sent" ||
       m.origin === "draft" ||
-      (m.origin === "inbox" && !m.tags.includes(SNOOZED_KEY) && m.category === view.category)
+      (m.origin === "inbox" && !m.snoozed && m.category === view.category)
     );
   });
   let threads = buildThreads(visible, myEmails, anchorOrigins);

@@ -1,7 +1,14 @@
 import Dexie, { type Table, type Transaction } from "dexie";
+import {
+  LEGACY_PINNED_KEY,
+  LEGACY_SNOOZED_KEY,
+  sanitizeTags,
+} from "../shared/categories";
+import { pinKeyOf } from "../shared/pinKey";
 import type {
   CustomBundleRecord,
   FolderCursorRecord,
+  PinRecord,
   RawMessage,
   RouteRuleRecord,
   RouteRuleType,
@@ -64,9 +71,43 @@ const migrateToRouteRules = async (tx: Transaction): Promise<void> => {
   });
 };
 
+/**
+ * Pin/snooze state used to be stored as Thunderbird message tags. It now
+ * lives only in this database: derive the new pinned/snoozed fields (and pin
+ * records) from the cached tags, then drop our keys from the tags arrays.
+ * The tags still on the server are stripped separately by cleanupLegacyTags.
+ */
+const migrateTagsToLocalState = async (tx: Transaction): Promise<void> => {
+  const now = Date.now();
+  const pins = new Map<string, PinRecord>();
+  await tx.table<RawMessage>("messages").toCollection().modify((m) => {
+    const tags: string[] = m.tags ?? [];
+    m.snoozed = tags.includes(LEGACY_SNOOZED_KEY);
+    m.pinned = m.pinned || tags.includes(LEGACY_PINNED_KEY);
+    m.tags = sanitizeTags(tags);
+    if (m.pinned) {
+      const key = pinKeyOf(m);
+      pins.set(key, { key, pinnedAt: now });
+    }
+  });
+  if (pins.size) await tx.table("pins").bulkPut([...pins.values()]);
+
+  const snoozes = await tx.table<SnoozeRecord>("snoozes").toArray();
+  const fixed: SnoozeRecord[] = [];
+  for (const record of snoozes) {
+    if (record.headerMessageId) continue;
+    const cached = await tx.table<RawMessage>("messages").get(record.messageId);
+    if (cached?.headerMessageId) {
+      fixed.push({ ...record, headerMessageId: cached.headerMessageId });
+    }
+  }
+  if (fixed.length) await tx.table("snoozes").bulkPut(fixed);
+};
+
 class NeoInboxDb extends Dexie {
   messages!: Table<RawMessage, number>;
   snoozes!: Table<SnoozeRecord, number>;
+  pins!: Table<PinRecord, string>;
   routeRules!: Table<RouteRuleRecord, string>;
   folderCursors!: Table<FolderCursorRecord, string>;
   customBundles!: Table<CustomBundleRecord, string>;
@@ -117,6 +158,11 @@ class NeoInboxDb extends Dexie {
       overrides: null,
       bundleRules: null,
     });
+    this.version(9)
+      .stores({
+        pins: "key",
+      })
+      .upgrade(migrateTagsToLocalState);
   }
 }
 

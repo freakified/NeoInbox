@@ -57,7 +57,10 @@ export interface RawMessage {
   accountId: string;
   tags: string[];
   category: Category | null;
+  /** NeoInbox-local state; never written to Thunderbird or the mail server. */
   pinned: boolean;
+  /** NeoInbox-local state; never written to Thunderbird or the mail server. */
+  snoozed: boolean;
   origin: MessageOrigin;
   references?: string[];
   inReplyTo?: string[];
@@ -86,6 +89,17 @@ export interface SnoozeRecord {
   wakeAt: number;
   originFolderId: string;
   originAccountId: string;
+  /** Identifies the message across the archive move (which changes its numeric id). */
+  headerMessageId?: string;
+}
+
+/**
+ * A pinned message. Keyed by Message-ID header (see pinKeyOf) so the pin
+ * follows the message across folder moves and numeric-id changes.
+ */
+export interface PinRecord {
+  key: string;
+  pinnedAt: number;
 }
 
 export interface FolderCursorRecord {

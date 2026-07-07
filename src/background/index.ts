@@ -19,13 +19,13 @@ import {
   runStartupSync,
 } from "./backfill";
 import { pushMyEmails, wireSyncEngine } from "./sync";
-import { ensureTagsRegistered } from "./tags";
+import { cleanupLegacyTags } from "./legacyTags";
+import { applyLocalState } from "./localState";
 import { broadcast, onCommand, startPortServer } from "./port";
 import { invalidateRouteRules } from "../classifier/routeRules";
 import { domainMatches } from "../classifier/features";
 import { db } from "../store/db";
 import { collectArchiveFolders, invalidateFolderCache } from "../shared/folders";
-import { SNOOZED_KEY } from "../shared/categories";
 import { parseSender } from "../shared/senders";
 import { log } from "../shared/log";
 import type { RawMessage, RouteRuleRecord } from "../shared/types";
@@ -45,6 +45,7 @@ const reclassifyMessages = async (cached: RawMessage[]): Promise<{ scanned: numb
       const cat = await classifyMessage(header);
       const fresh = await messenger.messages.get(cmsg.id);
       const raw = headerToRawMessage(fresh, "inbox", cat);
+      await applyLocalState(raw);
       await applyMessageDetails(raw, cmsg);
       await db.messages.put(raw);
       updated.push(raw);
@@ -164,7 +165,7 @@ for (const event of [
 
 wireSyncEngine();
 startPortServer();
-void ensureTagsRegistered().catch((e) => log.warn("tags", "registration failed", e));
+void cleanupLegacyTags().catch((e) => log.warn("legacy-tags", "cleanup failed", e));
 void ensureSnoozeAlarmsRestored().catch((e) => log.warn("snooze", "restore alarms failed", e));
 
 onCommand(async (msg) => {
@@ -194,6 +195,7 @@ onCommand(async (msg) => {
         cached?.origin ?? "inbox",
         cached?.category ?? null,
       );
+      await applyLocalState(raw);
       await applyMessageDetails(raw, cached);
       await db.messages.put(raw);
       broadcast({ type: "delta", updated: [raw] });
@@ -217,6 +219,7 @@ onCommand(async (msg) => {
         const header = await messenger.messages.get(msg.messageId);
         if (await isArchiveFolder(folderIdOf(header))) {
           const raw = headerToRawMessage(header, "done", cached?.category ?? null);
+          await applyLocalState(raw);
           await applyMessageDetails(raw, cached);
           await db.messages.put(raw);
           broadcast({ type: "delta", added: [raw] });
@@ -264,7 +267,7 @@ onCommand(async (msg) => {
       if (cached) {
         const raw = {
           ...cached,
-          tags: [...cached.tags.filter((t) => t !== SNOOZED_KEY), SNOOZED_KEY],
+          snoozed: true,
           origin: "inbox" as const,
         };
         await db.messages.put(raw);

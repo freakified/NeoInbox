@@ -19,6 +19,7 @@
   "permissions": [
     "compose",
     "messagesRead",
+    "messagesTags",
     "messagesUpdate",
     "messagesMove",
     "messagesDelete",

@@ -1,12 +1,11 @@
 import { db } from "../store/db";
-import { SNOOZED_KEY } from "../shared/categories";
 import { log } from "../shared/log";
 import type { RawMessage, SnoozeRecord } from "../shared/types";
 import { archiveFolderIdsForAccount } from "./archiveFolders";
 import { applyMessageDetails, classifyMessage, doneMessage } from "./ingest";
+import { applyLocalState, invalidateSnoozeIndex } from "./localState";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
-import { ensureTagsRegistered } from "./tags";
 
 const ALARM_PREFIX = "neoinbox-snooze-";
 const SEARCH_PAGE_LIMIT = 20;
@@ -43,29 +42,17 @@ export const snoozeMessage = async (
     headerMessageId,
   };
   await db.snoozes.put(record);
-
-  const nextTags = [
-    ...(msg.tags ?? []).filter((t) => t !== SNOOZED_KEY),
-    SNOOZED_KEY,
-  ];
-  await ensureTagsRegistered();
-  await messenger.messages.update(messageId, { tags: nextTags });
+  invalidateSnoozeIndex();
 
   try {
     await doneMessage(messageId);
   } catch (e) {
-    log.warn("snooze", "archive failed; rolling back snooze record + tag", {
+    log.warn("snooze", "archive failed; rolling back snooze record", {
       messageId,
       e: String(e),
     });
-    try {
-      await messenger.messages.update(messageId, {
-        tags: (msg.tags ?? []).filter((t) => t !== SNOOZED_KEY),
-      });
-    } catch (untagErr) {
-      log.warn("snooze", "rollback untag failed", { messageId, untagErr });
-    }
     await db.snoozes.delete(messageId);
+    invalidateSnoozeIndex();
     throw e;
   }
 
@@ -105,13 +92,6 @@ export const wakeSnoozedMessage = async (
     let restoredHeader = restored;
 
     if (restored) {
-      try {
-        await messenger.messages.update(restored.id, {
-          tags: (restored.tags ?? []).filter((t) => t !== SNOOZED_KEY),
-        });
-      } catch (e) {
-        log.warn("snooze", "untag on wake failed", e);
-      }
       if (record.originFolderId) {
         try {
           const moved = await messenger.messages.move(
@@ -129,6 +109,7 @@ export const wakeSnoozedMessage = async (
     }
 
     await db.snoozes.delete(originalId);
+    invalidateSnoozeIndex();
 
     if (!restoredHeader) {
       await db.messages.delete(originalId);
@@ -138,6 +119,7 @@ export const wakeSnoozedMessage = async (
 
     const cat = await classifyMessage(restoredHeader);
     const raw = headerToRawMessage(restoredHeader, "inbox", cat);
+    await applyLocalState(raw);
     if (reason === "alarm") raw.resurfacedAt = record.wakeAt;
     else if (reason === "unsnooze") raw.resurfacedAt = Date.now();
     await applyMessageDetails(raw);
@@ -214,7 +196,7 @@ const removeCachedSnoozedCopies = async (
     .filter((m) =>
       m.id !== raw.id &&
       m.headerMessageId === raw.headerMessageId &&
-      m.tags.includes(SNOOZED_KEY)
+      m.snoozed
     )
     .map((m) => m.id);
   if (!staleIds.length) return;
