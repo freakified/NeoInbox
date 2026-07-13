@@ -1,0 +1,210 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 0.28);
+  padding: 24px;
+}
+
+.dialog {
+  width: min(440px, 100%);
+  border: 1px solid var(--color-md-divider);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow-elevation-2);
+  padding: 20px;
+}
+
+.title {
+  margin: 0 0 4px;
+  color: var(--color-md-on-surface);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.subtitle {
+  margin: 0 0 16px;
+  color: var(--color-md-secondary-text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.option,
+.optionActive {
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+
+.optionActive {
+  background: rgb(26 115 232 / 0.07);
+  border-color: rgb(26 115 232 / 0.3);
+}
+
+.optionRow {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  padding: 9px 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 6px;
+}
+
+.option .optionRow:hover {
+  background: #f5f5f5;
+}
+
+.radio {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--color-md-secondary-text);
+  position: relative;
+}
+
+.optionActive .radio {
+  border-color: var(--color-md-primary);
+}
+
+.optionActive .radio::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--color-md-primary);
+}
+
+.optionLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  color: var(--color-md-on-surface);
+}
+
+.optionCount {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--color-md-secondary-text);
+}
+
+.subjectInput {
+  display: block;
+  width: calc(100% - 36px);
+  margin: 0 10px 8px 36px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-md-divider);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--color-md-on-surface);
+}
+
+.subjectInput:focus {
+  outline: none;
+  border-color: var(--color-md-primary);
+}
+
+.optionWarning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 10px 8px 36px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgb(217 48 37 / 0.08);
+  color: #b3261e;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.optionWarningIcon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #f5f5f5;
+  color: var(--color-md-secondary-text);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.noticeIcon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  color: var(--color-md-secondary-text);
+}
+
+.hint {
+  margin: 12px 0 0;
+  color: var(--color-md-secondary-text);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.cancelBtn,
+.confirmBtn {
+  border: none;
+  border-radius: 4px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cancelBtn {
+  background: transparent;
+  color: var(--color-md-secondary-text);
+}
+
+.cancelBtn:hover {
+  background: #f5f5f5;
+  color: var(--color-md-on-surface);
+}
+
+.confirmBtn {
+  background: var(--color-md-primary);
+  color: #fff;
+}
+
+.confirmBtn:hover {
+  background: #0b57d0;
+}
+
+.confirmBtn:disabled {
+  background: var(--color-md-divider);
+  color: var(--color-md-secondary-text);
+  cursor: not-allowed;
+}

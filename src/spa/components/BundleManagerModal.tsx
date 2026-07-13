@@ -8,6 +8,7 @@ import {
   normalizeRuleValue,
   ruleTypeLabel,
 } from "../../shared/routeRules";
+import { suggestRuleType } from "../../shared/ruleSuggestion";
 import { parseSender } from "../../shared/senders";
 import type {
   BuiltinCategory,
@@ -241,7 +242,11 @@ export const BundleManagerModal = ({
     email: sender.email,
     subject_keyword: thread?.subject ?? "",
   };
-  const initialRuleType: RuleType = sender.domain ? "domain" : sender.email ? "email" : "subject_keyword";
+  const initialRuleType: RuleType = sender.domain
+    ? suggestRuleType(sender.domain)
+    : sender.email
+      ? "email"
+      : "subject_keyword";
   const initialRuleValue = thread ? normalizeRuleValue(initialRuleType, threadRuleDefaults[initialRuleType]) : "";
   const seededRule = initialRuleValue ? { type: initialRuleType, value: initialRuleValue } : undefined;
 

@@ -1,4 +1,5 @@
-import type { RouteRuleRecord, RouteRuleType } from "./types";
+import { parseSender } from "./senders";
+import type { MessageOrigin, RouteRuleRecord, RouteRuleType } from "./types";
 
 export const ruleTypeLabel: Record<RouteRuleType, string> = {
   domain: "Domain",
@@ -61,4 +62,26 @@ export const matchingRouteRules = (
     .filter((r) => r.type === "subject_keyword" && r.value && subject.includes(r.value))
     .sort(newestFirst);
   return [...emails, ...domains, ...keywords];
+};
+
+export interface RuleMatchable {
+  origin: MessageOrigin;
+  subject: string;
+  author: string;
+}
+
+/**
+ * Whether a message would route through this (type, value) key. Shared by
+ * the background reclassify sweep and the SPA's rule-creation match-count
+ * preview so the two never drift apart.
+ */
+export const ruleMatchesMessage = (
+  rule: Pick<RouteRuleRecord, "type" | "value">,
+  msg: RuleMatchable,
+): boolean => {
+  if (msg.origin !== "inbox" || !rule.value) return false;
+  if (rule.type === "subject_keyword") return msg.subject.toLowerCase().includes(rule.value);
+  const sender = parseSender(msg.author);
+  if (rule.type === "email") return sender.email === rule.value;
+  return domainMatches(sender.domain, [rule.value]);
 };

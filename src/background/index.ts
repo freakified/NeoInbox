@@ -23,10 +23,9 @@ import { cleanupLegacyTags } from "./legacyTags";
 import { applyLocalState } from "./localState";
 import { broadcast, onCommand, startPortServer } from "./port";
 import { invalidateRouteRules } from "../classifier/routeRules";
-import { domainMatches } from "../classifier/features";
 import { db } from "../store/db";
 import { collectArchiveFolders, invalidateFolderCache } from "../shared/folders";
-import { parseSender } from "../shared/senders";
+import { ruleMatchesMessage } from "../shared/routeRules";
 import { log } from "../shared/log";
 import type { RawMessage, RouteRuleRecord } from "../shared/types";
 
@@ -65,13 +64,7 @@ const reclassifyMessages = async (cached: RawMessage[]): Promise<{ scanned: numb
  * its key matches, so this candidate set is sufficient.
  */
 const reclassifyRuleMatches = async (rule: RouteRuleRecord): Promise<void> => {
-  const cached = (await db.messages.toArray()).filter((m) => {
-    if (m.origin !== "inbox") return false;
-    if (rule.type === "subject_keyword") return m.subject.toLowerCase().includes(rule.value);
-    const sender = parseSender(m.author);
-    if (rule.type === "email") return sender.email === rule.value;
-    return domainMatches(sender.domain, [rule.value]);
-  });
+  const cached = (await db.messages.toArray()).filter((m) => ruleMatchesMessage(rule, m));
   await reclassifyMessages(cached);
 }
 

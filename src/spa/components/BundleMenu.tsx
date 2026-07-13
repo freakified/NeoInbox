@@ -1,15 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CATEGORIES, getCategoryMeta } from "../../shared/categories";
-import {
-  findRouteRule,
-  matchingRouteRules,
-  normalizeRuleValue,
-  ruleTypeLabel,
-} from "../../shared/routeRules";
+import { findRouteRule, matchingRouteRules, ruleTypeLabel } from "../../shared/routeRules";
 import { parseSender } from "../../shared/senders";
-import type { BuiltinCategory, Category, RouteRuleRecord, Thread } from "../../shared/types";
+import type { BuiltinCategory, Category, RouteRuleRecord, RouteRuleType, Thread } from "../../shared/types";
 import { useCustomBundles, useMailStore, useRouteRules } from "../../store/mailStore";
 import { Icon } from "./Icon";
+import { MoveRuleDialog } from "./MoveRuleDialog";
 import s from "./BundleMenu.module.css";
 
 const MOVE_DESTINATIONS: BuiltinCategory[] = [
@@ -29,6 +25,7 @@ export const BundleMenu = ({
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [view, setView] = useState<"root" | "move">("root");
+  const [movePrompt, setMovePrompt] = useState<Category | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const customBundles = useCustomBundles();
@@ -63,13 +60,16 @@ export const BundleMenu = ({
 
   const moveTo = (target: Category) => {
     setMenuOpen(false);
-    const type = sender.domain ? "domain" : sender.email ? "email" : null;
-    if (!type) {
+    if (!sender.domain && !sender.email) {
       // No sender to build a rule from; let the user add a subject rule instead.
       openBundleSettings({ category: target, thread });
       return;
     }
-    const value = normalizeRuleValue(type, type === "domain" ? sender.domain : sender.email);
+    setMovePrompt(target);
+  };
+
+  const commitMove = (target: Category, type: RouteRuleType, value: string) => {
+    setMovePrompt(null);
     const previous = findRouteRule(routeRules, type, value);
     const rule: RouteRuleRecord = {
       id: crypto.randomUUID(),
@@ -225,6 +225,15 @@ export const BundleMenu = ({
             </>
           )}
         </div>
+      )}
+      {movePrompt !== null && (
+        <MoveRuleDialog
+          target={movePrompt}
+          thread={thread}
+          sender={sender}
+          onCancel={() => setMovePrompt(null)}
+          onConfirm={(type, value) => commitMove(movePrompt, type, value)}
+        />
       )}
     </div>
   );
