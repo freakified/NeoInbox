@@ -55,20 +55,28 @@ const messageSettledOutOfFolder = async (
   );
 }
 
+export interface ClassificationResult {
+  category: Category | null;
+  /** getFull() failed (body not synced yet); result is based on headers only. */
+  incomplete: boolean;
+}
+
 export const classifyMessage = async (
   header: messenger.messages.MessageHeader,
-): Promise<Category | null> => {
+): Promise<ClassificationResult> => {
   let headers: Record<string, string[]> = {};
+  let incomplete = false;
   try {
     const full = await messenger.messages.getFull(header.id);
     headers = full.headers ?? {};
   } catch (e) {
+    incomplete = true;
     log.debug("ingest", "getFull failed", { id: header.id, e });
   }
 
   const features = extractFeatures(header, headers);
   const category = await classify(features);
-  return category ?? null;
+  return { category: category ?? null, incomplete };
 }
 
 export const pinMessage = async (id: number, pinned: boolean): Promise<void> => {

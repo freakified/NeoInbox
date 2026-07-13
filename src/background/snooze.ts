@@ -117,8 +117,9 @@ export const wakeSnoozedMessage = async (
       return;
     }
 
-    const cat = await classifyMessage(restoredHeader);
-    const raw = headerToRawMessage(restoredHeader, "inbox", cat);
+    const { category, incomplete } = await classifyMessage(restoredHeader);
+    const raw = headerToRawMessage(restoredHeader, "inbox", category);
+    raw.classifiedIncomplete = incomplete;
     await applyLocalState(raw);
     if (reason === "alarm") raw.resurfacedAt = record.wakeAt;
     else if (reason === "unsnooze") raw.resurfacedAt = Date.now();

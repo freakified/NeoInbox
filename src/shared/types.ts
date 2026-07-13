@@ -66,6 +66,13 @@ export interface RawMessage {
   inReplyTo?: string[];
   attachments?: AttachmentSummary[];
   detailsVersion?: number;
+  /**
+   * True when this row's category was decided without the full message body
+   * (getFull() failed, usually because IMAP hadn't synced it yet), so
+   * heuristics keyed on body/List-* headers may have missed. Retried by the
+   * backfill sweep once the body is available.
+   */
+  classifiedIncomplete?: boolean;
 }
 
 export interface Thread {

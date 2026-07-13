@@ -64,8 +64,15 @@ const cacheOne = async (
   const logicalOrigin = origin === "done" && (await isSnoozedHeader(fresh))
     ? "inbox"
     : origin;
-  const cat = logicalOrigin === "inbox" ? await classifyMessage(fresh) : null;
-  const raw = headerToRawMessage(fresh, logicalOrigin, cat);
+  let category: RawMessage["category"] = null;
+  let incomplete = false;
+  if (logicalOrigin === "inbox") {
+    const result = await classifyMessage(fresh);
+    category = result.category;
+    incomplete = result.incomplete;
+  }
+  const raw = headerToRawMessage(fresh, logicalOrigin, category);
+  raw.classifiedIncomplete = incomplete;
   await applyLocalState(raw);
   const cached = await db.messages.get(fresh.id);
   await applyMessageDetailsForOrigin(raw, cached);
@@ -131,8 +138,14 @@ const removeSentDraft = async (draftId: number): Promise<void> => {
 };
 
 export const wireSyncEngine = (): void => {
-  messenger.messages.onNewMailReceived.addListener(async (_folder, list) => {
+  messenger.messages.onNewMailReceived.addListener(async (folder, list) => {
     try {
+      // Mail can land in a folder that isn't a watched inbox (e.g. a
+      // server-side filter routes it elsewhere); caching it as "inbox"
+      // regardless would show it in the stream and then have the next full
+      // scan prune it as stranded, since its folder isn't in the scanned set.
+      const inboxIds = await getFolderIds(collectInboxFolders);
+      if (folder?.id && !inboxIds.has(folder.id)) return;
       const added = await cacheMessages(list.messages, "inbox");
       if (!added.length) return;
       broadcast({ type: "delta", added });
@@ -222,12 +235,23 @@ export const wireSyncEngine = (): void => {
         const logicalOrigin = origin === "done" && (await isSnoozedHeader(fresh))
           ? "inbox"
           : origin;
-        const category = cached
-          ? cached.category
-          : logicalOrigin === "inbox"
-            ? await classifyMessage(fresh)
-            : null;
+        // Only reuse the cached category if it was already classified as
+        // inbox mail: a row cached under another origin (sent/draft/done)
+        // always has category null, and that must not stick once the
+        // message actually lands in the inbox (e.g. unarchived, moved back
+        // by a filter) — reclassify instead of carrying the null forward.
+        let category: RawMessage["category"] = null;
+        let incomplete = false;
+        if (cached?.origin === "inbox") {
+          category = cached.category;
+          incomplete = cached.classifiedIncomplete ?? false;
+        } else if (logicalOrigin === "inbox") {
+          const result = await classifyMessage(fresh);
+          category = result.category;
+          incomplete = result.incomplete;
+        }
         const raw = headerToRawMessage(fresh, logicalOrigin, category);
+        raw.classifiedIncomplete = incomplete;
         await applyLocalState(raw);
         await applyMessageDetailsForOrigin(raw, cached);
         await db.messages.put(raw);

@@ -148,15 +148,20 @@ const ingestHeader = async (
   }
   let category: Category | null = null;
   let classified = false;
+  let incomplete = false;
   if (origin === "inbox") {
     if (cached) {
       category = cached.category;
+      incomplete = cached.classifiedIncomplete ?? false;
     } else {
-      category = await classifyMessage(header);
+      const result = await classifyMessage(header);
+      category = result.category;
+      incomplete = result.incomplete;
       if (category) classified = true;
     }
   }
   const raw = headerToRawMessage(header, origin, category);
+  raw.classifiedIncomplete = incomplete;
   await applyLocalState(raw);
   if (origin === "inbox") {
     await applyMessageDetails(raw, cached);
@@ -373,6 +378,9 @@ const runScan = (mode: ScanMode): Promise<ScanCounters> => {
       void fillMissingDetails().catch((e) =>
         log.warn("backfill", "details hydration failed", e),
       );
+      void retryIncompleteClassifications().catch((e) =>
+        log.warn("backfill", "classification retry failed", e),
+      );
     }
     return counters;
   });
@@ -449,6 +457,61 @@ export const fillMissingDetails = async (limit = DETAILS_FILL_LIMIT): Promise<vo
   }
 };
 
+let retryingClassifications = false;
+
+/**
+ * Re-attempts classification for inbox rows whose category was decided
+ * without the full message body (classifyMessage's getFull() call failed).
+ * Runs alongside fillMissingDetails after every scan; rows that still fail
+ * getFull() keep the flag and are retried on the next sweep.
+ */
+export const retryIncompleteClassifications = async (limit = DETAILS_FILL_LIMIT): Promise<void> => {
+  if (retryingClassifications) return;
+  retryingClassifications = true;
+  try {
+    const pending = (await db.messages.toArray())
+      .filter((m) => m.origin === "inbox" && m.classifiedIncomplete)
+      .slice(0, limit);
+    if (!pending.length) return;
+    log.info("backfill", `retrying classification for ${pending.length} messages`);
+    let updated: RawMessage[] = [];
+    const flushUpdated = (): void => {
+      if (!updated.length) return;
+      broadcast({ type: "delta", updated });
+      updated = [];
+    };
+    for (const msg of pending) {
+      try {
+        const header = await withTimeout(
+          messenger.messages.get(msg.id),
+          `retry classify message ${msg.id}`,
+        );
+        const { category, incomplete } = await classifyMessage(header);
+        if (incomplete) continue;
+        const row = await db.transaction("rw", db.messages, async () => {
+          const fresh = await db.messages.get(msg.id);
+          if (!fresh) return null;
+          const next: RawMessage = { ...fresh, category, classifiedIncomplete: false };
+          await db.messages.put(next);
+          return next;
+        });
+        if (row) {
+          updated.push(row);
+          if (updated.length >= BATCH_FLUSH) flushUpdated();
+        }
+      } catch (e) {
+        log.debug("backfill", "classification retry skipped a message", {
+          id: msg.id,
+          e: String(e),
+        });
+      }
+    }
+    flushUpdated();
+  } finally {
+    retryingClassifications = false;
+  }
+};
+
 export const reclassifyAll = (): Promise<{ scanned: number; updated: number }> => {
   if (reclassifyQueued) {
     sendProgress({ type: "backfill-progress", scanned: 0, classified: 0, done: true });
@@ -481,9 +544,10 @@ export const reclassifyAll = (): Promise<{ scanned: number; updated: number }> =
             messenger.messages.get(cachedMsg.id),
             `reclassify message ${cachedMsg.id}`,
           );
-          const cat = await classifyMessage(header);
-          if (cat !== cachedMsg.category) updated++;
-          const raw = headerToRawMessage(header, "inbox", cat);
+          const { category, incomplete } = await classifyMessage(header);
+          if (category !== cachedMsg.category) updated++;
+          const raw = headerToRawMessage(header, "inbox", category);
+          raw.classifiedIncomplete = incomplete;
           await applyLocalState(raw);
           await applyMessageDetails(raw, cachedMsg);
           batch.push(raw);

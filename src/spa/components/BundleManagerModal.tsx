@@ -997,6 +997,11 @@ const ThreadRouteSummary = ({
   const winner = matches[0];
   const expected = winner && winner.target !== "personal" ? winner.target : null;
   const stale = winner !== undefined && liveCategory !== expected;
+  // Only claim the thread predates the rule when the timestamps actually say
+  // so; otherwise the rule existed when this mail arrived and classification
+  // simply hasn't caught up (or missed), which "Apply now" fixes either way.
+  const newestMessageDate = Math.max(0, ...thread.messages.map((m) => m.date));
+  const predatesRule = winner !== undefined && newestMessageDate < winner.createdAt;
 
   const precedence =
     matches.length > 1
@@ -1004,7 +1009,9 @@ const ThreadRouteSummary = ({
       : "";
   const text = winner
     ? stale
-      ? `Your ${ruleTypeLabel[winner.type].toLowerCase()} rule “${winner.value}” routes mail like this to ${targetName(winner.target)}, but this thread was bundled before the rule and hasn't moved.${precedence}`
+      ? predatesRule
+        ? `Your ${ruleTypeLabel[winner.type].toLowerCase()} rule “${winner.value}” routes mail like this to ${targetName(winner.target)}, but this thread arrived before the rule and hasn't moved.${precedence}`
+        : `Your ${ruleTypeLabel[winner.type].toLowerCase()} rule “${winner.value}” should route this thread to ${targetName(winner.target)}, but it hasn't been applied yet.${precedence}`
       : `Your ${ruleTypeLabel[winner.type].toLowerCase()} rule “${winner.value}” routes this thread to ${targetName(winner.target)}.${precedence}`
     : liveCategory
       ? `This thread is in ${targetName(liveCategory)} because it matches the built-in detection. Rules you add always override built-in detection.`

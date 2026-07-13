@@ -42,9 +42,10 @@ const reclassifyMessages = async (cached: RawMessage[]): Promise<{ scanned: numb
   for (const cmsg of cached) {
     try {
       const header = await messenger.messages.get(cmsg.id);
-      const cat = await classifyMessage(header);
+      const { category, incomplete } = await classifyMessage(header);
       const fresh = await messenger.messages.get(cmsg.id);
-      const raw = headerToRawMessage(fresh, "inbox", cat);
+      const raw = headerToRawMessage(fresh, "inbox", category);
+      raw.classifiedIncomplete = incomplete;
       await applyLocalState(raw);
       await applyMessageDetails(raw, cmsg);
       await db.messages.put(raw);
