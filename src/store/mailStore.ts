@@ -9,7 +9,7 @@ import {
   type FailedCommand,
   type ServerMsg,
 } from "../shared/messaging";
-import type { Category, CustomBundleRecord, RawMessage, RouteRuleRecord, SnoozeRecord, Thread } from "../shared/types";
+import type { Category, CustomBundleRecord, RawMessage, ReminderRecord, RouteRuleRecord, SnoozeRecord, Thread } from "../shared/types";
 
 export type { Stream, StreamItem, StreamSection, StreamView } from "./stream";
 
@@ -73,6 +73,7 @@ interface MailStore {
   connectionState: ConnectionState;
   pendingOps: Record<number, PendingOp>;
   snoozesByMessageId: Record<number, SnoozeRecord>;
+  remindersById: Record<string, ReminderRecord>;
   toasts: ToastRecord[];
   bundleSettings: BundleSettingsRequest | null;
   reclassifying: boolean;
@@ -88,6 +89,16 @@ interface MailStore {
   applyCategoryLocally: (messageIds: number[], category: Category | null) => void;
   setCustomBundle: (bundle: CustomBundleRecord) => void;
   deleteCustomBundle: (id: string) => void;
+  createReminder: (text: string) => void;
+  updateReminderText: (id: string, text: string) => void;
+  setReminderPinned: (id: string, pinned: boolean) => void;
+  snoozeReminder: (id: string, wakeAt: number) => void;
+  unsnoozeReminder: (id: string) => void;
+  doneReminder: (id: string) => void;
+  restoreReminder: (id: string) => void;
+  deleteReminder: (id: string) => void;
+  /** Resurface snoozed reminders whose wake time has passed. */
+  wakeDueReminders: () => void;
   retryBackfill: () => void;
   retryToast: (toastId: string) => void;
   undoToast: (toastId: string) => void;
@@ -134,6 +145,13 @@ const commitUndoToast = (
   set({ toasts: get().toasts.filter((t) => t.id !== toastId) });
 };
 
+/** Reminders are SPA-owned; they persist straight to Dexie, no port round-trip. */
+const persistReminder = (record: ReminderRecord): void => {
+  void db.reminders.put(record).catch((e) => log.warn("store", "reminder save failed", e));
+};
+
+let reminderWakeTimer: ReturnType<typeof setInterval> | null = null;
+
 let port: BackgroundPort | null = null;
 
 const send = (msg: ClientMsg): void => {
@@ -155,24 +173,33 @@ export const useMailStore = create<MailStore>((set, get) => ({
   connectionState: "connected",
   pendingOps: {},
   snoozesByMessageId: {},
+  remindersById: {},
   toasts: [],
   bundleSettings: null,
   reclassifying: false,
 
   init: async () => {
     if (get().hydrated) return;
-    const [all, rawBundles, routeRules, snoozes] = await Promise.all([
+    const [all, rawBundles, routeRules, snoozes, reminders] = await Promise.all([
       db.messages.toArray(),
       db.customBundles.toArray(),
       db.routeRules.toArray(),
       db.snoozes.toArray(),
+      db.reminders.toArray(),
     ]);
     const customBundles = rawBundles.sort((a, b) => a.order - b.order);
     const byId: Record<number, RawMessage> = {};
     for (const m of all) byId[m.id] = m;
     const snoozesByMessageId: Record<number, SnoozeRecord> = {};
     for (const snooze of snoozes) snoozesByMessageId[snooze.messageId] = snooze;
-    set({ messagesById: byId, hydrated: true, customBundles, routeRules, snoozesByMessageId });
+    const remindersById: Record<string, ReminderRecord> = {};
+    for (const reminder of reminders) remindersById[reminder.id] = reminder;
+    set({ messagesById: byId, hydrated: true, customBundles, routeRules, snoozesByMessageId, remindersById });
+
+    get().wakeDueReminders();
+    if (reminderWakeTimer === null) {
+      reminderWakeTimer = setInterval(() => get().wakeDueReminders(), 30_000);
+    }
 
     const runtime = messenger.runtime as unknown as RuntimeWithConnect;
     if (!runtime.connect) {
@@ -350,6 +377,118 @@ export const useMailStore = create<MailStore>((set, get) => ({
       routeRules: get().routeRules.filter((r) => r.target !== id),
     });
     send({ type: "delete-custom-bundle", id });
+  },
+
+  createReminder: (text) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const record: ReminderRecord = {
+      id: crypto.randomUUID(),
+      text: trimmed,
+      createdAt: Date.now(),
+      status: "active",
+      pinned: false,
+    };
+    set({ remindersById: { ...get().remindersById, [record.id]: record } });
+    persistReminder(record);
+  },
+
+  updateReminderText: (id, text) => {
+    const prev = get().remindersById[id];
+    const trimmed = text.trim();
+    if (!prev || !trimmed || prev.text === trimmed) return;
+    const next = { ...prev, text: trimmed };
+    set({ remindersById: { ...get().remindersById, [id]: next } });
+    persistReminder(next);
+  },
+
+  setReminderPinned: (id, pinned) => {
+    const prev = get().remindersById[id];
+    if (!prev) return;
+    const next = { ...prev, pinned };
+    set({ remindersById: { ...get().remindersById, [id]: next } });
+    persistReminder(next);
+  },
+
+  snoozeReminder: (id, wakeAt) => {
+    const prev = get().remindersById[id];
+    if (!prev) return;
+    const next: ReminderRecord = { ...prev, snoozeWakeAt: wakeAt };
+    delete next.resurfacedAt;
+    set({ remindersById: { ...get().remindersById, [id]: next } });
+    persistReminder(next);
+  },
+
+  unsnoozeReminder: (id) => {
+    const prev = get().remindersById[id];
+    if (!prev) return;
+    const next: ReminderRecord = { ...prev, resurfacedAt: Date.now() };
+    delete next.snoozeWakeAt;
+    set({ remindersById: { ...get().remindersById, [id]: next } });
+    persistReminder(next);
+  },
+
+  doneReminder: (id) => {
+    const prev = get().remindersById[id];
+    if (!prev) return;
+    const next: ReminderRecord = { ...prev, status: "done", doneAt: Date.now() };
+    delete next.snoozeWakeAt;
+    set({ remindersById: { ...get().remindersById, [id]: next } });
+    persistReminder(next);
+    get().notify("Reminder marked as done", [
+      {
+        label: "Undo",
+        run: () => {
+          set({ remindersById: { ...get().remindersById, [id]: prev } });
+          persistReminder(prev);
+        },
+      },
+    ]);
+  },
+
+  restoreReminder: (id) => {
+    const prev = get().remindersById[id];
+    if (!prev) return;
+    const next: ReminderRecord = { ...prev, status: "active", resurfacedAt: Date.now() };
+    delete next.doneAt;
+    set({ remindersById: { ...get().remindersById, [id]: next } });
+    persistReminder(next);
+    get().notify("Reminder moved back to inbox");
+  },
+
+  deleteReminder: (id) => {
+    const prev = get().remindersById[id];
+    if (!prev) return;
+    const map = { ...get().remindersById };
+    delete map[id];
+    set({ remindersById: map });
+    void db.reminders.delete(id).catch((e) => log.warn("store", "reminder delete failed", e));
+    get().notify("Reminder deleted", [
+      {
+        label: "Undo",
+        run: () => {
+          set({ remindersById: { ...get().remindersById, [id]: prev } });
+          persistReminder(prev);
+        },
+      },
+    ]);
+  },
+
+  wakeDueReminders: () => {
+    const now = Date.now();
+    const map = get().remindersById;
+    const due = Object.values(map).filter(
+      (r) => r.snoozeWakeAt !== undefined && r.snoozeWakeAt <= now,
+    );
+    if (!due.length) return;
+    const next = { ...map };
+    for (const r of due) {
+      const woken: ReminderRecord = { ...r, resurfacedAt: r.snoozeWakeAt };
+      delete woken.snoozeWakeAt;
+      next[r.id] = woken;
+      persistReminder(woken);
+    }
+    set({ remindersById: next });
   },
 
   retryBackfill: () => {
@@ -540,9 +679,10 @@ export const useStreamForView = (view: StreamView, pinnedOnly = false): Stream =
   const messagesById = useMailStore((s) => s.messagesById);
   const myEmails = useMailStore((s) => s.myEmails);
   const snoozesByMessageId = useMailStore((s) => s.snoozesByMessageId);
+  const remindersById = useMailStore((s) => s.remindersById);
   return useMemo(
-    () => deriveStream(messagesById, myEmails, view, snoozesByMessageId, pinnedOnly),
-    [messagesById, myEmails, view, snoozesByMessageId, pinnedOnly],
+    () => deriveStream(messagesById, myEmails, view, snoozesByMessageId, pinnedOnly, remindersById),
+    [messagesById, myEmails, view, snoozesByMessageId, pinnedOnly, remindersById],
   );
 }
 

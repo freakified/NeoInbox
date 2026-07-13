@@ -1,0 +1,45 @@
+.row {
+  width: 100%;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  background: var(--color-md-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatarIcon {
+  color: #fff;
+  font-size: 20px;
+}
+
+.snoozeDue {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #df742c;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.snoozeIcon {
+  color: #df742c;
+  font-size: 20px;
+}
+
+.pinnedDate {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.pinIndicator {
+  font-size: 16px;
+  color: var(--color-md-primary);
+}

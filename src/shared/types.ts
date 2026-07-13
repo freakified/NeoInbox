@@ -84,6 +84,24 @@ export interface Thread {
   resurfacedAt?: number;
 }
 
+/**
+ * A standalone reminder in the stream. NeoInbox-local: never written to
+ * Thunderbird or the mail server. A snoozed reminder keeps status "active"
+ * with snoozeWakeAt set; waking clears it and stamps resurfacedAt.
+ */
+export interface ReminderRecord {
+  id: string;
+  text: string;
+  createdAt: number;
+  status: "active" | "done";
+  pinned: boolean;
+  /** When a snoozed reminder returns to the inbox; unset = not snoozed. */
+  snoozeWakeAt?: number;
+  /** Set when the reminder's stream position comes from a snooze wake. */
+  resurfacedAt?: number;
+  doneAt?: number;
+}
+
 export interface SnoozeRecord {
   messageId: number;
   wakeAt: number;

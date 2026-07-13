@@ -16,7 +16,9 @@ import { useShowDeleteActions } from "./lib/deleteActionPrefs";
 import { BundleSliceRow } from "./components/BundleSliceRow";
 import { BundleManagerModal } from "./components/BundleManagerModal";
 import { useBulkActions } from "./components/BulkActionConfirm";
+import { Fab } from "./components/Fab";
 import { Icon } from "./components/Icon";
+import { ReminderRow } from "./components/ReminderRow";
 import { MotionSurface } from "./components/Motion";
 import { SectionLabel } from "./components/SectionLabel";
 import { ThreadRow } from "./components/ThreadRow";
@@ -32,6 +34,7 @@ const parseHashView = (): StreamView => {
   if (raw === "draft") return { type: "draft" };
   if (raw === "sent") return { type: "sent" };
   if (raw === "done") return { type: "done" };
+  if (raw === "reminders") return { type: "reminders" };
   if (raw.startsWith("bundle/")) {
     const category = raw.slice("bundle/".length);
     if (category) return { type: "bundle", category };
@@ -53,6 +56,7 @@ const emptyTextForView = (view: StreamView, pinnedOnly: boolean): string => {
   if (view.type === "draft") return "No drafts.";
   if (view.type === "sent") return "No sent messages.";
   if (view.type === "done") return "No done messages.";
+  if (view.type === "reminders") return "No reminders — create one with the button below.";
   if (view.type === "bundle") return "No messages in this bundle.";
   return "No messages found.";
 };
@@ -65,6 +69,7 @@ const headerForView = (
   if (view.type === "draft") return { title: "Drafts", color: "#C5221F" };
   if (view.type === "done") return { title: "Done", color: "#5CA46F" };
   if (view.type === "sent") return { title: "Sent", color: "var(--color-md-primary)" };
+  if (view.type === "reminders") return { title: "Reminders", color: "var(--color-md-primary)" };
   if (view.type === "bundle") {
     const meta = getCategoryMeta(view.category, customBundles);
     return { title: meta.name, color: meta.color };
@@ -72,12 +77,15 @@ const headerForView = (
   return { title: "Inbox", color: "var(--color-md-primary)" };
 };
 
+// Reminders live in the stream but are never part of bulk sweeps.
+const threadsOfItem = (item: StreamItem) =>
+  item.type === "thread" ? [item.thread] : item.type === "bundle" ? item.threads : [];
+
 // Sweeps skip pinned threads, so a section of only pinned mail has nothing to sweep.
 const canDoneSection = (items: StreamItem[]): boolean =>
-  items.some((item) => {
-    const threads = item.type === "thread" ? [item.thread] : item.threads;
-    return threads.some((t) => !t.pinned && t.messages.some((m) => m.origin === "inbox"));
-  });
+  items.some((item) =>
+    threadsOfItem(item).some((t) => !t.pinned && t.messages.some((m) => m.origin === "inbox")),
+  );
 
 const limitSections = (
   sections: StreamSection[],
@@ -114,20 +122,20 @@ export const App = () => {
 
   // Bulk sweeps never touch pinned threads — that's the point of pinning.
   const sectionDoneAll = (items: StreamItem[]) => {
-    const ids = items.flatMap((item) => {
-      const threads = item.type === "thread" ? [item.thread] : item.threads;
-      return threads
+    const ids = items.flatMap((item) =>
+      threadsOfItem(item)
         .filter((t) => !t.pinned)
-        .flatMap((t) => t.messages.filter((m) => m.origin === "inbox").map((m) => m.id));
-    });
+        .flatMap((t) => t.messages.filter((m) => m.origin === "inbox").map((m) => m.id)),
+    );
     doneMessages(ids);
   };
 
   const sectionTrashAll = (items: StreamItem[]) => {
-    const ids = items.flatMap((item) => {
-      const threads = item.type === "thread" ? [item.thread] : item.threads;
-      return threads.filter((t) => !t.pinned).flatMap((t) => t.messages.map((m) => m.id));
-    });
+    const ids = items.flatMap((item) =>
+      threadsOfItem(item)
+        .filter((t) => !t.pinned)
+        .flatMap((t) => t.messages.map((m) => m.id)),
+    );
     trashMessages(ids);
   };
 
@@ -330,7 +338,7 @@ export const App = () => {
                 <Icon name="send" className={s.navIcon} />
                 <span>Sent</span>
               </button>
-              <button type="button" className={unsupportedClass} disabled title="Coming later">
+              <button type="button" className={navClass({ type: "reminders" })} onClick={() => navigate({ type: "reminders" })}>
                 <Icon name="notifications" className={s.navIcon} />
                 <span>Reminders</span>
               </button>
@@ -395,6 +403,8 @@ export const App = () => {
                   onToggle={() => toggleKey(`thread:${item.thread.id}`)}
                   expandedRef={expandedRef}
                 />
+              ) : item.type === "reminder" ? (
+                <ReminderRow key={item.reminder.id} reminder={item.reminder} />
               ) : (
                 <BundleSliceRow
                   key={item.category}
@@ -513,6 +523,7 @@ export const App = () => {
         )}
         </main>
       </div>
+      <Fab />
       <Toaster />
     </div>
   );

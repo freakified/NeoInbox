@@ -10,6 +10,7 @@ import type {
   FolderCursorRecord,
   PinRecord,
   RawMessage,
+  ReminderRecord,
   RouteRuleRecord,
   RouteRuleType,
   SnoozeRecord,
@@ -108,6 +109,7 @@ class NeoInboxDb extends Dexie {
   messages!: Table<RawMessage, number>;
   snoozes!: Table<SnoozeRecord, number>;
   pins!: Table<PinRecord, string>;
+  reminders!: Table<ReminderRecord, string>;
   routeRules!: Table<RouteRuleRecord, string>;
   folderCursors!: Table<FolderCursorRecord, string>;
   customBundles!: Table<CustomBundleRecord, string>;
@@ -163,6 +165,9 @@ class NeoInboxDb extends Dexie {
         pins: "key",
       })
       .upgrade(migrateTagsToLocalState);
+    this.version(10).stores({
+      reminders: "id, status, snoozeWakeAt",
+    });
   }
 }
 

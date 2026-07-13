@@ -1,5 +1,5 @@
 import { buildThreads } from "../shared/threading";
-import type { Category, MessageOrigin, RawMessage, SnoozeRecord, Thread } from "../shared/types";
+import type { Category, MessageOrigin, RawMessage, ReminderRecord, SnoozeRecord, Thread } from "../shared/types";
 import { dateBucket, futureDateBucket } from "../spa/lib/dateBucket";
 
 export type StreamView =
@@ -8,10 +8,12 @@ export type StreamView =
   | { type: "draft" }
   | { type: "sent" }
   | { type: "done" }
+  | { type: "reminders" }
   | { type: "bundle"; category: Category };
 
 export type StreamItem =
   | { type: "thread"; date: number; thread: Thread }
+  | { type: "reminder"; date: number; reminder: ReminderRecord }
   | {
     type: "bundle";
     date: number;
@@ -49,12 +51,38 @@ const compareSection = (a: string, b: string): number => {
   return 0;
 }
 
+/** Which reminders show in a view, and the date that positions them there. */
+const reminderDateForView = (
+  r: ReminderRecord,
+  view: StreamView,
+  pinnedOnly: boolean,
+): number | null => {
+  const snoozed = r.snoozeWakeAt !== undefined;
+  if (view.type === "inbox") {
+    if (r.status !== "active" || snoozed) return null;
+    if (pinnedOnly && !r.pinned) return null;
+    return r.resurfacedAt ?? r.createdAt;
+  }
+  if (view.type === "snoozed") {
+    return r.status === "active" && snoozed ? r.snoozeWakeAt! : null;
+  }
+  if (view.type === "done") {
+    return r.status === "done" ? r.doneAt ?? r.createdAt : null;
+  }
+  if (view.type === "reminders") {
+    if (r.status !== "active") return null;
+    return snoozed ? r.snoozeWakeAt! : r.resurfacedAt ?? r.createdAt;
+  }
+  return null;
+};
+
 export const deriveStream = (
   messagesById: Record<number, RawMessage>,
   myEmails: ReadonlySet<string>,
   view: StreamView = { type: "inbox" },
   snoozesByMessageId: Record<number, SnoozeRecord> = {},
   pinnedOnly = false,
+  remindersById: Record<string, ReminderRecord> = {},
 ): Stream => {
   const allMessages = Object.values(messagesById);
   const anchorOrigins: ReadonlySet<MessageOrigin> = new Set(
@@ -67,6 +95,7 @@ export const deriveStream = (
           : ["inbox"],
   );
   const visible = allMessages.filter((m) => {
+    if (view.type === "reminders") return false;
     if (view.type === "inbox") {
       return m.origin === "sent" || m.origin === "draft" || (m.origin === "inbox" && !m.snoozed);
     }
@@ -115,6 +144,12 @@ export const deriveStream = (
     }
   }
 
+  const reminderItems: StreamItem[] = [];
+  for (const r of Object.values(remindersById)) {
+    const date = reminderDateForView(r, view, pinnedOnly);
+    if (date !== null) reminderItems.push({ type: "reminder", date, reminder: r });
+  }
+
   const items: StreamItem[] = [
     ...[...byCategory.entries()].map(([category, ts]) => {
       const sorted = [...ts].sort((a, b) => b.latestDate - a.latestDate);
@@ -130,11 +165,17 @@ export const deriveStream = (
       date: t.latestDate,
       thread: t,
     })),
+    ...reminderItems,
   ].sort((a, b) => view.type === "snoozed" ? a.date - b.date : b.date - a.date);
 
+  const now = Date.now();
   const byBucket = new Map<string, StreamItem[]>();
   for (const item of items) {
-    const label = view.type === "snoozed" ? futureDateBucket(item.date) : dateBucket(item.date);
+    // The reminders view mixes past items with future (snoozed) ones.
+    const label =
+      view.type === "snoozed" || (view.type === "reminders" && item.date > now)
+        ? futureDateBucket(item.date)
+        : dateBucket(item.date);
     let arr = byBucket.get(label);
     if (!arr) {
       arr = [];
@@ -156,5 +197,5 @@ export const deriveStream = (
     return view.type === "snoozed" ? aDate - bDate : bDate - aDate;
   });
 
-  return { sections, threadCount: threads.length, view };
+  return { sections, threadCount: threads.length + reminderItems.length, view };
 }
