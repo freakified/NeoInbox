@@ -13,6 +13,7 @@ import {
   wakeSnoozedMessage,
 } from "./snooze";
 import {
+  classifyCachedDoneMessages,
   getLastProgress,
   runBackfill,
   runIncrementalSync,
@@ -26,7 +27,7 @@ import { applyLocalState } from "./localState";
 import { broadcast, onCommand, startPortServer } from "./port";
 import { invalidateRouteRules } from "../classifier/routeRules";
 import { db } from "../store/db";
-import { collectArchiveFolders, invalidateFolderCache } from "../shared/folders";
+import { collectArchiveFolders, collectInboxFolders, invalidateFolderCache } from "../shared/folders";
 import { ruleMatchesMessage } from "../shared/routeRules";
 import { log } from "../shared/log";
 import type { RawMessage, RouteRuleRecord } from "../shared/types";
@@ -180,6 +181,9 @@ for (const event of [
 wireSyncEngine();
 startPortServer();
 void cleanupLegacyTags().catch((e) => log.warn("legacy-tags", "cleanup failed", e));
+void classifyCachedDoneMessages().catch((e) =>
+  log.warn("backfill", "done category sweep failed", e),
+);
 void ensureSnoozeAlarmsRestored().catch((e) => log.warn("snooze", "restore alarms failed", e));
 
 onCommand(async (msg) => {
@@ -244,6 +248,49 @@ onCommand(async (msg) => {
       }
       await db.messages.delete(msg.messageId);
       broadcast({ type: "delta", removedIds: [msg.messageId] });
+      return;
+    }
+    case "move-to-inbox": {
+      const cached = await db.messages.get(msg.messageId);
+      let movedHeader: messenger.messages.MessageHeader | undefined;
+      try {
+        const accountId =
+          cached?.accountId ??
+          ((await messenger.messages.get(msg.messageId)) as messenger.messages.MessageHeader & {
+            folder?: { accountId?: string };
+          }).folder?.accountId ??
+          "";
+        const target = (await collectInboxFolders()).find((f) => f.accountId === accountId);
+        if (!target) throw new Error("No inbox folder found for this account");
+        const moved = (await messenger.messages.move(
+          [msg.messageId],
+          target.id as unknown as messenger.folders.MailFolderId,
+        )) as { messages?: messenger.messages.MessageHeader[] } | undefined;
+        movedHeader = moved?.messages?.[0];
+      } catch (e) {
+        log.warn("command", "move-to-inbox failed", { id: msg.messageId, e: String(e) });
+        broadcast({
+          type: "command-failed",
+          command: "move-to-inbox",
+          messageId: msg.messageId,
+          reason: String((e as Error)?.message ?? e),
+        });
+        return;
+      }
+      try {
+        const header = await messenger.messages.get(movedHeader?.id ?? msg.messageId);
+        const raw = headerToRawMessage(header, "inbox", cached?.category ?? null);
+        await applyLocalState(raw);
+        await applyMessageDetails(raw, cached);
+        if (raw.id !== msg.messageId) {
+          await db.messages.delete(msg.messageId);
+          broadcast({ type: "delta", removedIds: [msg.messageId] });
+        }
+        await db.messages.put(raw);
+        broadcast({ type: "delta", added: [raw] });
+      } catch {
+        /* The move may have assigned a new message id; onMoved/backfill will cache it. */
+      }
       return;
     }
     case "trash": {

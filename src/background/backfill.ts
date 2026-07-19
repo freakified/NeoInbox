@@ -457,20 +457,73 @@ export const fillMissingDetails = async (limit = DETAILS_FILL_LIMIT): Promise<vo
   }
 };
 
+const DONE_CATEGORY_SWEEP_FLAG = "neoinbox-done-category-sweep-v1";
+
+/**
+ * Done rows cached before bundle views included archived mail were never
+ * classified (the sync engine only classified inbox mail), so they all carry
+ * category null and can't match any bundle. One-time sweep to classify the
+ * backlog; new done rows are classified on the way in.
+ */
+export const classifyCachedDoneMessages = async (): Promise<void> => {
+  const stored = await messenger.storage.local.get(DONE_CATEGORY_SWEEP_FLAG);
+  if (stored[DONE_CATEGORY_SWEEP_FLAG]) return;
+  const pending = (await db.messages.toArray()).filter(
+    (m) => m.origin === "done" && m.category === null,
+  );
+  if (pending.length) {
+    log.info("backfill", `classifying ${pending.length} cached done messages`);
+  }
+  let updated: RawMessage[] = [];
+  const flushUpdated = (): void => {
+    if (!updated.length) return;
+    broadcast({ type: "delta", updated });
+    updated = [];
+  };
+  for (const msg of pending) {
+    try {
+      const header = await withTimeout(
+        messenger.messages.get(msg.id),
+        `classify done message ${msg.id}`,
+      );
+      const { category, incomplete } = await classifyMessage(header);
+      if (category === null && !incomplete) continue;
+      const row = await db.transaction("rw", db.messages, async () => {
+        const fresh = await db.messages.get(msg.id);
+        if (!fresh || fresh.origin !== "done") return null;
+        const next: RawMessage = { ...fresh, category, classifiedIncomplete: incomplete };
+        await db.messages.put(next);
+        return next;
+      });
+      if (row) {
+        updated.push(row);
+        if (updated.length >= BATCH_FLUSH) flushUpdated();
+      }
+    } catch (e) {
+      log.debug("backfill", "done category sweep skipped a message", {
+        id: msg.id,
+        e: String(e),
+      });
+    }
+  }
+  flushUpdated();
+  await messenger.storage.local.set({ [DONE_CATEGORY_SWEEP_FLAG]: true });
+};
+
 let retryingClassifications = false;
 
 /**
- * Re-attempts classification for inbox rows whose category was decided
- * without the full message body (classifyMessage's getFull() call failed).
- * Runs alongside fillMissingDetails after every scan; rows that still fail
- * getFull() keep the flag and are retried on the next sweep.
+ * Re-attempts classification for inbox and done rows whose category was
+ * decided without the full message body (classifyMessage's getFull() call
+ * failed). Runs alongside fillMissingDetails after every scan; rows that
+ * still fail getFull() keep the flag and are retried on the next sweep.
  */
 export const retryIncompleteClassifications = async (limit = DETAILS_FILL_LIMIT): Promise<void> => {
   if (retryingClassifications) return;
   retryingClassifications = true;
   try {
     const pending = (await db.messages.toArray())
-      .filter((m) => m.origin === "inbox" && m.classifiedIncomplete)
+      .filter((m) => (m.origin === "inbox" || m.origin === "done") && m.classifiedIncomplete)
       .slice(0, limit);
     if (!pending.length) return;
     log.info("backfill", `retrying classification for ${pending.length} messages`);

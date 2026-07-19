@@ -15,8 +15,10 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
   const notify = useMailStore((st) => st.notify);
   const showDeleteActions = useShowDeleteActions();
   const { doneMessages, trashMessages } = useBulkActions();
+  const moveToInboxThread = useMailStore((st) => st.moveToInboxThread);
   const inboxMessageIds = thread.messages.filter((m) => m.origin === "inbox").map((m) => m.id);
   const hasInboxMessages = inboxMessageIds.length > 0;
+  const doneMessageIds = thread.messages.filter((m) => m.origin === "done").map((m) => m.id);
   const snoozedMessageIds = thread.messages
     .filter((m) => m.snoozed)
     .map((m) => m.id);
@@ -35,6 +37,10 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
     notify("Moved back to inbox");
   };
   const onTrash = () => trashMessages(thread.messages.map((m) => m.id));
+  const onMoveToInbox = () => {
+    moveToInboxThread(doneMessageIds);
+    notify("Moved back to inbox");
+  };
 
   return (
     <div className={s.strip} onClick={(e) => e.stopPropagation()}>
@@ -58,6 +64,11 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
       {hasInboxMessages && (
         <ActionBtn title="Done" onClick={onDone}>
           <Icon name="check" className={clsx(s.iconBase, s.iconMuted)} />
+        </ActionBtn>
+      )}
+      {!hasInboxMessages && doneMessageIds.length > 0 && (
+        <ActionBtn title="Move to inbox" onClick={onMoveToInbox}>
+          <Icon name="move_to_inbox" className={clsx(s.iconBase, s.iconMuted)} />
         </ActionBtn>
       )}
     </div>

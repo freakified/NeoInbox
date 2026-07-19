@@ -92,7 +92,9 @@ export const deriveStream = (
         ? ["draft"]
         : view.type === "done"
           ? ["done"]
-          : ["inbox"],
+          : view.type === "bundle"
+            ? ["inbox", "done"]
+            : ["inbox"],
   );
   const visible = allMessages.filter((m) => {
     if (view.type === "reminders") return false;
@@ -105,10 +107,13 @@ export const deriveStream = (
     if (view.type === "draft") return m.origin === "draft";
     if (view.type === "sent") return m.origin === "sent";
     if (view.type === "done") return m.origin === "sent" || m.origin === "draft" || m.origin === "done";
+    // The bundle view is the whole bundle: done messages count alongside inbox.
     return (
       m.origin === "sent" ||
       m.origin === "draft" ||
-      (m.origin === "inbox" && !m.snoozed && m.category === view.category)
+      ((m.origin === "inbox" || m.origin === "done") &&
+        !m.snoozed &&
+        m.category === view.category)
     );
   });
   let threads = buildThreads(visible, myEmails, anchorOrigins);

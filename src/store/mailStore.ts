@@ -36,7 +36,8 @@ type PendingOp =
   | { kind: "done"; message: RawMessage }
   | { kind: "snooze"; message: RawMessage; wakeAt: number }
   | { kind: "unsnooze"; message: RawMessage; snooze?: SnoozeRecord }
-  | { kind: "trash"; message: RawMessage };
+  | { kind: "trash"; message: RawMessage }
+  | { kind: "moveToInbox"; message: RawMessage };
 
 export interface ToastAction {
   label: string;
@@ -84,6 +85,8 @@ interface MailStore {
   snoozeThread: (messageIds: number[], wakeAt: number) => void;
   unsnoozeThread: (messageIds: number[]) => void;
   trashThread: (messageIds: number[]) => void;
+  /** Restore done (archived) messages to their account's inbox. */
+  moveToInboxThread: (messageIds: number[]) => void;
   setRouteRule: (rule: RouteRuleRecord) => void;
   deleteRouteRule: (id: string) => void;
   applyCategoryLocally: (messageIds: number[], category: Category | null) => void;
@@ -352,6 +355,21 @@ export const useMailStore = create<MailStore>((set, get) => ({
     undoTimers.set(toastId, timer);
   },
 
+  moveToInboxThread: (messageIds) => {
+    if (messageIds.length === 0) return;
+    const prev = get().messagesById;
+    const map = { ...prev };
+    const pending = { ...get().pendingOps };
+    for (const id of messageIds) {
+      const m = prev[id];
+      if (!m) continue;
+      pending[id] = { kind: "moveToInbox", message: m };
+      map[id] = { ...m, origin: "inbox" };
+    }
+    set({ messagesById: map, pendingOps: pending });
+    for (const id of messageIds) send({ type: "move-to-inbox", messageId: id });
+  },
+
   setRouteRule: (rule) => {
     // Mirror the background's invariant: one destination per (type, value) key.
     const rules = get().routeRules.filter(
@@ -522,6 +540,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
     if (kind === "done") get().doneThread([messageId]);
     else if (kind === "trash") get().trashThread([messageId]);
     else if (kind === "unsnooze") get().unsnoozeThread([messageId]);
+    else if (kind === "move-to-inbox") get().moveToInboxThread([messageId]);
     else if (kind === "snooze" && wakeAt !== undefined) {
       get().snoozeThread([messageId], wakeAt);
     }
@@ -584,6 +603,7 @@ const failureLabel = (command: FailedCommand): string => {
   if (command === "done") return "Couldn't archive";
   if (command === "snooze") return "Couldn't snooze";
   if (command === "unsnooze") return "Couldn't unsnooze";
+  if (command === "move-to-inbox") return "Couldn't move to inbox";
   return "Couldn't move to trash";
 }
 

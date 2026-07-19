@@ -46,6 +46,11 @@
   color: var(--color-md-primary);
 }
 
+.doneIndicator {
+  font-size: 16px;
+  color: #5ca46f;
+}
+
 .bundleChip {
   font-size: 12px;
   font-weight: 500;

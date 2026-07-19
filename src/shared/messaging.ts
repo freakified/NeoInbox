@@ -9,6 +9,7 @@ export type ClientMsg =
   | { type: "snooze"; messageId: number; wakeAt: number }
   | { type: "unsnooze"; messageId: number }
   | { type: "trash"; messageId: number }
+  | { type: "move-to-inbox"; messageId: number }
   | { type: "set-route-rule"; rule: RouteRuleRecord }
   | { type: "delete-route-rule"; id: string }
   | { type: "set-custom-bundle"; bundle: CustomBundleRecord }
@@ -17,7 +18,7 @@ export type ClientMsg =
   /** Re-run the classify pipeline; all cached inbox messages when no ids given. */
   | { type: "reclassify"; messageIds?: number[] };
 
-export type FailedCommand = "done" | "snooze" | "unsnooze" | "trash";
+export type FailedCommand = "done" | "snooze" | "unsnooze" | "trash" | "move-to-inbox";
 
 export type ServerMsg =
   | ({ type: "delta" } & Delta)

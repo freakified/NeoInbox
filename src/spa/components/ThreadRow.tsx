@@ -30,6 +30,10 @@ export const ThreadRow = ({
   const initial = firstSender ? senderInitial(firstSender.author) : "?";
   const attachmentRefs = collectAttachments(t.messages);
   const hasDraft = t.messages.some((m) => m.origin === "draft");
+  // Whole thread archived: bundle and done views mix these with inbox threads.
+  const isDone =
+    t.messages.some((m) => m.origin === "done") &&
+    !t.messages.some((m) => m.origin === "inbox");
   // A pinned thread escapes its bundle in the stream, so the chip keeps its origin visible.
   const bundleMeta = t.pinned && t.category ? getCategoryMeta(t.category, customBundles) : null;
   const baseDate = t.snoozeDueAt ? (
@@ -46,9 +50,10 @@ export const ThreadRow = ({
       <Icon name="schedule" className={s.snoozeIcon} />
     </span>
   ) : formatDate(t.latestDate);
-  const date = t.pinned ? (
+  const date = t.pinned || isDone ? (
     <span className={s.pinnedDate}>
-      <Icon name="push_pin" className={s.pinIndicator} />
+      {t.pinned && <Icon name="push_pin" className={s.pinIndicator} />}
+      {isDone && <Icon name="check" className={s.doneIndicator} />}
       {baseDate}
     </span>
   ) : baseDate;

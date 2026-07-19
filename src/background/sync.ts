@@ -66,7 +66,8 @@ const cacheOne = async (
     : origin;
   let category: RawMessage["category"] = null;
   let incomplete = false;
-  if (logicalOrigin === "inbox") {
+  // Done rows keep their bundle so archived mail still shows in bundle views.
+  if (logicalOrigin === "inbox" || logicalOrigin === "done") {
     const result = await classifyMessage(fresh);
     category = result.category;
     incomplete = result.incomplete;
@@ -235,17 +236,20 @@ export const wireSyncEngine = (): void => {
         const logicalOrigin = origin === "done" && (await isSnoozedHeader(fresh))
           ? "inbox"
           : origin;
-        // Only reuse the cached category if it was already classified as
-        // inbox mail: a row cached under another origin (sent/draft/done)
-        // always has category null, and that must not stick once the
-        // message actually lands in the inbox (e.g. unarchived, moved back
-        // by a filter) — reclassify instead of carrying the null forward.
+        // Only reuse the cached category if the row was actually classified:
+        // inbox rows always were, done rows carry one since bundle views
+        // started including archived mail. A null on a sent/draft row (or a
+        // legacy done row) must not stick once the message lands somewhere
+        // that needs a category — reclassify instead of carrying it forward.
         let category: RawMessage["category"] = null;
         let incomplete = false;
-        if (cached?.origin === "inbox") {
+        if (
+          cached?.origin === "inbox" ||
+          (cached?.origin === "done" && cached.category !== null)
+        ) {
           category = cached.category;
           incomplete = cached.classifiedIncomplete ?? false;
-        } else if (logicalOrigin === "inbox") {
+        } else if (logicalOrigin === "inbox" || logicalOrigin === "done") {
           const result = await classifyMessage(fresh);
           category = result.category;
           incomplete = result.incomplete;
