@@ -39,6 +39,8 @@ export const endScan = (): void => {
   }
 };
 
+export const scanActive = (): boolean => activeScans > 0;
+
 export const wasRemovedDuringScan = (id: number): boolean => removedDuringScan.has(id);
 
 export const wasCachedDuringScan = (id: number): boolean => cachedDuringScan.has(id);

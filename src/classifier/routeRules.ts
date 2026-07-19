@@ -4,14 +4,21 @@ import type { Category, RouteRuleRecord } from "../shared/types";
 import type { Features } from "./features";
 
 let cache: RouteRuleRecord[] | null = null;
+let epoch = 0;
 
 export const invalidateRouteRules = (): void => {
   cache = null;
+  epoch++;
 };
 
 const loadRules = async (): Promise<RouteRuleRecord[]> => {
-  cache ??= await db.routeRules.toArray();
-  return cache;
+  if (cache) return cache;
+  const startedAt = epoch;
+  const rules = await db.routeRules.toArray();
+  // An invalidation while the read was in flight means `rules` may predate
+  // the write that triggered it; serve it once but don't cache it.
+  if (epoch === startedAt) cache = rules;
+  return rules;
 };
 
 /** Precedence lives in matchingRouteRules so the SPA can explain it. */

@@ -154,12 +154,23 @@ let reminderWakeTimer: ReturnType<typeof setInterval> | null = null;
 
 let port: BackgroundPort | null = null;
 
+/**
+ * Commands issued while the port is down. Dropping them would silently lose
+ * mutations (a saved rule, a done/trash) that the optimistic UI already
+ * applied; instead they flush in order once the port reconnects.
+ */
+const outbox: ClientMsg[] = [];
+
 const send = (msg: ClientMsg): void => {
-  if (!port) return;
+  if (!port) {
+    outbox.push(msg);
+    return;
+  }
   try {
     port.postMessage(msg);
   } catch (e) {
-    log.warn("store", "port send failed", e);
+    log.warn("store", "port send failed; queued for reconnect", e);
+    outbox.push(msg);
   }
 }
 
@@ -227,6 +238,8 @@ export const useMailStore = create<MailStore>((set, get) => ({
       set({ connectionState: "connected" });
       backoff = 500;
       send({ type: "hello" });
+      // Flush anything queued while disconnected; a failed post requeues.
+      for (const queued of outbox.splice(0, outbox.length)) send(queued);
     };
     connect();
   },

@@ -17,7 +17,9 @@ import {
   runBackfill,
   runIncrementalSync,
   runStartupSync,
+  serialized,
 } from "./backfill";
+import { scanActive } from "./scanGuard";
 import { pushMyEmails, wireSyncEngine } from "./sync";
 import { cleanupLegacyTags } from "./legacyTags";
 import { applyLocalState } from "./localState";
@@ -58,14 +60,32 @@ const reclassifyMessages = async (cached: RawMessage[]): Promise<{ scanned: numb
   return { scanned: cached.length, moved };
 }
 
+const RULE_SWEEP_SETTLE_MS = 2_000;
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * Reclassify cached inbox messages that match a rule's key. Adding,
  * reassigning, or deleting a rule can only change the category of messages
  * its key matches, so this candidate set is sufficient.
  */
 const reclassifyRuleMatches = async (rule: RouteRuleRecord): Promise<void> => {
-  const cached = (await db.messages.toArray()).filter((m) => ruleMatchesMessage(rule, m));
-  await reclassifyMessages(cached);
+  const sweep = async (): Promise<void> => {
+    const cached = (await db.messages.toArray()).filter((m) => ruleMatchesMessage(rule, m));
+    await reclassifyMessages(cached);
+  };
+  await sweep();
+  // A scan in flight may still hold matching rows in an unflushed batch that
+  // was classified before the rule landed; those rows would be written after
+  // the sweep above with pre-rule categories. Sweep again once the scan
+  // chain drains.
+  if (scanActive()) await serialized(sweep);
+  // The live new-mail path can likewise be mid-classification when the rule
+  // lands and write its row after the sweeps above; one settled pass catches
+  // those stragglers.
+  await sleep(RULE_SWEEP_SETTLE_MS);
+  await sweep();
 }
 
 const openOrFocusInbox = async (): Promise<void> => {

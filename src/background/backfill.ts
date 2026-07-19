@@ -46,7 +46,7 @@ let lastProgress: ServerMsg | null = null;
 
 /** Scans and reclassifies run one at a time so their batches never interleave. */
 let chain: Promise<unknown> = Promise.resolve();
-const serialized = <T>(work: () => Promise<T>): Promise<T> => {
+export const serialized = <T>(work: () => Promise<T>): Promise<T> => {
   const run = chain.then(work, work);
   chain = run.catch(() => undefined);
   return run;
