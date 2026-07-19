@@ -15,6 +15,8 @@ import type {
   RouteRuleType,
   SnoozeRecord,
   TranslationRecord,
+  TripMembershipRecord,
+  TripRecord,
 } from "../shared/types";
 
 /** Pre-v7 record shapes, kept only for the migration below. */
@@ -114,6 +116,8 @@ class NeoInboxDb extends Dexie {
   folderCursors!: Table<FolderCursorRecord, string>;
   customBundles!: Table<CustomBundleRecord, string>;
   translations!: Table<TranslationRecord, string>;
+  trips!: Table<TripRecord, string>;
+  tripMemberships!: Table<TripMembershipRecord, string>;
 
   constructor() {
     super("neoinbox");
@@ -167,6 +171,10 @@ class NeoInboxDb extends Dexie {
       .upgrade(migrateTagsToLocalState);
     this.version(10).stores({
       reminders: "id, status, snoozeWakeAt",
+    });
+    this.version(11).stores({
+      trips: "id",
+      tripMemberships: "key, tripId",
     });
   }
 }

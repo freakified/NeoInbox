@@ -9,7 +9,17 @@ import {
   type FailedCommand,
   type ServerMsg,
 } from "../shared/messaging";
-import type { Category, CustomBundleRecord, RawMessage, ReminderRecord, RouteRuleRecord, SnoozeRecord, Thread } from "../shared/types";
+import type {
+  Category,
+  CustomBundleRecord,
+  RawMessage,
+  ReminderRecord,
+  RouteRuleRecord,
+  SnoozeRecord,
+  Thread,
+  TripMembershipRecord,
+  TripRecord,
+} from "../shared/types";
 
 export type { Stream, StreamItem, StreamSection, StreamView } from "./stream";
 
@@ -75,6 +85,8 @@ interface MailStore {
   pendingOps: Record<number, PendingOp>;
   snoozesByMessageId: Record<number, SnoozeRecord>;
   remindersById: Record<string, ReminderRecord>;
+  tripsById: Record<string, TripRecord>;
+  tripMembershipByKey: Record<string, TripMembershipRecord>;
   toasts: ToastRecord[];
   bundleSettings: BundleSettingsRequest | null;
   reclassifying: boolean;
@@ -102,6 +114,14 @@ interface MailStore {
   deleteReminder: (id: string) => void;
   /** Resurface snoozed reminders whose wake time has passed. */
   wakeDueReminders: () => void;
+  createTrip: (name: string) => TripRecord;
+  renameTrip: (id: string, name: string) => void;
+  deleteTrip: (id: string) => void;
+  /**
+   * Assign messages (by pinKey) to a trip; null removes them from all trips
+   * and, as a tombstone, keeps auto-clustering (phase 2) from re-adding them.
+   */
+  setTripMembership: (keys: string[], tripId: string | null) => void;
   retryBackfill: () => void;
   retryToast: (toastId: string) => void;
   undoToast: (toastId: string) => void;
@@ -153,6 +173,17 @@ const persistReminder = (record: ReminderRecord): void => {
   void db.reminders.put(record).catch((e) => log.warn("store", "reminder save failed", e));
 };
 
+/** Trips are SPA-owned too (same model as reminders). */
+const persistTrip = (record: TripRecord): void => {
+  void db.trips.put(record).catch((e) => log.warn("store", "trip save failed", e));
+};
+
+const persistTripMemberships = (records: TripMembershipRecord[]): void => {
+  void db.tripMemberships
+    .bulkPut(records)
+    .catch((e) => log.warn("store", "trip membership save failed", e));
+};
+
 let reminderWakeTimer: ReturnType<typeof setInterval> | null = null;
 
 let port: BackgroundPort | null = null;
@@ -188,19 +219,24 @@ export const useMailStore = create<MailStore>((set, get) => ({
   pendingOps: {},
   snoozesByMessageId: {},
   remindersById: {},
+  tripsById: {},
+  tripMembershipByKey: {},
   toasts: [],
   bundleSettings: null,
   reclassifying: false,
 
   init: async () => {
     if (get().hydrated) return;
-    const [all, rawBundles, routeRules, snoozes, reminders] = await Promise.all([
-      db.messages.toArray(),
-      db.customBundles.toArray(),
-      db.routeRules.toArray(),
-      db.snoozes.toArray(),
-      db.reminders.toArray(),
-    ]);
+    const [all, rawBundles, routeRules, snoozes, reminders, trips, tripMemberships] =
+      await Promise.all([
+        db.messages.toArray(),
+        db.customBundles.toArray(),
+        db.routeRules.toArray(),
+        db.snoozes.toArray(),
+        db.reminders.toArray(),
+        db.trips.toArray(),
+        db.tripMemberships.toArray(),
+      ]);
     const customBundles = rawBundles.sort((a, b) => a.order - b.order);
     const byId: Record<number, RawMessage> = {};
     for (const m of all) byId[m.id] = m;
@@ -208,7 +244,20 @@ export const useMailStore = create<MailStore>((set, get) => ({
     for (const snooze of snoozes) snoozesByMessageId[snooze.messageId] = snooze;
     const remindersById: Record<string, ReminderRecord> = {};
     for (const reminder of reminders) remindersById[reminder.id] = reminder;
-    set({ messagesById: byId, hydrated: true, customBundles, routeRules, snoozesByMessageId, remindersById });
+    const tripsById: Record<string, TripRecord> = {};
+    for (const trip of trips) tripsById[trip.id] = trip;
+    const tripMembershipByKey: Record<string, TripMembershipRecord> = {};
+    for (const membership of tripMemberships) tripMembershipByKey[membership.key] = membership;
+    set({
+      messagesById: byId,
+      hydrated: true,
+      customBundles,
+      routeRules,
+      snoozesByMessageId,
+      remindersById,
+      tripsById,
+      tripMembershipByKey,
+    });
 
     get().wakeDueReminders();
     if (reminderWakeTimer === null) {
@@ -522,6 +571,78 @@ export const useMailStore = create<MailStore>((set, get) => ({
     set({ remindersById: next });
   },
 
+  createTrip: (name) => {
+    const record: TripRecord = {
+      id: crypto.randomUUID(),
+      name: name.trim() || "New trip",
+      nameIsCustom: !!name.trim(),
+      createdAt: Date.now(),
+    };
+    set({ tripsById: { ...get().tripsById, [record.id]: record } });
+    persistTrip(record);
+    return record;
+  },
+
+  renameTrip: (id, name) => {
+    const prev = get().tripsById[id];
+    const trimmed = name.trim();
+    if (!prev || !trimmed || prev.name === trimmed) return;
+    const next: TripRecord = { ...prev, name: trimmed, nameIsCustom: true };
+    set({ tripsById: { ...get().tripsById, [id]: next } });
+    persistTrip(next);
+  },
+
+  deleteTrip: (id) => {
+    const prev = get().tripsById[id];
+    if (!prev) return;
+    const trips = { ...get().tripsById };
+    delete trips[id];
+    const memberships = { ...get().tripMembershipByKey };
+    const removed: TripMembershipRecord[] = [];
+    for (const [key, record] of Object.entries(memberships)) {
+      if (record.tripId === id) {
+        removed.push(record);
+        delete memberships[key];
+      }
+    }
+    set({ tripsById: trips, tripMembershipByKey: memberships });
+    void db.trips.delete(id).catch((e) => log.warn("store", "trip delete failed", e));
+    void db.tripMemberships
+      .bulkDelete(removed.map((r) => r.key))
+      .catch((e) => log.warn("store", "trip membership delete failed", e));
+    get().notify("Trip deleted", [
+      {
+        label: "Undo",
+        run: () => {
+          set({
+            tripsById: { ...get().tripsById, [id]: prev },
+            tripMembershipByKey: {
+              ...get().tripMembershipByKey,
+              ...Object.fromEntries(removed.map((r) => [r.key, r])),
+            },
+          });
+          persistTrip(prev);
+          persistTripMemberships(removed);
+        },
+      },
+    ]);
+  },
+
+  setTripMembership: (keys, tripId) => {
+    if (keys.length === 0) return;
+    const now = Date.now();
+    const records = keys.map(
+      (key): TripMembershipRecord => ({ key, tripId, source: "manual", addedAt: now }),
+    );
+    set({
+      tripMembershipByKey: {
+        ...get().tripMembershipByKey,
+        ...Object.fromEntries(records.map((r) => [r.key, r])),
+      },
+    });
+    persistTripMemberships(records);
+  },
+
   retryBackfill: () => {
     const prev = get().syncProgress;
     set({
@@ -713,9 +834,21 @@ export const useStreamForView = (view: StreamView, pinnedOnly = false): Stream =
   const myEmails = useMailStore((s) => s.myEmails);
   const snoozesByMessageId = useMailStore((s) => s.snoozesByMessageId);
   const remindersById = useMailStore((s) => s.remindersById);
+  const tripsById = useMailStore((s) => s.tripsById);
+  const tripMembershipByKey = useMailStore((s) => s.tripMembershipByKey);
   return useMemo(
-    () => deriveStream(messagesById, myEmails, view, snoozesByMessageId, pinnedOnly, remindersById),
-    [messagesById, myEmails, view, snoozesByMessageId, pinnedOnly, remindersById],
+    () =>
+      deriveStream(
+        messagesById,
+        myEmails,
+        view,
+        snoozesByMessageId,
+        pinnedOnly,
+        remindersById,
+        tripsById,
+        tripMembershipByKey,
+      ),
+    [messagesById, myEmails, view, snoozesByMessageId, pinnedOnly, remindersById, tripsById, tripMembershipByKey],
   );
 }
 
@@ -745,4 +878,12 @@ export const useToasts = (): ToastRecord[] => {
 
 export const useBundleSettings = (): BundleSettingsRequest | null => {
   return useMailStore((s) => s.bundleSettings);
+}
+
+export const useTrips = (): Record<string, TripRecord> => {
+  return useMailStore((s) => s.tripsById);
+}
+
+export const useTripMemberships = (): Record<string, TripMembershipRecord> => {
+  return useMailStore((s) => s.tripMembershipByKey);
 }

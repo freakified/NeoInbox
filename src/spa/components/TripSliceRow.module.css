@@ -1,0 +1,40 @@
+.titleGroup {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.rangeLabel {
+  font-size: 13px;
+  color: var(--color-md-secondary-text);
+  white-space: nowrap;
+}
+
+.renameInput {
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--color-md-on-surface);
+  border: none;
+  border-bottom: 2px solid var(--color-md-primary);
+  background: transparent;
+  padding: 0;
+  min-width: 0;
+  width: min(340px, 60vw);
+}
+
+.renameInput:focus {
+  outline: none;
+}
+
+.emptyPreview {
+  color: var(--color-md-secondary-text);
+}
+
+.emptyBody {
+  width: var(--bundle-inner-width);
+  margin: 0 auto;
+  padding: 8px 12px 4px;
+  color: var(--color-md-secondary-text);
+  font-size: 13.5px;
+}

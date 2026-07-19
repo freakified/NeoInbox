@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { clsx } from "clsx";
 import type { Thread } from "../../shared/types";
-import { useMailStore } from "../../store/mailStore";
+import { tripIdOfThread } from "../../shared/trips";
+import { useMailStore, useTripMemberships } from "../../store/mailStore";
 import { useShowDeleteActions } from "../lib/deleteActionPrefs";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
 import { useBulkActions } from "./BulkActionConfirm";
 import { Icon } from "./Icon";
 import { SnoozeMenu } from "./SnoozeMenu";
+import { TripPickerDialog } from "./TripPickerDialog";
 import s from "./ActionStrip.module.css";
 
 export const ActionStrip = ({ thread }: { thread: Thread }) => {
@@ -16,6 +19,12 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
   const showDeleteActions = useShowDeleteActions();
   const { doneMessages, trashMessages } = useBulkActions();
   const moveToInboxThread = useMailStore((st) => st.moveToInboxThread);
+  const tripMemberships = useTripMemberships();
+  const [tripPickerOpen, setTripPickerOpen] = useState(false);
+  const currentTripId = tripIdOfThread(thread, tripMemberships);
+  // Travel mail can always be filed into a trip; other mail only shows the
+  // action once it's in one (so it can be moved back out).
+  const showTripAction = thread.category === "travel" || currentTripId !== null;
   const inboxMessageIds = thread.messages.filter((m) => m.origin === "inbox").map((m) => m.id);
   const hasInboxMessages = inboxMessageIds.length > 0;
   const doneMessageIds = thread.messages.filter((m) => m.origin === "done").map((m) => m.id);
@@ -50,6 +59,24 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
           className={clsx(s.iconBase, thread.pinned ? s.iconPrimary : s.iconMuted)}
         />
       </ActionBtn>
+      {showTripAction && (
+        <ActionBtn
+          title={currentTripId ? "Change trip" : "Move to trip"}
+          onClick={() => setTripPickerOpen(true)}
+        >
+          <Icon
+            name="flight"
+            className={clsx(s.iconBase, currentTripId ? s.iconPrimary : s.iconMuted)}
+          />
+        </ActionBtn>
+      )}
+      {tripPickerOpen && (
+        <TripPickerDialog
+          thread={thread}
+          currentTripId={currentTripId}
+          onClose={() => setTripPickerOpen(false)}
+        />
+      )}
       {hasInboxMessages && <SnoozeMenu onChoose={onSnooze} />}
       {snoozedMessageIds.length > 0 && (
         <ActionBtn title="Unsnooze" onClick={onUnsnooze}>

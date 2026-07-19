@@ -23,6 +23,7 @@ import { MotionSurface } from "./components/Motion";
 import { SectionLabel } from "./components/SectionLabel";
 import { ThreadRow } from "./components/ThreadRow";
 import { Toaster } from "./components/Toaster";
+import { TripSliceRow } from "./components/TripSliceRow";
 import s from "./App.module.css";
 
 const STREAM_PAGE_SIZE = 80;
@@ -79,7 +80,24 @@ const headerForView = (
 
 // Reminders live in the stream but are never part of bulk sweeps.
 const threadsOfItem = (item: StreamItem) =>
-  item.type === "thread" ? [item.thread] : item.type === "bundle" ? item.threads : [];
+  item.type === "thread"
+    ? [item.thread]
+    : item.type === "bundle" || item.type === "trip"
+      ? item.threads
+      : [];
+
+type GroupItem = Extract<StreamItem, { type: "bundle" } | { type: "trip" }>;
+
+/** Expansion key for the two openable group row kinds (bundles and trips). */
+const groupKeyOf = (item: StreamItem): string | null =>
+  item.type === "bundle"
+    ? `bundle:${item.category}`
+    : item.type === "trip"
+      ? `trip:${item.trip.id}`
+      : null;
+
+const isGroupKey = (key: string): boolean =>
+  key.startsWith("bundle:") || key.startsWith("trip:");
 
 // Sweeps skip pinned threads, so a section of only pinned mail has nothing to sweep.
 const canDoneSection = (items: StreamItem[]): boolean =>
@@ -226,7 +244,7 @@ export const App = () => {
       onClick={(e) => {
         if (!expandedKey) return;
         if (!(e.target as HTMLElement).closest("[data-row]")) {
-          if (expandedKey.startsWith("bundle:") && openBundleThreadId) {
+          if (isGroupKey(expandedKey) && openBundleThreadId) {
             setOpenBundleThreadId(null);
             return;
           }
@@ -387,10 +405,8 @@ export const App = () => {
         )}
 
         {visibleStream.sections.map((group) => {
-          const expandedBundleIdx = expandedKey?.startsWith("bundle:")
-            ? group.items.findIndex(
-                (item) => item.type === "bundle" && expandedKey === `bundle:${item.category}`
-              )
+          const expandedBundleIdx = expandedKey && isGroupKey(expandedKey)
+            ? group.items.findIndex((item) => groupKeyOf(item) === expandedKey)
             : -1;
 
           const renderItems = (items: StreamItem[]) =>
@@ -405,6 +421,16 @@ export const App = () => {
                 />
               ) : item.type === "reminder" ? (
                 <ReminderRow key={item.reminder.id} reminder={item.reminder} />
+              ) : item.type === "trip" ? (
+                <TripSliceRow
+                  key={item.trip.id}
+                  tripKey={`trip:${item.trip.id}`}
+                  trip={item.trip}
+                  threads={item.threads}
+                  isOpen={false}
+                  onToggle={toggleKey}
+                  expandedRef={expandedRef}
+                />
               ) : (
                 <BundleSliceRow
                   key={item.category}
@@ -419,7 +445,7 @@ export const App = () => {
             );
 
           const openBundle = expandedBundleIdx >= 0
-            ? group.items[expandedBundleIdx] as Extract<StreamItem, { type: "bundle" }>
+            ? group.items[expandedBundleIdx] as GroupItem
             : null;
 
           const expandedThreadIdx = !openBundle && expandedKey?.startsWith("thread:")
@@ -461,16 +487,29 @@ export const App = () => {
                         {renderItems(group.items.slice(0, expandedBundleIdx))}
                       </MotionSurface>
                     )}
-                    <BundleSliceRow
-                      bundleKey={`bundle:${openBundle.category}`}
-                      category={openBundle.category}
-                      threads={openBundle.threads}
-                      isOpen={true}
-                      onToggle={toggleKey}
-                      expandedRef={expandedRef}
-                      openThreadId={openBundleThreadId}
-                      onOpenThreadChange={setOpenBundleThreadId}
-                    />
+                    {openBundle.type === "trip" ? (
+                      <TripSliceRow
+                        tripKey={`trip:${openBundle.trip.id}`}
+                        trip={openBundle.trip}
+                        threads={openBundle.threads}
+                        isOpen={true}
+                        onToggle={toggleKey}
+                        expandedRef={expandedRef}
+                        openThreadId={openBundleThreadId}
+                        onOpenThreadChange={setOpenBundleThreadId}
+                      />
+                    ) : (
+                      <BundleSliceRow
+                        bundleKey={`bundle:${openBundle.category}`}
+                        category={openBundle.category}
+                        threads={openBundle.threads}
+                        isOpen={true}
+                        onToggle={toggleKey}
+                        expandedRef={expandedRef}
+                        openThreadId={openBundleThreadId}
+                        onOpenThreadChange={setOpenBundleThreadId}
+                      />
+                    )}
                     {expandedBundleIdx < group.items.length - 1 && (
                       <MotionSurface className={s.card}>
                         {renderItems(group.items.slice(expandedBundleIdx + 1))}

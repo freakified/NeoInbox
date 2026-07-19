@@ -25,6 +25,7 @@ import { pushMyEmails, wireSyncEngine } from "./sync";
 import { cleanupLegacyTags } from "./legacyTags";
 import { applyLocalState } from "./localState";
 import { broadcast, onCommand, startPortServer } from "./port";
+import { installTripScan } from "./tripScan";
 import { invalidateRouteRules } from "../classifier/routeRules";
 import { db } from "../store/db";
 import { collectArchiveFolders, collectInboxFolders, invalidateFolderCache } from "../shared/folders";
@@ -180,6 +181,7 @@ for (const event of [
 
 wireSyncEngine();
 startPortServer();
+installTripScan();
 void cleanupLegacyTags().catch((e) => log.warn("legacy-tags", "cleanup failed", e));
 void classifyCachedDoneMessages().catch((e) =>
   log.warn("backfill", "done category sweep failed", e),

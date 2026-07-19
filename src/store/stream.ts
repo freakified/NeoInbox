@@ -1,5 +1,16 @@
 import { buildThreads } from "../shared/threading";
-import type { Category, MessageOrigin, RawMessage, ReminderRecord, SnoozeRecord, Thread } from "../shared/types";
+import { pinKeyOf } from "../shared/pinKey";
+import { tripIdOfThread } from "../shared/trips";
+import type {
+  Category,
+  MessageOrigin,
+  RawMessage,
+  ReminderRecord,
+  SnoozeRecord,
+  Thread,
+  TripMembershipRecord,
+  TripRecord,
+} from "../shared/types";
 import { dateBucket, futureDateBucket } from "../spa/lib/dateBucket";
 
 export type StreamView =
@@ -18,6 +29,12 @@ export type StreamItem =
     type: "bundle";
     date: number;
     category: Category;
+    threads: Thread[];
+  }
+  | {
+    type: "trip";
+    date: number;
+    trip: TripRecord;
     threads: Thread[];
   };
 
@@ -76,6 +93,9 @@ const reminderDateForView = (
   return null;
 };
 
+/** The bundle whose view groups member threads into trip cards. */
+export const TRIPS_CATEGORY: Category = "travel";
+
 export const deriveStream = (
   messagesById: Record<number, RawMessage>,
   myEmails: ReadonlySet<string>,
@@ -83,6 +103,8 @@ export const deriveStream = (
   snoozesByMessageId: Record<number, SnoozeRecord> = {},
   pinnedOnly = false,
   remindersById: Record<string, ReminderRecord> = {},
+  tripsById: Record<string, TripRecord> = {},
+  tripMembershipByKey: Record<string, TripMembershipRecord> = {},
 ): Stream => {
   const allMessages = Object.values(messagesById);
   const anchorOrigins: ReadonlySet<MessageOrigin> = new Set(
@@ -108,12 +130,17 @@ export const deriveStream = (
     if (view.type === "sent") return m.origin === "sent";
     if (view.type === "done") return m.origin === "sent" || m.origin === "draft" || m.origin === "done";
     // The bundle view is the whole bundle: done messages count alongside inbox.
+    // The trips bundle additionally pulls in any mail assigned to a trip,
+    // whatever its category — manual adds aren't limited to travel mail.
+    const inTrip =
+      view.category === TRIPS_CATEGORY &&
+      tripMembershipByKey[pinKeyOf(m)]?.tripId != null;
     return (
       m.origin === "sent" ||
       m.origin === "draft" ||
       ((m.origin === "inbox" || m.origin === "done") &&
         !m.snoozed &&
-        m.category === view.category)
+        (m.category === view.category || inTrip))
     );
   });
   let threads = buildThreads(visible, myEmails, anchorOrigins);
@@ -132,8 +159,10 @@ export const deriveStream = (
     threads = threads.filter((t) => t.pinned);
   }
   const showInboxBundles = view.type === "inbox";
+  const showTrips = view.type === "bundle" && view.category === TRIPS_CATEGORY;
 
   const byCategory = new Map<Category, Thread[]>();
+  const byTrip = new Map<string, Thread[]>();
   const personal: Thread[] = [];
   for (const t of threads) {
     // Pinned threads never hide inside a bundle; they surface individually.
@@ -144,6 +173,19 @@ export const deriveStream = (
         byCategory.set(t.category, arr);
       }
       arr.push(t);
+    } else if (showTrips) {
+      const tripId = tripIdOfThread(t, tripMembershipByKey);
+      // A membership pointing at a deleted trip renders unassigned.
+      if (tripId && tripsById[tripId]) {
+        let arr = byTrip.get(tripId);
+        if (!arr) {
+          arr = [];
+          byTrip.set(tripId, arr);
+        }
+        arr.push(t);
+      } else {
+        personal.push(t);
+      }
     } else {
       personal.push(t);
     }
@@ -155,7 +197,24 @@ export const deriveStream = (
     if (date !== null) reminderItems.push({ type: "reminder", date, reminder: r });
   }
 
+  // Every trip shows in the trips view, even with no visible mail, so it can
+  // still be renamed or deleted.
+  const tripItems: StreamItem[] = showTrips
+    ? Object.values(tripsById).map((trip) => {
+        const sorted = [...(byTrip.get(trip.id) ?? [])].sort(
+          (a, b) => b.latestDate - a.latestDate,
+        );
+        return {
+          type: "trip" as const,
+          date: sorted[0]?.latestDate ?? trip.createdAt,
+          trip,
+          threads: sorted,
+        };
+      })
+    : [];
+
   const items: StreamItem[] = [
+    ...tripItems,
     ...[...byCategory.entries()].map(([category, ts]) => {
       const sorted = [...ts].sort((a, b) => b.latestDate - a.latestDate);
       return {
@@ -202,5 +261,7 @@ export const deriveStream = (
     return view.type === "snoozed" ? aDate - bDate : bDate - aDate;
   });
 
-  return { sections, threadCount: threads.length + reminderItems.length, view };
+  // Empty trips still render as cards, so they count as content too.
+  const emptyTripCount = tripItems.filter((item) => item.type === "trip" && !item.threads.length).length;
+  return { sections, threadCount: threads.length + reminderItems.length + emptyTripCount, view };
 }

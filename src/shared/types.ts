@@ -109,6 +109,36 @@ export interface ReminderRecord {
   doneAt?: number;
 }
 
+/**
+ * A trip: an explicit, user-visible grouping of travel mail, shown as trip
+ * cards inside the Trips bundle. NeoInbox-local. Membership lives in
+ * TripMembershipRecord rows, never derived — reclustering must not reshuffle
+ * a trip the user curated by hand.
+ */
+export interface TripRecord {
+  id: string;
+  name: string;
+  /** User renamed it; auto-naming (phase 2) must never overwrite. */
+  nameIsCustom: boolean;
+  createdAt: number;
+  /** Travel dates, set by reservation extraction (phase 2); display falls back to member mail dates. */
+  startDate?: number;
+  endDate?: number;
+}
+
+/**
+ * Assigns one message to a trip. Keyed by Message-ID (see pinKeyOf) so the
+ * assignment survives archive moves and id renumbering. tripId null is a
+ * tombstone: the user removed the message from all trips, and the phase-2
+ * auto-clusterer must not add it back. Manual rows always win over auto rows.
+ */
+export interface TripMembershipRecord {
+  key: string;
+  tripId: string | null;
+  source: "auto" | "manual";
+  addedAt: number;
+}
+
 export interface SnoozeRecord {
   messageId: number;
   wakeAt: number;
