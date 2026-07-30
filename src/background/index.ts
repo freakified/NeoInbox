@@ -4,6 +4,7 @@ import {
   doneMessage,
   pinMessage,
   trashMessage,
+  verifiedOpId,
 } from "./ingest";
 import { headerToRawMessage } from "./messageMap";
 import {
@@ -25,6 +26,7 @@ import { pushMyEmails, wireSyncEngine } from "./sync";
 import { cleanupLegacyTags } from "./legacyTags";
 import { applyLocalState } from "./localState";
 import { broadcast, onCommand, startPortServer } from "./port";
+import { installTripExtract, scheduleTripExtraction } from "./extract";
 import { installTripScan } from "./tripScan";
 import { invalidateRouteRules } from "../classifier/routeRules";
 import { db } from "../store/db";
@@ -144,12 +146,16 @@ messenger.browserAction.onClicked.addListener(() => {
 messenger.runtime.onInstalled.addListener((details) => {
   log.info("background", "onInstalled", details.reason);
   void ensureSnoozeAlarmsRestored().catch((e) => log.warn("snooze", "restore alarms failed", e));
-  void runBackfill().catch((e) => log.warn("backfill", "failed", e));
+  void runBackfill()
+    .then(scheduleTripExtraction)
+    .catch((e) => log.warn("backfill", "failed", e));
 });
 
 messenger.runtime.onStartup.addListener(() => {
   void ensureSnoozeAlarmsRestored().catch((e) => log.warn("snooze", "restore alarms failed", e));
-  void runStartupSync().catch((e) => log.warn("backfill", "startup sync failed", e));
+  void runStartupSync()
+    .then(scheduleTripExtraction)
+    .catch((e) => log.warn("backfill", "startup sync failed", e));
 });
 
 const SYNC_ALARM = "neoinbox-periodic-sync";
@@ -159,6 +165,7 @@ messenger.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === SYNC_ALARM) {
     try {
       await runIncrementalSync();
+      scheduleTripExtraction();
     } catch (e) {
       log.warn("backfill", "periodic sync failed", e);
     }
@@ -182,6 +189,7 @@ for (const event of [
 wireSyncEngine();
 startPortServer();
 installTripScan();
+installTripExtract();
 void cleanupLegacyTags().catch((e) => log.warn("legacy-tags", "cleanup failed", e));
 void classifyCachedDoneMessages().catch((e) =>
   log.warn("backfill", "done category sweep failed", e),
@@ -248,6 +256,16 @@ onCommand(async (msg) => {
       } catch {
         /* The move may have assigned a new message id; onMoved/backfill will cache it. */
       }
+      // Keep an optimistic done row rather than deleting: done/trip views
+      // would otherwise show a gap until onMoved re-caches the archived copy.
+      // The old id may be stale for a moment; body loads and destructive ops
+      // verify ids anyway, and onMoved swaps in the live row.
+      if (cached) {
+        const optimistic = { ...cached, origin: "done" as const };
+        await db.messages.put(optimistic);
+        broadcast({ type: "delta", updated: [optimistic] });
+        return;
+      }
       await db.messages.delete(msg.messageId);
       broadcast({ type: "delta", removedIds: [msg.messageId] });
       return;
@@ -255,17 +273,23 @@ onCommand(async (msg) => {
     case "move-to-inbox": {
       const cached = await db.messages.get(msg.messageId);
       let movedHeader: messenger.messages.MessageHeader | undefined;
+      let opId = msg.messageId;
       try {
+        // Done rows are the most stale-prone ids in the cache; never move an
+        // unverified one (it could be a different message entirely).
+        const verified = await verifiedOpId(msg.messageId);
+        if (verified === null) throw new Error("Message no longer exists");
+        opId = verified;
         const accountId =
           cached?.accountId ??
-          ((await messenger.messages.get(msg.messageId)) as messenger.messages.MessageHeader & {
+          ((await messenger.messages.get(opId)) as messenger.messages.MessageHeader & {
             folder?: { accountId?: string };
           }).folder?.accountId ??
           "";
         const target = (await collectInboxFolders()).find((f) => f.accountId === accountId);
         if (!target) throw new Error("No inbox folder found for this account");
         const moved = (await messenger.messages.move(
-          [msg.messageId],
+          [opId],
           target.id as unknown as messenger.folders.MailFolderId,
         )) as { messages?: messenger.messages.MessageHeader[] } | undefined;
         movedHeader = moved?.messages?.[0];
@@ -280,7 +304,7 @@ onCommand(async (msg) => {
         return;
       }
       try {
-        const header = await messenger.messages.get(movedHeader?.id ?? msg.messageId);
+        const header = await messenger.messages.get(movedHeader?.id ?? opId);
         const raw = headerToRawMessage(header, "inbox", cached?.category ?? null);
         await applyLocalState(raw);
         await applyMessageDetails(raw, cached);

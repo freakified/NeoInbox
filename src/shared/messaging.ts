@@ -1,4 +1,10 @@
-import type { CustomBundleRecord, Delta, RouteRuleRecord } from "./types";
+import type {
+  CustomBundleRecord,
+  Delta,
+  RouteRuleRecord,
+  TripMembershipRecord,
+  TripRecord,
+} from "./types";
 
 export const PORT_NAME = "neoinbox";
 
@@ -37,4 +43,16 @@ export type ServerMsg =
       reason: string;
     }
   | { type: "reclassify-done"; scanned: number; moved: number }
+  /**
+   * Auto-clusterer output (already persisted to Dexie by the background).
+   * memberships only ever carry source "auto" rows; the SPA must keep any
+   * local manual row over an incoming auto row for the same key.
+   */
+  | {
+      type: "trips-delta";
+      trips: TripRecord[];
+      removedTripIds: string[];
+      memberships: TripMembershipRecord[];
+      removedMembershipKeys: string[];
+    }
   | { type: "error"; message: string };

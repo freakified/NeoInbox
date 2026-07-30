@@ -159,33 +159,43 @@ export const deriveStream = (
     threads = threads.filter((t) => t.pinned);
   }
   const showInboxBundles = view.type === "inbox";
-  const showTrips = view.type === "bundle" && view.category === TRIPS_CATEGORY;
+  const showTripsView = view.type === "bundle" && view.category === TRIPS_CATEGORY;
+  // Faithful to Google Inbox: each trip is its own row in the inbox stream,
+  // not a slice of the travel bundle.
+  const groupTrips = showInboxBundles || showTripsView;
 
   const byCategory = new Map<Category, Thread[]>();
   const byTrip = new Map<string, Thread[]>();
   const personal: Thread[] = [];
   for (const t of threads) {
-    // Pinned threads never hide inside a bundle; they surface individually.
-    if (showInboxBundles && t.category && !t.pinned) {
+    // Pinned threads never hide inside a bundle or a trip; they surface
+    // individually (the trips view is the exception — a trip card is the
+    // whole trip, pinned mail included).
+    const canGroupTrip = groupTrips && (showTripsView || !t.pinned);
+    // A membership pointing at a deleted trip renders unassigned.
+    const tripId = canGroupTrip ? tripIdOfThread(t, tripMembershipByKey) : null;
+    if (tripId && tripsById[tripId]) {
+      let arr = byTrip.get(tripId);
+      if (!arr) {
+        arr = [];
+        byTrip.set(tripId, arr);
+      }
+      arr.push(t);
+    } else if (
+      // Like real Inbox, there is no generic travel bundle: travel mail is
+      // either in a trip or loose in the inbox. The category survives
+      // internally to feed the trips view's unassigned list and extraction.
+      showInboxBundles &&
+      t.category &&
+      t.category !== TRIPS_CATEGORY &&
+      !t.pinned
+    ) {
       let arr = byCategory.get(t.category);
       if (!arr) {
         arr = [];
         byCategory.set(t.category, arr);
       }
       arr.push(t);
-    } else if (showTrips) {
-      const tripId = tripIdOfThread(t, tripMembershipByKey);
-      // A membership pointing at a deleted trip renders unassigned.
-      if (tripId && tripsById[tripId]) {
-        let arr = byTrip.get(tripId);
-        if (!arr) {
-          arr = [];
-          byTrip.set(tripId, arr);
-        }
-        arr.push(t);
-      } else {
-        personal.push(t);
-      }
     } else {
       personal.push(t);
     }
@@ -197,21 +207,21 @@ export const deriveStream = (
     if (date !== null) reminderItems.push({ type: "reminder", date, reminder: r });
   }
 
-  // Every trip shows in the trips view, even with no visible mail, so it can
-  // still be renamed or deleted.
-  const tripItems: StreamItem[] = showTrips
-    ? Object.values(tripsById).map((trip) => {
-        const sorted = [...(byTrip.get(trip.id) ?? [])].sort(
-          (a, b) => b.latestDate - a.latestDate,
-        );
-        return {
-          type: "trip" as const,
-          date: sorted[0]?.latestDate ?? trip.createdAt,
-          trip,
-          threads: sorted,
-        };
-      })
-    : [];
+  // The trips view lists every trip — even with no visible mail — so it can
+  // still be renamed or deleted. The inbox only shows trips with live mail.
+  const tripItems: StreamItem[] = Object.values(tripsById)
+    .filter((trip) => showTripsView || (byTrip.get(trip.id)?.length ?? 0) > 0)
+    .map((trip) => {
+      const sorted = [...(byTrip.get(trip.id) ?? [])].sort(
+        (a, b) => b.latestDate - a.latestDate,
+      );
+      return {
+        type: "trip" as const,
+        date: sorted[0]?.latestDate ?? trip.createdAt,
+        trip,
+        threads: sorted,
+      };
+    });
 
   const items: StreamItem[] = [
     ...tripItems,
@@ -224,11 +234,15 @@ export const deriveStream = (
         threads: sorted,
       };
     }),
-    ...personal.map((t) => ({
-      type: "thread" as const,
-      date: t.latestDate,
-      thread: t,
-    })),
+    // The trips view is only the list of trip bundles, like real Inbox —
+    // unassigned travel mail lives loose in the inbox, not here.
+    ...(showTripsView
+      ? []
+      : personal.map((t) => ({
+          type: "thread" as const,
+          date: t.latestDate,
+          thread: t,
+        }))),
     ...reminderItems,
   ].sort((a, b) => view.type === "snoozed" ? a.date - b.date : b.date - a.date);
 
@@ -261,7 +275,11 @@ export const deriveStream = (
     return view.type === "snoozed" ? aDate - bDate : bDate - aDate;
   });
 
-  // Empty trips still render as cards, so they count as content too.
+  // The trips view renders only trip cards (incl. empty ones); everywhere
+  // else, empty trips never render but loose threads do.
   const emptyTripCount = tripItems.filter((item) => item.type === "trip" && !item.threads.length).length;
-  return { sections, threadCount: threads.length + reminderItems.length + emptyTripCount, view };
+  const threadCount = showTripsView
+    ? tripItems.length
+    : threads.length + reminderItems.length + emptyTripCount;
+  return { sections, threadCount, view };
 }

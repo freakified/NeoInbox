@@ -114,6 +114,12 @@ interface MailStore {
   deleteReminder: (id: string) => void;
   /** Resurface snoozed reminders whose wake time has passed. */
   wakeDueReminders: () => void;
+  /**
+   * A cached row's TB id turned out stale (see resolveLiveMessageId): re-key
+   * the row to the verified live id, or drop it when the live id is already
+   * cached as its own row.
+   */
+  healStaleMessage: (staleId: number, liveId: number) => void;
   createTrip: (name: string) => TripRecord;
   renameTrip: (id: string, name: string) => void;
   deleteTrip: (id: string) => void;
@@ -313,8 +319,12 @@ export const useMailStore = create<MailStore>((set, get) => ({
     const pending = { ...get().pendingOps };
     for (const id of messageIds) {
       const m = prev[id];
-      if (m) pending[id] = { kind: "done", message: m };
-      delete map[id];
+      if (!m) continue;
+      pending[id] = { kind: "done", message: m };
+      // Flip to done rather than delete: the row leaves the inbox instantly
+      // but stays visible in done/bundle/trip views while the archive (which
+      // waits out the undo toast, then an IMAP round-trip) catches up.
+      map[id] = { ...m, origin: "done" };
     }
     const toastId = nextToastId();
     const toast: ToastRecord = {
@@ -571,6 +581,21 @@ export const useMailStore = create<MailStore>((set, get) => ({
     set({ remindersById: next });
   },
 
+  healStaleMessage: (staleId, liveId) => {
+    const map = { ...get().messagesById };
+    const stale = map[staleId];
+    if (!stale) return;
+    delete map[staleId];
+    void db.messages.delete(staleId).catch((e) => log.warn("store", "stale row delete failed", e));
+    if (!map[liveId]) {
+      const healed = { ...stale, id: liveId };
+      map[liveId] = healed;
+      void db.messages.put(healed).catch((e) => log.warn("store", "healed row save failed", e));
+    }
+    log.info("store", "healed stale message id", { staleId, liveId });
+    set({ messagesById: map });
+  },
+
   createTrip: (name) => {
     const record: TripRecord = {
       id: crypto.randomUUID(),
@@ -810,6 +835,26 @@ const applyServerMsg = (
           : `Checked ${msg.scanned} ${msg.scanned === 1 ? "message" : "messages"} — ${msg.moved} moved`;
       const toast: ToastRecord = { id: nextToastId(), message };
       set({ reclassifying: false, toasts: [...get().toasts, toast].slice(-TOAST_LIMIT) });
+      return;
+    }
+    case "trips-delta": {
+      // Background auto-clusterer output; already persisted to Dexie. Merge
+      // into the store, but a manual membership made here always beats an
+      // incoming auto row for the same key — the clusterer read our state
+      // before this user action landed.
+      const tripsById = { ...get().tripsById };
+      for (const id of msg.removedTripIds) delete tripsById[id];
+      for (const trip of msg.trips) tripsById[trip.id] = trip;
+      const membershipByKey = { ...get().tripMembershipByKey };
+      for (const key of msg.removedMembershipKeys) {
+        if (membershipByKey[key]?.source === "manual") continue;
+        delete membershipByKey[key];
+      }
+      for (const m of msg.memberships) {
+        if (membershipByKey[m.key]?.source === "manual") continue;
+        membershipByKey[m.key] = m;
+      }
+      set({ tripsById, tripMembershipByKey: membershipByKey });
       return;
     }
     case "error":

@@ -139,6 +139,54 @@ export interface TripMembershipRecord {
   addedAt: number;
 }
 
+export type ReservationKind =
+  | "flight"
+  | "lodging"
+  | "train"
+  | "rental"
+  | "dining"
+  | "event"
+  | "other";
+
+/** One leg / stay / booking inside a reservation email. */
+export interface ReservationSegment {
+  kind: ReservationKind;
+  /** Departure / check-in (ms). Day precision is all clustering needs. */
+  start: number;
+  /** Arrival / check-out (ms); omitted when the email only gives one date. */
+  end?: number;
+  /** IATA code or station for flights/trains; city or venue text otherwise. */
+  origin?: string;
+  destination?: string;
+  /** Human line: "UA 837 SFO → NRT", "Hyatt Regency Tokyo". */
+  summary?: string;
+}
+
+/**
+ * The reservation-extraction result for one message, keyed by Message-ID
+ * (pinKeyOf) like trip memberships. Negative results are stored too
+ * (status "none") so the sweep never refetches a body it already scanned;
+ * bumping EXTRACTOR_VERSION invalidates everything for re-extraction.
+ */
+export interface ReservationRecord {
+  key: string;
+  messageDate: number;
+  senderDomain: string;
+  extractorVersion: number;
+  /** Extractor id that produced the hit, or "" for status "none". */
+  extractor: string;
+  status: "extracted" | "cancelled" | "none";
+  segments: ReservationSegment[];
+  /**
+   * Confirmation codes / record locators found near context words
+   * ("confirmation #", "record locator", …). Populated even when no
+   * reservation was extracted — that's how check-in reminders and receipts
+   * get matched to the trip that owns the code (phase 3).
+   */
+  confirmationCodes: string[];
+  scannedAt: number;
+}
+
 export interface SnoozeRecord {
   messageId: number;
   wakeAt: number;

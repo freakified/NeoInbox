@@ -121,7 +121,7 @@ export const TripSliceRow = ({
         <RowHeader
           leading={
             <div className={b.iconWrap}>
-              <Icon name="flight" className={b.iconSized} style={{ color: TRIP_COLOR }} />
+              <Icon name="travel" className={b.iconSized} style={{ color: TRIP_COLOR }} />
             </div>
           }
           primary={
@@ -228,8 +228,8 @@ export const TripSliceRow = ({
       >
         {threads.length === 0 ? (
           <p className={s.emptyBody}>
-            No mail in this trip yet. Use a message&rsquo;s &ldquo;Move to trip&rdquo; action to
-            add some.
+            No mail in this trip yet. Open a conversation&rsquo;s ⋮ menu and choose Move to
+            &rarr; this trip.
           </p>
         ) : expandedIdx >= 0 ? (
           <>

@@ -23,7 +23,7 @@ import { MotionSurface } from "./components/Motion";
 import { SectionLabel } from "./components/SectionLabel";
 import { ThreadRow } from "./components/ThreadRow";
 import { Toaster } from "./components/Toaster";
-import { TripSliceRow } from "./components/TripSliceRow";
+import { TRIP_COLOR, TripSliceRow } from "./components/TripSliceRow";
 import s from "./App.module.css";
 
 const STREAM_PAGE_SIZE = 80;
@@ -58,6 +58,8 @@ const emptyTextForView = (view: StreamView, pinnedOnly: boolean): string => {
   if (view.type === "sent") return "No sent messages.";
   if (view.type === "done") return "No done messages.";
   if (view.type === "reminders") return "No reminders — create one with the button below.";
+  if (view.type === "bundle" && view.category === "travel")
+    return "No trips yet — open a conversation's ⋮ menu and choose Move to → New trip.";
   if (view.type === "bundle") return "No messages in this bundle.";
   return "No messages found.";
 };
@@ -72,6 +74,9 @@ const headerForView = (
   if (view.type === "sent") return { title: "Sent", color: "var(--color-md-primary)" };
   if (view.type === "reminders") return { title: "Reminders", color: "var(--color-md-primary)" };
   if (view.type === "bundle") {
+    // The travel bundle's page is the trips list; the "Travel" label is only
+    // for the residual bundle of unassigned travel mail in the inbox.
+    if (view.category === "travel") return { title: "Trips", color: "#3F51B5" };
     const meta = getCategoryMeta(view.category, customBundles);
     return { title: meta.name, color: meta.color };
   }
@@ -205,9 +210,13 @@ export const App = () => {
   const syncing = !!sync && !sync.done;
   const syncFailed = !!sync?.done && !!sync.error;
   const reconnecting = connectionState === "reconnecting";
+  // Trips isn't listed with the bundles: like Google Inbox, it gets a
+  // top-level drawer entry (each trip also rows up in the inbox on its own).
   const bundles = useMemo(
     () => [
-      ...Object.keys(CATEGORIES).filter((category) => category !== "personal"),
+      ...Object.keys(CATEGORIES).filter(
+        (category) => category !== "personal" && category !== "travel",
+      ),
       ...customBundles.map((bundle) => bundle.id),
     ].map((category) => ({
       id: category,
@@ -376,6 +385,16 @@ export const App = () => {
 
             <div className={s.drawerGroup}>
               <div className={s.drawerLabel}>Bundled in the inbox</div>
+              {/* Trips lived in this list in real Inbox, even though each
+                  trip bundles individually rather than as one slice. */}
+              <button
+                type="button"
+                className={navClass({ type: "bundle", category: "travel" })}
+                onClick={() => navigate({ type: "bundle", category: "travel" })}
+              >
+                <Icon name="travel" className={s.navIcon} style={{ color: TRIP_COLOR }} />
+                <span>Trips</span>
+              </button>
               {bundles.map(({ id, meta }) => (
                 <button
                   type="button"

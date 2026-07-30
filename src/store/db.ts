@@ -11,6 +11,7 @@ import type {
   PinRecord,
   RawMessage,
   ReminderRecord,
+  ReservationRecord,
   RouteRuleRecord,
   RouteRuleType,
   SnoozeRecord,
@@ -118,6 +119,7 @@ class NeoInboxDb extends Dexie {
   translations!: Table<TranslationRecord, string>;
   trips!: Table<TripRecord, string>;
   tripMemberships!: Table<TripMembershipRecord, string>;
+  reservations!: Table<ReservationRecord, string>;
 
   constructor() {
     super("neoinbox");
@@ -175,6 +177,9 @@ class NeoInboxDb extends Dexie {
     this.version(11).stores({
       trips: "id",
       tripMemberships: "key, tripId",
+    });
+    this.version(12).stores({
+      reservations: "key, status",
     });
   }
 }

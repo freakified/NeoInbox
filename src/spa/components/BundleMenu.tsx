@@ -2,16 +2,27 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CATEGORIES, getCategoryMeta } from "../../shared/categories";
 import { findRouteRule, matchingRouteRules, ruleTypeLabel } from "../../shared/routeRules";
 import { parseSender } from "../../shared/senders";
+import { tripIdOfThread, tripKeysOfThread } from "../../shared/trips";
 import type { BuiltinCategory, Category, RouteRuleRecord, RouteRuleType, Thread } from "../../shared/types";
-import { useCustomBundles, useMailStore, useRouteRules } from "../../store/mailStore";
+import {
+  useCustomBundles,
+  useMailStore,
+  useRouteRules,
+  useTripMemberships,
+  useTrips,
+} from "../../store/mailStore";
 import { Icon } from "./Icon";
 import { MoveRuleDialog } from "./MoveRuleDialog";
+import { NewTripDialog } from "./NewTripDialog";
+import { TRIP_COLOR } from "./TripSliceRow";
 import s from "./BundleMenu.module.css";
 
+// Travel isn't offered: like real Inbox there's no travel bundle — travel
+// mail is either in a trip (listed below the bundles) or loose in the inbox.
 const MOVE_DESTINATIONS: BuiltinCategory[] = [
   "personal",
   ...(Object.entries(CATEGORIES)
-    .filter(([cat]) => cat !== "personal")
+    .filter(([cat]) => cat !== "personal" && cat !== "travel")
     .sort(([, a], [, b]) => a.order - b.order)
     .map(([cat]) => cat as BuiltinCategory)),
 ];
@@ -26,15 +37,37 @@ export const BundleMenu = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const [view, setView] = useState<"root" | "move">("root");
   const [movePrompt, setMovePrompt] = useState<Category | null>(null);
+  const [newTripOpen, setNewTripOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const customBundles = useCustomBundles();
   const routeRules = useRouteRules();
+  const tripsById = useTrips();
+  const tripMemberships = useTripMemberships();
   const setRouteRule = useMailStore((st) => st.setRouteRule);
   const deleteRouteRule = useMailStore((st) => st.deleteRouteRule);
   const applyCategoryLocally = useMailStore((st) => st.applyCategoryLocally);
+  const setTripMembership = useMailStore((st) => st.setTripMembership);
   const notify = useMailStore((st) => st.notify);
   const openBundleSettings = useMailStore((st) => st.openBundleSettings);
+
+  const trips = useMemo(
+    () => Object.values(tripsById).sort((a, b) => b.createdAt - a.createdAt),
+    [tripsById],
+  );
+  const currentTripId = tripIdOfThread(thread, tripMemberships);
+
+  const moveToTrip = (tripId: string, tripName: string) => {
+    setMenuOpen(false);
+    setTripMembership(tripKeysOfThread(thread), tripId);
+    notify(`Moved to ${tripName}`);
+  };
+
+  const removeFromTrip = () => {
+    setMenuOpen(false);
+    setTripMembership(tripKeysOfThread(thread), null);
+    notify("Removed from trip");
+  };
 
   const sender = useMemo(
     () => parseSender(thread.messages[0]?.author ?? ""),
@@ -209,7 +242,40 @@ export const BundleMenu = ({
                     onClick={() => moveTo(bundle.id)}
                   />
                 ))}
+                {trips.map((trip) => (
+                  <DestinationItem
+                    key={trip.id}
+                    name={trip.name}
+                    icon="travel"
+                    color={TRIP_COLOR}
+                    current={currentTripId === trip.id}
+                    onClick={() => moveToTrip(trip.id, trip.name)}
+                  />
+                ))}
               </div>
+              {currentTripId && (
+                <button
+                  type="button"
+                  className={s.menuItem}
+                  role="menuitem"
+                  onClick={removeFromTrip}
+                >
+                  <Icon name="close" className={s.menuIcon} />
+                  <span className={s.menuItemLabel}>Remove from trip</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className={s.menuItem}
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setNewTripOpen(true);
+                }}
+              >
+                <Icon name="travel" className={s.menuIcon} />
+                <span className={s.menuItemLabel}>New trip…</span>
+              </button>
               <button
                 type="button"
                 className={s.menuItem}
@@ -225,6 +291,9 @@ export const BundleMenu = ({
             </>
           )}
         </div>
+      )}
+      {newTripOpen && (
+        <NewTripDialog thread={thread} onClose={() => setNewTripOpen(false)} />
       )}
       {movePrompt !== null && (
         <MoveRuleDialog

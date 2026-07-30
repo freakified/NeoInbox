@@ -1,4 +1,5 @@
 import { withTimeout } from "./backfill";
+import { isTripCandidate, scheduleTripExtraction } from "./extract";
 import { applyMessageDetailsForOrigin, classifyMessage } from "./ingest";
 import { applyLocalState, isSnoozedHeader } from "./localState";
 import { headerToRawMessage } from "./messageMap";
@@ -150,6 +151,7 @@ export const wireSyncEngine = (): void => {
       const added = await cacheMessages(list.messages, "inbox");
       if (!added.length) return;
       broadcast({ type: "delta", added });
+      if (added.some((m) => isTripCandidate(m))) scheduleTripExtraction();
       await wakeSnoozesForNewMail(added);
     } catch (e) {
       log.error("sync", "onNewMail flush failed", e);
@@ -318,16 +320,21 @@ export const wireSyncEngine = (): void => {
           arr.push(fresh);
           byOrigin.set(origin, arr);
         }
-        const removedIds = ids.filter((id) => !snoozedOriginalIds.has(id));
-        if (removedIds.length) {
-          await db.messages.bulkDelete(removedIds);
-          broadcast({ type: "delta", removedIds });
-        }
+        // Cache the moved copies before dropping the old rows and ship one
+        // combined delta: removing first would leave a visible gap (e.g. a
+        // trip card showing empty) for as long as classification takes.
         const added = [];
         for (const [origin, headers] of byOrigin) {
           added.push(...await cacheMessages(headers, origin));
         }
-        if (added.length) broadcast({ type: "delta", added });
+        const addedIds = new Set(added.map((m) => m.id));
+        const removedIds = ids.filter(
+          (id) => !snoozedOriginalIds.has(id) && !addedIds.has(id),
+        );
+        if (removedIds.length) await db.messages.bulkDelete(removedIds);
+        if (removedIds.length || added.length) {
+          broadcast({ type: "delta", removedIds, added });
+        }
         log.debug("sync", `onMoved removed ${removedIds.length}, cached ${added.length} moved messages`);
       } catch (e) {
         log.warn("sync", "onMoved failed", e);

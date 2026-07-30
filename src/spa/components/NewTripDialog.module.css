@@ -1,0 +1,14 @@
+.nameInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--color-md-divider);
+  border-radius: 4px;
+  font-size: 13.5px;
+  color: var(--color-md-on-surface);
+}
+
+.nameInput:focus {
+  outline: none;
+  border-color: var(--color-md-primary);
+}

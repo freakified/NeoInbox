@@ -1,5 +1,6 @@
 import { classify } from "../classifier/pipeline";
 import { extractFeatures } from "../classifier/features";
+import { resolveLiveMessageId } from "../shared/liveMessage";
 import { log } from "../shared/log";
 import { pinKeyOf } from "../shared/pinKey";
 import { scanCidRefs } from "../spa/lib/srcdoc";
@@ -31,6 +32,25 @@ export class TrashFailedError extends Error {
 
 const isMessageNotFound = (e: unknown): boolean =>
   String((e as Error)?.message ?? e).includes("Message not found");
+
+/**
+ * Destructive ops must never run on an unverified id: a cached row's numeric
+ * id can go stale (archived rows are never rescanned) and end up referring to
+ * an unrelated message, which the op would then archive/trash/move instead.
+ * Returns the id verified to be the cached row's message, or null when the
+ * message no longer exists. A stale cache row is dropped here; follow-up
+ * flows re-cache the message under its live id.
+ */
+export const verifiedOpId = async (id: number): Promise<number | null> => {
+  const cached = await db.messages.get(id);
+  if (!cached?.headerMessageId) return id;
+  const liveId = await resolveLiveMessageId(cached);
+  if (liveId !== null && liveId !== id) {
+    log.warn("live-message", "stale id on destructive op; re-resolved", { id, liveId });
+    await db.messages.delete(id);
+  }
+  return liveId;
+};
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -88,6 +108,12 @@ export const pinMessage = async (id: number, pinned: boolean): Promise<void> => 
 }
 
 export const doneMessage = async (id: number): Promise<void> => {
+  const opId = await verifiedOpId(id);
+  if (opId === null) {
+    log.info("archive", "message no longer exists; treating archive as settled", { id });
+    return;
+  }
+  id = opId;
   let sourceFolderId = "";
   let headerMessageId = "";
   try {
@@ -157,6 +183,12 @@ export const doneMessage = async (id: number): Promise<void> => {
 }
 
 export const trashMessage = async (id: number): Promise<void> => {
+  const opId = await verifiedOpId(id);
+  if (opId === null) {
+    log.info("trash", "message no longer exists; treating trash as settled", { id });
+    return;
+  }
+  id = opId;
   let sourceFolderId = "";
   let headerMessageId = "";
   try {

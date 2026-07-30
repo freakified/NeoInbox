@@ -11,7 +11,7 @@ export interface CategoryMeta {
 export const CATEGORIES: Record<BuiltinCategory, CategoryMeta> = {
   travel: {
     key: "neoinbox-travel",
-    name: "Trips",
+    name: "Travel",
     color: "#9C27B0",
     icon: "travel",
     order: 1,

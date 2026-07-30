@@ -1,7 +1,9 @@
 import { clsx } from "clsx";
 import { useEffect, useState } from "react";
+import { resolveLiveMessageId } from "../../shared/liveMessage";
 import { parseSender } from "../../shared/senders";
 import type { RawMessage } from "../../shared/types";
+import { useMailStore } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate } from "../lib/dateBucket";
 import { extractPreviewText } from "../lib/srcdoc";
@@ -80,19 +82,31 @@ export const InlineMessage = ({
     if (isOpen || preview !== null) return;
 
     let cancelled = false;
-    messenger.messages
-      .getFull(m.id)
-      .then((part) => {
+    void (async () => {
+      try {
+        // Verify the id before fetching: stale cached ids can belong to a
+        // different message entirely (healing re-runs this with the live id).
+        const liveId = await resolveLiveMessageId(m);
+        if (cancelled) return;
+        if (liveId === null) {
+          setPreview("");
+          return;
+        }
+        if (liveId !== m.id) {
+          useMailStore.getState().healStaleMessage(m.id, liveId);
+          return;
+        }
+        const part = await messenger.messages.getFull(liveId);
         if (!cancelled) setPreview(extractPreviewText(part));
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setPreview("");
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [isOpen, m.id, preview]);
+  }, [isOpen, m, preview]);
 
   return (
     <div className={s.message}>

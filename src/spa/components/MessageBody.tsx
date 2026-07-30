@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { resolveLiveMessageId } from "../../shared/liveMessage";
 import { parseSender } from "../../shared/senders";
 import type { RawMessage } from "../../shared/types";
+import { useMailStore } from "../../store/mailStore";
 import { useIframeAutoHeight } from "../lib/useIframeAutoHeight";
 import {
   buildTextSrcdoc,
@@ -51,17 +53,38 @@ export const MessageBody = ({
     setRawHtml(null);
     setShowImagesForMessage(false);
 
-    messenger.messages.getFull(m.id).then((part) => {
+    void (async () => {
+      // Never render a body fetched by an unverified id: stale cached ids can
+      // belong to a different message entirely.
+      const liveId = await resolveLiveMessageId(m);
       if (cancelled) return;
-      const html = extractHtmlBody(part);
-      if (html) {
-        setRawHtml(html);
-        setIsPlainText(false);
-      } else {
-        setRawHtml(extractTextBody(part) ?? "");
+      if (liveId === null) {
+        setRawHtml("This message could not be found — it may have been moved or deleted.");
+        setIsPlainText(true);
+        return;
+      }
+      if (liveId !== m.id) {
+        // Healing re-keys the row, so this effect re-runs with the live id.
+        useMailStore.getState().healStaleMessage(m.id, liveId);
+        return;
+      }
+      try {
+        const part = await messenger.messages.getFull(liveId);
+        if (cancelled) return;
+        const html = extractHtmlBody(part);
+        if (html) {
+          setRawHtml(html);
+          setIsPlainText(false);
+        } else {
+          setRawHtml(extractTextBody(part) ?? "");
+          setIsPlainText(true);
+        }
+      } catch {
+        if (cancelled) return;
+        setRawHtml("This message's content isn't available offline yet.");
         setIsPlainText(true);
       }
-    });
+    })();
 
     return () => {
       cancelled = true;
