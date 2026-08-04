@@ -146,6 +146,7 @@ export const BundleSliceRow = ({
           }
           date={latestDate ? formatDate(latestDate) : undefined}
           onClick={() => onToggle(bundleKey)}
+          expanded={false}
         />
       )}
 

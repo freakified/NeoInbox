@@ -73,6 +73,14 @@ export interface RawMessage {
    * backfill sweep once the body is available.
    */
   classifiedIncomplete?: boolean;
+  /**
+   * CLASSIFIER_VERSION in force when `category` was decided. Scans reuse a
+   * cached category rather than re-running the pipeline, so without this stamp
+   * a rules change would never reach mail that is already cached. Rows below
+   * the current version are re-classified by the version sweep. Absent on
+   * sent/draft rows, which are never classified.
+   */
+  classifierVersion?: number;
 }
 
 export interface Thread {

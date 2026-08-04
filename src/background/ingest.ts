@@ -1,11 +1,12 @@
 import { classify } from "../classifier/pipeline";
+import type { ClassificationResult } from "../classifier/version";
 import { extractFeatures } from "../classifier/features";
 import { resolveLiveMessageId } from "../shared/liveMessage";
 import { log } from "../shared/log";
 import { pinKeyOf } from "../shared/pinKey";
 import { scanCidRefs } from "../spa/lib/srcdoc";
 import { db } from "../store/db";
-import type { AttachmentSummary, Category, RawMessage } from "../shared/types";
+import type { AttachmentSummary, RawMessage } from "../shared/types";
 import {
   findByHeaderMessageIdInFolder,
   messageStillIn,
@@ -75,12 +76,6 @@ const messageSettledOutOfFolder = async (
   );
 }
 
-export interface ClassificationResult {
-  category: Category | null;
-  /** getFull() failed (body not synced yet); result is based on headers only. */
-  incomplete: boolean;
-}
-
 export const classifyMessage = async (
   header: messenger.messages.MessageHeader,
 ): Promise<ClassificationResult> => {
@@ -97,6 +92,26 @@ export const classifyMessage = async (
   const features = extractFeatures(header, headers);
   const category = await classify(features);
   return { category: category ?? null, incomplete };
+}
+
+/**
+ * Fetches the live header for a cached row, re-resolving by Message-ID when
+ * Thunderbird has remapped the id (moves, compaction, a rebuilt .msf). Returns
+ * null when the message can't be found — callers should skip the row rather
+ * than delete it, since the lookup can also fail transiently; real removals
+ * are handled by the scan's prune step.
+ */
+export const getLiveHeader = async (
+  row: RawMessage,
+): Promise<messenger.messages.MessageHeader | null> => {
+  const liveId = await resolveLiveMessageId(row);
+  if (liveId === null) return null;
+  try {
+    return await messenger.messages.get(liveId);
+  } catch (e) {
+    log.debug("ingest", "live header fetch failed", { id: row.id, liveId, e: String(e) });
+    return null;
+  }
 }
 
 export const pinMessage = async (id: number, pinned: boolean): Promise<void> => {

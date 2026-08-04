@@ -2,9 +2,16 @@ import {
   applyMessageDetails,
   classifyMessage,
   extractMessageDetails,
+  getLiveHeader,
   MESSAGE_DETAILS_VERSION,
   needsMessageDetails,
 } from "./ingest";
+import {
+  applyClassification,
+  carryClassification,
+  classificationOutdated,
+  CLASSIFIER_VERSION,
+} from "../classifier/version";
 import { applyLocalState } from "./localState";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
@@ -19,7 +26,7 @@ import {
 } from "../shared/folders";
 import { log } from "../shared/log";
 import type { ServerMsg } from "../shared/messaging";
-import type { Category, FolderCursorRecord, MessageOrigin, RawMessage } from "../shared/types";
+import type { FolderCursorRecord, MessageOrigin, RawMessage } from "../shared/types";
 
 const PROGRESS_EVERY = 50;
 const BATCH_FLUSH = 100;
@@ -28,6 +35,13 @@ const SENT_WINDOW_MS = 365 * 24 * 60 * 60 * 1000;
 /** Incremental scans re-read this far behind the cursor to absorb date skew. */
 const CURSOR_OVERLAP_MS = 3 * 24 * 60 * 60 * 1000;
 const PER_MESSAGE_TIMEOUT_MS = 15_000;
+/**
+ * Folder-level calls get a longer budget than per-message work (a page of a
+ * large folder is legitimately slow), but they must have one: an IMAP
+ * connection that stalls mid-listing would otherwise leave the scan promise
+ * pending forever, and with it the queue flag that gates every later sync.
+ */
+const FOLDER_OP_TIMEOUT_MS = 60_000;
 /** Max messages hydrated per fillMissingDetails run; the periodic sweep continues the rest. */
 const DETAILS_FILL_LIMIT = 400;
 
@@ -35,7 +49,15 @@ type ScanMode = "full" | "incremental";
 
 interface ScanCounters {
   scanned: number;
+  /** Fresh classifications that produced a category; drives the progress bar. */
   classified: number;
+  /**
+   * How many rows actually ran the pipeline. Scans reuse a cached row's
+   * category, so `classified: 0` is ambiguous on its own — it reads the same
+   * whether every row was already current or the scan classified nothing it
+   * should have. This separates the two.
+   */
+  reclassified: number;
 }
 
 let fullScanQueued = false;
@@ -59,15 +81,19 @@ const sendProgress = (msg: Extract<ServerMsg, { type: "backfill-progress" }>): v
 
 export const getLastProgress = (): ServerMsg | null => lastProgress;
 
-export const withTimeout = async <T>(work: Promise<T>, label: string): Promise<T> => {
+export const withTimeout = async <T>(
+  work: Promise<T>,
+  label: string,
+  ms: number = PER_MESSAGE_TIMEOUT_MS,
+): Promise<T> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       work,
       new Promise<never>((_, reject) => {
         timer = setTimeout(
-          () => reject(new Error(`${label} timed out after ${PER_MESSAGE_TIMEOUT_MS}ms`)),
-          PER_MESSAGE_TIMEOUT_MS,
+          () => reject(new Error(`${label} timed out after ${ms}ms`)),
+          ms,
         );
       }),
     ]);
@@ -91,17 +117,24 @@ async function* iterateFolder(
   fromDate?: number,
 ): AsyncGenerator<messenger.messages.MessageHeader> {
   const fid = folderId as unknown as messenger.folders.MailFolderId;
-  let page: Page =
+  let page: Page = await withTimeout(
     fromDate === undefined
-      ? await messenger.messages.list(fid)
-      : ((await messenger.messages.query({
+      ? messenger.messages.list(fid)
+      : (messenger.messages.query({
           folderId: fid,
           fromDate: new Date(fromDate),
-        })) as Page);
+        }) as Promise<Page>),
+    `list folder ${folderId}`,
+    FOLDER_OP_TIMEOUT_MS,
+  );
   while (true) {
     for (const header of page.messages ?? []) yield header;
     if (!page.id) return;
-    page = await messenger.messages.continueList(page.id);
+    page = await withTimeout(
+      messenger.messages.continueList(page.id),
+      `continue listing folder ${folderId}`,
+      FOLDER_OP_TIMEOUT_MS,
+    );
   }
 }
 
@@ -141,34 +174,33 @@ const applyHeadersFirstDetails = (raw: RawMessage, cached?: RawMessage): void =>
 const ingestHeader = async (
   header: messenger.messages.MessageHeader,
   origin: MessageOrigin,
-): Promise<{ raw: RawMessage | null; classified: boolean }> => {
+): Promise<{ raw: RawMessage | null; classified: boolean; ranPipeline: boolean }> => {
   const cached = await db.messages.get(header.id);
-  if (cached && isUnchanged(cached, header, origin)) {
-    return { raw: null, classified: false };
+  // A row whose category predates the current rules must not take the
+  // unchanged fast path: nothing else in a scan re-runs the pipeline, so it
+  // would keep its stale category through any number of rescans.
+  const outdated = origin === "inbox" && classificationOutdated(cached);
+  if (cached && !outdated && isUnchanged(cached, header, origin)) {
+    return { raw: null, classified: false, ranPipeline: false };
   }
-  let category: Category | null = null;
   let classified = false;
-  let incomplete = false;
-  if (origin === "inbox") {
-    if (cached) {
-      category = cached.category;
-      incomplete = cached.classifiedIncomplete ?? false;
-    } else {
-      const result = await classifyMessage(header);
-      category = result.category;
-      incomplete = result.incomplete;
-      if (category) classified = true;
-    }
+  let ranPipeline = false;
+  const raw = headerToRawMessage(header, origin);
+  if (origin === "inbox" && (!cached || outdated)) {
+    const result = await classifyMessage(header);
+    applyClassification(raw, result);
+    ranPipeline = true;
+    if (result.category) classified = true;
+  } else if (origin === "inbox") {
+    carryClassification(raw, cached);
   }
-  const raw = headerToRawMessage(header, origin, category);
-  raw.classifiedIncomplete = incomplete;
   await applyLocalState(raw);
   if (origin === "inbox") {
     await applyMessageDetails(raw, cached);
   } else {
     applyHeadersFirstDetails(raw, cached);
   }
-  return { raw, classified };
+  return { raw, classified, ranPipeline };
 };
 
 const visitFolder = async (
@@ -209,11 +241,12 @@ const visitFolder = async (
     const dateMs = Math.min(header.date ? new Date(header.date).getTime() : 0, now);
     if (dateMs > maxDate) maxDate = dateMs;
     try {
-      const { raw, classified } = await withTimeout(
+      const { raw, classified, ranPipeline } = await withTimeout(
         ingestHeader(header, origin),
         `ingest message ${header.id}`,
       );
       if (classified) counters.classified++;
+      if (ranPipeline) counters.reclassified++;
       if (raw) {
         batch.push(raw);
         if (batch.length >= BATCH_FLUSH) await flush();
@@ -271,8 +304,10 @@ const visitFolder = async (
 const folderDrifted = async (folder: InboxFolder, origin: MessageOrigin): Promise<boolean> => {
   if (origin === "sent") return false;
   try {
-    const info = await messenger.folders.getFolderInfo(
-      folder.id as unknown as messenger.folders.MailFolderId,
+    const info = await withTimeout(
+      messenger.folders.getFolderInfo(folder.id as unknown as messenger.folders.MailFolderId),
+      `folder info ${folder.name}`,
+      FOLDER_OP_TIMEOUT_MS,
     );
     if (typeof info.totalMessageCount !== "number") return false;
     const cachedRows = await db.messages.where("folderId").equals(folder.id).toArray();
@@ -316,7 +351,7 @@ const runScan = (mode: ScanMode): Promise<ScanCounters> => {
   const duplicate = mode === "full" ? fullScanQueued : fullScanQueued || incrementalScanQueued;
   if (duplicate) {
     if (lastProgress) broadcast(lastProgress);
-    return Promise.resolve({ scanned: 0, classified: 0 });
+    return Promise.resolve({ scanned: 0, classified: 0, reclassified: 0 });
   }
   if (mode === "full") fullScanQueued = true;
   else incrementalScanQueued = true;
@@ -325,7 +360,7 @@ const runScan = (mode: ScanMode): Promise<ScanCounters> => {
   const announce = mode === "full";
   return serialized(async () => {
     beginScan();
-    const counters: ScanCounters = { scanned: 0, classified: 0 };
+    const counters: ScanCounters = { scanned: 0, classified: 0, reclassified: 0 };
     let errored: string | null = null;
     try {
       const [inboxes, sents, drafts] = await Promise.all([
@@ -353,7 +388,11 @@ const runScan = (mode: ScanMode): Promise<ScanCounters> => {
       }
       log.info(
         "backfill",
-        `${mode} scan done: ${counters.classified}/${counters.scanned} classified`,
+        // "ran the classifier" is the honest signal: the rest were either
+        // already current or are sent/draft rows, which never classify.
+        `${mode} scan done: ${counters.scanned} scanned, ` +
+          `${counters.reclassified} ran the classifier, ` +
+          `${counters.classified} categorised`,
       );
     } catch (e) {
       errored = e instanceof Error ? e.message : String(e);
@@ -483,15 +522,21 @@ export const classifyCachedDoneMessages = async (): Promise<void> => {
   for (const msg of pending) {
     try {
       const header = await withTimeout(
-        messenger.messages.get(msg.id),
+        getLiveHeader(msg),
         `classify done message ${msg.id}`,
       );
+      if (!header) continue;
       const { category, incomplete } = await classifyMessage(header);
       if (category === null && !incomplete) continue;
       const row = await db.transaction("rw", db.messages, async () => {
         const fresh = await db.messages.get(msg.id);
         if (!fresh || fresh.origin !== "done") return null;
-        const next: RawMessage = { ...fresh, category, classifiedIncomplete: incomplete };
+        const next: RawMessage = {
+          ...fresh,
+          category,
+          classifiedIncomplete: incomplete,
+          classifierVersion: CLASSIFIER_VERSION,
+        };
         await db.messages.put(next);
         return next;
       });
@@ -508,6 +553,155 @@ export const classifyCachedDoneMessages = async (): Promise<void> => {
   }
   flushUpdated();
   await messenger.storage.local.set({ [DONE_CATEGORY_SWEEP_FLAG]: true });
+};
+
+const CLASSIFIER_VERSION_KEY = "neoinbox-classifier-version";
+/**
+ * Rows re-classified per sweep pass. The cache holds every message ever
+ * archived (done rows are never pruned), so the backlog runs to tens of
+ * thousands and a single pass would hold the scan chain for hours. Progress is
+ * durable in the per-row stamps, so the work chunks cleanly.
+ */
+const VERSION_SWEEP_CHUNK = 500;
+/** Breather between passes so scans and live events get the chain back. */
+const VERSION_SWEEP_GAP_MS = 5_000;
+
+let sweepingVersion = false;
+let versionSweepTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Outdated rows, inbox before done: the inbox is what's actually on screen. */
+const outdatedRows = async (limit: number): Promise<{ total: number; chunk: RawMessage[] }> => {
+  const rows = (await db.messages.toArray()).filter(
+    (m) => (m.origin === "inbox" || m.origin === "done") && classificationOutdated(m),
+  );
+  rows.sort((a, b) =>
+    a.origin === b.origin ? b.date - a.date : a.origin === "inbox" ? -1 : 1,
+  );
+  return { total: rows.length, chunk: rows.slice(0, limit) };
+};
+
+/**
+ * Re-classifies one chunk of cached rows whose category predates the current
+ * rules, newest inbox mail first. Returns how many remain afterwards.
+ *
+ * Scans reuse a cached row's category rather than re-running the pipeline, so
+ * this sweep is the only thing that carries a classifier change to mail that
+ * is already cached. Without it a rules change reaches newly arriving mail
+ * only, and the existing inbox keeps its old categories until someone presses
+ * "Reclassify inbox" by hand.
+ *
+ * Each row is stamped as it is written, so an interrupted run resumes where it
+ * stopped; the stored version only advances once a pass finds nothing left.
+ */
+export const runClassifierVersionSweep = async (): Promise<{
+  scanned: number;
+  moved: number;
+  remaining: number;
+}> => {
+  const idle = { scanned: 0, moved: 0, remaining: 0 };
+  if (sweepingVersion) return idle;
+  const stored = await messenger.storage.local.get(CLASSIFIER_VERSION_KEY);
+  const previous = Number(stored[CLASSIFIER_VERSION_KEY] ?? 0);
+  if (previous >= CLASSIFIER_VERSION) return idle;
+  sweepingVersion = true;
+  // Serialized with scans: the sweep writes the same rows a scan batches, and
+  // interleaving the two would let a stale batch overwrite a fresh category.
+  return serialized(async () => {
+    beginScan();
+    let scanned = 0;
+    let moved = 0;
+    let remaining = 0;
+    let drained = false;
+    try {
+      const { total, chunk } = await outdatedRows(VERSION_SWEEP_CHUNK);
+      if (!total) {
+        drained = true;
+        return idle;
+      }
+      log.info(
+        "backfill",
+        `classifier ${previous} -> ${CLASSIFIER_VERSION}: reclassifying ${chunk.length} of ${total} cached messages`,
+      );
+      let updated: RawMessage[] = [];
+      const flushUpdated = (): void => {
+        if (!updated.length) return;
+        broadcast({ type: "delta", updated });
+        updated = [];
+      };
+      for (const msg of chunk) {
+        scanned++;
+        try {
+          const header = await withTimeout(
+            getLiveHeader(msg),
+            `version sweep message ${msg.id}`,
+          );
+          // Skipped rows keep their old stamp, so a scan that meets them again
+          // re-classifies them via ingestHeader; nothing is lost by moving on.
+          if (!header) continue;
+          const result = await classifyMessage(header);
+          const row = await db.transaction("rw", db.messages, async () => {
+            const fresh = await db.messages.get(msg.id);
+            if (!fresh) return null;
+            const next: RawMessage = { ...fresh };
+            applyClassification(next, result);
+            await db.messages.put(next);
+            return next;
+          });
+          if (row) {
+            if ((row.category ?? null) !== (msg.category ?? null)) moved++;
+            updated.push(row);
+            if (updated.length >= BATCH_FLUSH) flushUpdated();
+          }
+        } catch (e) {
+          log.debug("backfill", "version sweep skipped a message", {
+            id: msg.id,
+            e: String(e),
+          });
+        }
+      }
+      flushUpdated();
+      // Derived from the chunk size rather than a re-query: rows the pass
+      // couldn't stamp (message gone, getFull still failing) stay outdated, and
+      // re-querying would leave the driver spinning forever on that tail. The
+      // last pass takes everything left and declares the version applied.
+      remaining = Math.max(total - chunk.length, 0);
+      drained = remaining === 0;
+      log.info(
+        "backfill",
+        `version sweep pass: ${moved}/${scanned} changed category, ${remaining} left`,
+      );
+      return { scanned, moved, remaining };
+    } catch (e) {
+      log.error("backfill", "version sweep failed", e);
+      return { scanned, moved, remaining };
+    } finally {
+      endScan();
+      sweepingVersion = false;
+      // Claim the new version only once a pass finds nothing outdated left.
+      if (drained) {
+        await messenger.storage.local
+          .set({ [CLASSIFIER_VERSION_KEY]: CLASSIFIER_VERSION })
+          .catch((e) => log.warn("backfill", "storing classifier version failed", e));
+        log.info("backfill", `classifier version ${CLASSIFIER_VERSION} fully applied`);
+      }
+    }
+  });
+};
+
+/**
+ * Drives the version sweep to completion a chunk at a time, yielding the scan
+ * chain between passes. Deliberately silent on the progress channel: this runs
+ * for as long as the backlog takes and must not pin the UI's progress bar —
+ * the per-chunk deltas re-bundle rows on screen as they land.
+ */
+export const startClassifierVersionSweep = (): void => {
+  clearTimeout(versionSweepTimer);
+  void runClassifierVersionSweep()
+    .then(({ remaining }) => {
+      if (remaining <= 0) return;
+      versionSweepTimer = setTimeout(startClassifierVersionSweep, VERSION_SWEEP_GAP_MS);
+    })
+    .catch((e) => log.warn("backfill", "classifier version sweep failed", e));
 };
 
 let retryingClassifications = false;
@@ -536,15 +730,21 @@ export const retryIncompleteClassifications = async (limit = DETAILS_FILL_LIMIT)
     for (const msg of pending) {
       try {
         const header = await withTimeout(
-          messenger.messages.get(msg.id),
+          getLiveHeader(msg),
           `retry classify message ${msg.id}`,
         );
+        if (!header) continue;
         const { category, incomplete } = await classifyMessage(header);
         if (incomplete) continue;
         const row = await db.transaction("rw", db.messages, async () => {
           const fresh = await db.messages.get(msg.id);
           if (!fresh) return null;
-          const next: RawMessage = { ...fresh, category, classifiedIncomplete: false };
+          const next: RawMessage = {
+            ...fresh,
+            category,
+            classifiedIncomplete: false,
+            classifierVersion: CLASSIFIER_VERSION,
+          };
           await db.messages.put(next);
           return next;
         });
@@ -594,13 +794,14 @@ export const reclassifyAll = (): Promise<{ scanned: number; updated: number }> =
         scanned++;
         try {
           const header = await withTimeout(
-            messenger.messages.get(cachedMsg.id),
+            getLiveHeader(cachedMsg),
             `reclassify message ${cachedMsg.id}`,
           );
-          const { category, incomplete } = await classifyMessage(header);
-          if (category !== cachedMsg.category) updated++;
-          const raw = headerToRawMessage(header, "inbox", category);
-          raw.classifiedIncomplete = incomplete;
+          if (!header) continue;
+          const result = await classifyMessage(header);
+          if (result.category !== cachedMsg.category) updated++;
+          const raw = headerToRawMessage(header, "inbox");
+          applyClassification(raw, result);
           await applyLocalState(raw);
           await applyMessageDetails(raw, cachedMsg);
           batch.push(raw);

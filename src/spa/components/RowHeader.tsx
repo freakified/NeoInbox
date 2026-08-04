@@ -10,6 +10,8 @@ export const RowHeader = ({
   date,
   bold = false,
   onClick,
+  onKeyDown,
+  expanded,
   actionStrip,
 }: {
   leading: React.ReactNode;
@@ -19,14 +21,31 @@ export const RowHeader = ({
   date?: React.ReactNode;
   bold?: boolean;
   onClick?: () => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  expanded?: boolean;
   actionStrip?: React.ReactNode;
 }) => {
   const [hovered, setHovered] = useState(false);
 
+  // `data-row-header` is what the global j/k handler walks: it marks every
+  // openable row (thread, bundle, trip) in document order, which is the same
+  // order the user sees.
   return (
     <div
       className={s.row}
+      data-row-header={onClick ? "" : undefined}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-expanded={expanded}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (onClick && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onClick();
+          return;
+        }
+        onKeyDown?.(e);
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >

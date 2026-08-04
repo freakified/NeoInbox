@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutGroup, useReducedMotion } from "framer-motion";
 import {
   useBundleSettings,
@@ -21,8 +21,11 @@ import { Icon } from "./components/Icon";
 import { ReminderRow } from "./components/ReminderRow";
 import { MotionSurface } from "./components/Motion";
 import { SectionLabel } from "./components/SectionLabel";
+import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { ThreadRow } from "./components/ThreadRow";
 import { Toaster } from "./components/Toaster";
+import { overlayIsOpen } from "./lib/overlays";
+import { moveRowFocus } from "./lib/rowNavigation";
 import { TRIP_COLOR, TripSliceRow } from "./components/TripSliceRow";
 import s from "./App.module.css";
 
@@ -104,6 +107,23 @@ const groupKeyOf = (item: StreamItem): string | null =>
 const isGroupKey = (key: string): boolean =>
   key.startsWith("bundle:") || key.startsWith("trip:");
 
+// Single-letter shortcuts must never eat a keystroke meant for a compose box,
+// a rename field, or the bundle-rule editor.
+const isTypingTarget = (target: EventTarget | null): boolean => {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+};
+
+/** `g` prefix targets, Gmail/Inbox style. */
+const GO_TO_VIEWS: Record<string, StreamView> = {
+  i: { type: "inbox" },
+  s: { type: "snoozed" },
+  d: { type: "done" },
+  r: { type: "reminders" },
+  t: { type: "bundle", category: "travel" },
+};
+
 // Sweeps skip pinned threads, so a section of only pinned mail has nothing to sweep.
 const canDoneSection = (items: StreamItem[]): boolean =>
   items.some((item) =>
@@ -175,6 +195,8 @@ export const App = () => {
   const [drawerOpen, setDrawerOpen] = useState(() =>
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 980px)").matches,
   );
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const goPrefixRef = useRef(false);
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -224,7 +246,9 @@ export const App = () => {
     })),
     [customBundles],
   );
-  const navigate = (view: StreamView) => {
+  // Stable so the global key listener below isn't torn down and re-added on
+  // every render of the stream.
+  const navigate = useCallback((view: StreamView) => {
     setExpandedKey(null);
     setOpenBundleThreadId(null);
     if (typeof window !== "undefined") {
@@ -235,7 +259,53 @@ export const App = () => {
     } else {
       setActiveView(view);
     }
-  };
+  }, []);
+  // List-wide keys. Row-scoped ones (e/s/p/#) are handled by the focused row so
+  // they always act on what the cursor is actually on.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isTypingTarget(e.target)) return;
+      if (overlayIsOpen()) return;
+
+      if (goPrefixRef.current) {
+        goPrefixRef.current = false;
+        const view = GO_TO_VIEWS[e.key];
+        if (view) {
+          e.preventDefault();
+          // The second key of a `g` chord overlaps the row shortcuts (`g s` vs
+          // snooze). Stopping it here, in the capture phase, keeps it from ever
+          // reaching the focused row.
+          e.stopPropagation();
+          navigate(view);
+          return;
+        }
+      }
+
+      if (e.key === "j" || e.key === "ArrowDown") {
+        if (moveRowFocus(1)) e.preventDefault();
+      } else if (e.key === "k" || e.key === "ArrowUp") {
+        if (moveRowFocus(-1)) e.preventDefault();
+      } else if (e.key === "Escape") {
+        if (openBundleThreadId) setOpenBundleThreadId(null);
+        else if (expandedKey) setExpandedKey(null);
+      } else if (e.key === "?") {
+        e.preventDefault();
+        setShowShortcuts(true);
+      } else if (e.key === "g") {
+        goPrefixRef.current = true;
+        window.setTimeout(() => {
+          goPrefixRef.current = false;
+        }, 1200);
+      }
+    };
+
+    // Capture phase: React dispatches row handlers from the root container on
+    // the way back up, so this runs first and can claim a key outright.
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [expandedKey, navigate, openBundleThreadId]);
+
   const navClass = (view: StreamView) =>
     `${s.navItem} ${isSameView(activeView, view) ? s.navItemActive : ""}`;
   const unsupportedClass = `${s.navItem} ${s.navItemDisabled}`;
@@ -262,6 +332,8 @@ export const App = () => {
         }
       }}
     >
+      {showShortcuts && <ShortcutsHelp onClose={() => setShowShortcuts(false)} />}
+
       {bundleSettings && (
         <BundleManagerModal
           onClose={closeBundleSettings}
@@ -320,8 +392,18 @@ export const App = () => {
             </button>
           )}
           <button
+            type="button"
+            onClick={() => setShowShortcuts(true)}
+            title="Keyboard shortcuts (?)"
+            aria-label="Keyboard shortcuts"
+            className={s.settingsBtn}
+          >
+            <Icon name="keyboard" className={s.settingsIcon} />
+          </button>
+          <button
             onClick={() => openBundleSettings({})}
             title="Settings"
+            aria-label="Settings"
             className={s.settingsBtn}
           >
             <Icon name="settings" className={s.settingsIcon} />

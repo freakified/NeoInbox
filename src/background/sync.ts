@@ -1,6 +1,11 @@
 import { withTimeout } from "./backfill";
 import { isTripCandidate, scheduleTripExtraction } from "./extract";
 import { applyMessageDetailsForOrigin, classifyMessage } from "./ingest";
+import {
+  applyClassification,
+  carryClassification,
+  classificationOutdated,
+} from "../classifier/version";
 import { applyLocalState, isSnoozedHeader } from "./localState";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
@@ -65,16 +70,11 @@ const cacheOne = async (
   const logicalOrigin = origin === "done" && (await isSnoozedHeader(fresh))
     ? "inbox"
     : origin;
-  let category: RawMessage["category"] = null;
-  let incomplete = false;
+  const raw = headerToRawMessage(fresh, logicalOrigin);
   // Done rows keep their bundle so archived mail still shows in bundle views.
   if (logicalOrigin === "inbox" || logicalOrigin === "done") {
-    const result = await classifyMessage(fresh);
-    category = result.category;
-    incomplete = result.incomplete;
+    applyClassification(raw, await classifyMessage(fresh));
   }
-  const raw = headerToRawMessage(fresh, logicalOrigin, category);
-  raw.classifiedIncomplete = incomplete;
   await applyLocalState(raw);
   const cached = await db.messages.get(fresh.id);
   await applyMessageDetailsForOrigin(raw, cached);
@@ -243,21 +243,17 @@ export const wireSyncEngine = (): void => {
         // started including archived mail. A null on a sent/draft row (or a
         // legacy done row) must not stick once the message lands somewhere
         // that needs a category — reclassify instead of carrying it forward.
-        let category: RawMessage["category"] = null;
-        let incomplete = false;
-        if (
-          cached?.origin === "inbox" ||
-          (cached?.origin === "done" && cached.category !== null)
-        ) {
-          category = cached.category;
-          incomplete = cached.classifiedIncomplete ?? false;
+        // A category decided under older rules is likewise not reusable.
+        const reusable =
+          !classificationOutdated(cached) &&
+          (cached?.origin === "inbox" ||
+            (cached?.origin === "done" && cached.category !== null));
+        const raw = headerToRawMessage(fresh, logicalOrigin);
+        if (reusable) {
+          carryClassification(raw, cached);
         } else if (logicalOrigin === "inbox" || logicalOrigin === "done") {
-          const result = await classifyMessage(fresh);
-          category = result.category;
-          incomplete = result.incomplete;
+          applyClassification(raw, await classifyMessage(fresh));
         }
-        const raw = headerToRawMessage(fresh, logicalOrigin, category);
-        raw.classifiedIncomplete = incomplete;
         await applyLocalState(raw);
         await applyMessageDetailsForOrigin(raw, cached);
         await db.messages.put(raw);

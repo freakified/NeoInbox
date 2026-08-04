@@ -143,6 +143,7 @@ export const TripSliceRow = ({
           }
           date={rangeLabel || undefined}
           onClick={() => onToggle(tripKey)}
+          expanded={false}
         />
       )}
 

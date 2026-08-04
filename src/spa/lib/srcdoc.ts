@@ -276,6 +276,45 @@ const BASE_CSS = `<style>
   .nb-blocked-image{display:none!important}
 </style>`;
 
+// The rendered body is a srcdoc iframe with `sandbox="allow-same-origin"` (needed
+// so useIframeAutoHeight can measure contentDocument). Scripts are already off via
+// sandbox; this CSP is what actually stops a message from phoning home through the
+// dozen non-<img> channels — remote stylesheets, webfonts, nested frames, <object>,
+// <video poster>, form posts. Never add `allow-scripts` to that iframe: same-origin
+// + scripts would give message HTML reach into the extension's messenger.* APIs.
+const csp = (showImages: boolean): string => {
+  const remote = showImages ? " https: http:" : "";
+  return [
+    "default-src 'none'",
+    `img-src data: cid: blob:${remote}`,
+    `media-src data: cid: blob:${remote}`,
+    "style-src 'unsafe-inline'",
+    "font-src data:",
+    "script-src 'none'",
+    "object-src 'none'",
+    "frame-src 'none'",
+    "child-src 'none'",
+    "connect-src 'none'",
+    "form-action 'none'",
+    "base-uri 'none'",
+  ].join("; ");
+};
+
+const cspMeta = (showImages: boolean): string =>
+  `<meta http-equiv="Content-Security-Policy" content="${escapeAttr(csp(showImages))}">`;
+
+// Belt-and-braces for the same channels, in case a Thunderbird build ignores a
+// meta-tag CSP inside srcdoc. Also drops redirects, which no mail body needs.
+const stripActiveContent = (doc: Document): void => {
+  doc
+    .querySelectorAll("script, noscript, iframe, frame, object, embed, base, link, meta[http-equiv]")
+    .forEach((el) => {
+      // Keep the CSP we are about to insert and harmless charset declarations.
+      if (el.tagName === "META" && !/refresh/i.test(el.getAttribute("http-equiv") ?? "")) return;
+      el.remove();
+    });
+};
+
 const isRemoteUrl = (value: string | null): boolean => {
   const url = value?.trim();
   if (!url) return false;
@@ -309,6 +348,15 @@ const blockRemoteImages = (doc: Document): void => {
     }
   });
 
+  doc.querySelectorAll("video[poster]").forEach((video) => {
+    const poster = video.getAttribute("poster");
+    if (isRemoteUrl(poster)) video.removeAttribute("poster");
+  });
+
+  doc.querySelectorAll('input[type="image"]').forEach((input) => {
+    if (isRemoteUrl(input.getAttribute("src"))) input.removeAttribute("src");
+  });
+
   doc.querySelectorAll<HTMLElement>("[style]").forEach((el) => {
     const backgroundImage = el.style.backgroundImage;
     if (hasRemoteBackground(backgroundImage)) {
@@ -334,6 +382,20 @@ export const hasBlockedRemoteImages = (rawHtml: string): boolean => {
   ) {
     return true;
   }
+  if (
+    Array.from(doc.querySelectorAll("video[poster]")).some((video) =>
+      isRemoteUrl(video.getAttribute("poster")),
+    )
+  ) {
+    return true;
+  }
+  if (
+    Array.from(doc.querySelectorAll('input[type="image"]')).some((input) =>
+      isRemoteUrl(input.getAttribute("src")),
+    )
+  ) {
+    return true;
+  }
   return Array.from(doc.querySelectorAll<HTMLElement>("[style]")).some((el) =>
     hasRemoteBackground(el.style.backgroundImage),
   );
@@ -341,15 +403,16 @@ export const hasBlockedRemoteImages = (rawHtml: string): boolean => {
 
 export const buildSrcdoc = (rawHtml: string, showImages: boolean): string => {
   const doc = new DOMParser().parseFromString(rawHtml, "text/html");
-  doc.querySelectorAll("script, noscript").forEach((el) => el.remove());
+  stripActiveContent(doc);
   if (!showImages) blockRemoteImages(doc);
   markQuotedHtml(doc);
-  doc.head.insertAdjacentHTML("afterbegin", BASE_CSS);
+  doc.head.insertAdjacentHTML("afterbegin", `${cspMeta(showImages)}${BASE_CSS}`);
   return `<!DOCTYPE html>${doc.documentElement.outerHTML}`;
 }
 
 export const buildTextSrcdoc = (rawText: string): string =>
-  `<!DOCTYPE html><html><head>${BASE_CSS}</head><body>${renderTextWithQuoteToggle(rawText)}</body></html>`;
+  `<!DOCTYPE html><html><head>${cspMeta(false)}${BASE_CSS}</head>` +
+  `<body>${renderTextWithQuoteToggle(rawText)}</body></html>`;
 
 export const extractRawTextBody = (
   part: messenger.messages.MessagePart,

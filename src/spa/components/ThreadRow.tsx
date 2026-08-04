@@ -3,7 +3,11 @@ import { getCategoryMeta } from "../../shared/categories";
 import { useCustomBundles } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate } from "../lib/dateBucket";
+import { useShowDeleteActions } from "../lib/deleteActionPrefs";
+import { overlayIsOpen } from "../lib/overlays";
+import { keepFocusAfterRowRemoval } from "../lib/rowNavigation";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
+import { useThreadActions } from "../lib/useThreadActions";
 import { ActionStrip } from "./ActionStrip";
 import { Icon } from "./Icon";
 import { MessageAttachments, collectAttachments } from "./MessageAttachments";
@@ -24,6 +28,29 @@ export const ThreadRow = ({
   expandedRef?: React.RefObject<HTMLDivElement | null>;
 }) => {
   const customBundles = useCustomBundles();
+  const actions = useThreadActions(t);
+  const showDeleteActions = useShowDeleteActions();
+
+  // Row-scoped shortcuts. Enter/Space (open) are handled by RowHeader itself;
+  // list-wide keys like j/k live in App.
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // The snooze menu opens inside this row, so its keystrokes bubble here.
+    if (overlayIsOpen()) return;
+
+    const run = (enabled: boolean, action: () => void, removesRow = true) => {
+      if (!enabled) return;
+      e.preventDefault();
+      if (removesRow) keepFocusAfterRowRemoval();
+      action();
+    };
+
+    if (e.key === "e") run(actions.hasInboxMessages, actions.done);
+    else if (e.key === "s") run(actions.hasInboxMessages, actions.snoozeDefault);
+    else if (e.key === "#") run(showDeleteActions, actions.trash);
+    else if (e.key === "p") run(true, actions.togglePin, false);
+  };
+
   const firstSender = t.messages[0];
   const name = firstSender ? senderName(firstSender.author) : "";
   const avatarBg = avatarColor(name);
@@ -96,6 +123,8 @@ export const ThreadRow = ({
           date={date}
           bold={t.unreadCount > 0}
           onClick={onToggle}
+          onKeyDown={onKeyDown}
+          expanded={false}
           actionStrip={<ActionStrip thread={t} />}
         />
       )}

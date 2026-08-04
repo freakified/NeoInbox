@@ -2,10 +2,12 @@ import {
   applyMessageDetails,
   classifyMessage,
   doneMessage,
+  getLiveHeader,
   pinMessage,
   trashMessage,
   verifiedOpId,
 } from "./ingest";
+import { applyClassification, carryClassification } from "../classifier/version";
 import { headerToRawMessage } from "./messageMap";
 import {
   handleSnoozeAlarm,
@@ -16,10 +18,12 @@ import {
 import {
   classifyCachedDoneMessages,
   getLastProgress,
+  retryIncompleteClassifications,
   runBackfill,
   runIncrementalSync,
   runStartupSync,
   serialized,
+  startClassifierVersionSweep,
 } from "./backfill";
 import { scanActive } from "./scanGuard";
 import { pushMyEmails, wireSyncEngine } from "./sync";
@@ -42,25 +46,42 @@ const INBOX_URL = "inbox.html";
  * the results, and broadcast one delta. Returns how many changed category.
  */
 const reclassifyMessages = async (cached: RawMessage[]): Promise<{ scanned: number; moved: number }> => {
-  const updated = [];
+  const updated: RawMessage[] = [];
+  const readded: RawMessage[] = [];
+  const removedIds: number[] = [];
   let moved = 0;
   for (const cmsg of cached) {
     try {
-      const header = await messenger.messages.get(cmsg.id);
-      const { category, incomplete } = await classifyMessage(header);
-      const fresh = await messenger.messages.get(cmsg.id);
-      const raw = headerToRawMessage(fresh, "inbox", category);
-      raw.classifiedIncomplete = incomplete;
+      // Cached ids go stale when Thunderbird remaps them (moves, compaction, a
+      // rebuilt folder database). Resolve by Message-ID rather than letting the
+      // row fail with "Message not found" and silently keep its old category.
+      const header = await getLiveHeader(cmsg);
+      if (!header) {
+        log.debug("reclassify", "message no longer resolvable; skipped", { id: cmsg.id });
+        continue;
+      }
+      const raw = headerToRawMessage(header, "inbox");
+      applyClassification(raw, await classifyMessage(header));
       await applyLocalState(raw);
       await applyMessageDetails(raw, cmsg);
+      if (raw.id === cmsg.id) {
+        updated.push(raw);
+      } else {
+        await db.messages.delete(cmsg.id);
+        removedIds.push(cmsg.id);
+        readded.push(raw);
+      }
       await db.messages.put(raw);
-      updated.push(raw);
       if ((raw.category ?? null) !== (cmsg.category ?? null)) moved++;
     } catch (e) {
       log.warn("reclassify", "failed", { id: cmsg.id, e });
     }
   }
-  if (updated.length) broadcast({ type: "delta", updated });
+  // One combined delta: re-keyed rows must land before the old id is dropped
+  // or the row would blink out of the stream in between.
+  if (updated.length || readded.length || removedIds.length) {
+    broadcast({ type: "delta", updated, added: readded, removedIds });
+  }
   return { scanned: cached.length, moved };
 }
 
@@ -161,6 +182,17 @@ messenger.runtime.onStartup.addListener(() => {
 const SYNC_ALARM = "neoinbox-periodic-sync";
 messenger.alarms.create(SYNC_ALARM, { periodInMinutes: 15, delayInMinutes: 15 });
 
+/**
+ * Mail classified before its body was available (getFull() fails while IMAP is
+ * still syncing — the norm for a backlog that arrived while Thunderbird was
+ * closed) lands with no category. Repair used to ride along in runScan's
+ * finally, which meant no scan, no repair; it gets its own alarm so it runs
+ * regardless of what the scan chain is doing, and soon after startup, when the
+ * backlog is freshest.
+ */
+const CLASSIFY_RETRY_ALARM = "neoinbox-classify-retry";
+messenger.alarms.create(CLASSIFY_RETRY_ALARM, { periodInMinutes: 10, delayInMinutes: 2 });
+
 messenger.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === SYNC_ALARM) {
     try {
@@ -168,6 +200,14 @@ messenger.alarms.onAlarm.addListener(async (alarm) => {
       scheduleTripExtraction();
     } catch (e) {
       log.warn("backfill", "periodic sync failed", e);
+    }
+    return;
+  }
+  if (alarm.name === CLASSIFY_RETRY_ALARM) {
+    try {
+      await retryIncompleteClassifications();
+    } catch (e) {
+      log.warn("backfill", "classification retry failed", e);
     }
     return;
   }
@@ -194,6 +234,10 @@ void cleanupLegacyTags().catch((e) => log.warn("legacy-tags", "cleanup failed", 
 void classifyCachedDoneMessages().catch((e) =>
   log.warn("backfill", "done category sweep failed", e),
 );
+// Carries a classifier rules change to mail that is already cached. Runs in
+// chunks behind whatever scan onInstalled/onStartup kicked off, and no-ops
+// entirely when the stored version already matches.
+startClassifierVersionSweep();
 void ensureSnoozeAlarmsRestored().catch((e) => log.warn("snooze", "restore alarms failed", e));
 
 onCommand(async (msg) => {
@@ -218,11 +262,8 @@ onCommand(async (msg) => {
       }
       const header = await messenger.messages.get(msg.messageId);
       const cached = await db.messages.get(msg.messageId);
-      const raw = headerToRawMessage(
-        header,
-        cached?.origin ?? "inbox",
-        cached?.category ?? null,
-      );
+      const raw = headerToRawMessage(header, cached?.origin ?? "inbox");
+      carryClassification(raw, cached);
       await applyLocalState(raw);
       await applyMessageDetails(raw, cached);
       await db.messages.put(raw);
@@ -246,7 +287,8 @@ onCommand(async (msg) => {
       try {
         const header = await messenger.messages.get(msg.messageId);
         if (await isArchiveFolder(folderIdOf(header))) {
-          const raw = headerToRawMessage(header, "done", cached?.category ?? null);
+          const raw = headerToRawMessage(header, "done");
+          carryClassification(raw, cached);
           await applyLocalState(raw);
           await applyMessageDetails(raw, cached);
           await db.messages.put(raw);
@@ -305,7 +347,8 @@ onCommand(async (msg) => {
       }
       try {
         const header = await messenger.messages.get(movedHeader?.id ?? opId);
-        const raw = headerToRawMessage(header, "inbox", cached?.category ?? null);
+        const raw = headerToRawMessage(header, "inbox");
+        carryClassification(raw, cached);
         await applyLocalState(raw);
         await applyMessageDetails(raw, cached);
         if (raw.id !== msg.messageId) {

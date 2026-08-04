@@ -1,73 +1,41 @@
 import { clsx } from "clsx";
 import type { Thread } from "../../shared/types";
-import { useMailStore } from "../../store/mailStore";
 import { useShowDeleteActions } from "../lib/deleteActionPrefs";
-import { formatSnoozeToastTime } from "../lib/snoozePresets";
-import { useBulkActions } from "./BulkActionConfirm";
+import { useThreadActions } from "../lib/useThreadActions";
 import { Icon } from "./Icon";
 import { SnoozeMenu } from "./SnoozeMenu";
 import s from "./ActionStrip.module.css";
 
 export const ActionStrip = ({ thread }: { thread: Thread }) => {
-  const pin = useMailStore((st) => st.pin);
-  const snoozeThread = useMailStore((st) => st.snoozeThread);
-  const unsnoozeThread = useMailStore((st) => st.unsnoozeThread);
-  const notify = useMailStore((st) => st.notify);
   const showDeleteActions = useShowDeleteActions();
-  const { doneMessages, trashMessages } = useBulkActions();
-  const moveToInboxThread = useMailStore((st) => st.moveToInboxThread);
-  const inboxMessageIds = thread.messages.filter((m) => m.origin === "inbox").map((m) => m.id);
-  const hasInboxMessages = inboxMessageIds.length > 0;
-  const doneMessageIds = thread.messages.filter((m) => m.origin === "done").map((m) => m.id);
-  const snoozedMessageIds = thread.messages
-    .filter((m) => m.snoozed)
-    .map((m) => m.id);
-
-  const togglePin = () => {
-    const next = !thread.pinned;
-    for (const m of thread.messages) pin(m.id, next);
-  };
-  const onDone = () => doneMessages(inboxMessageIds);
-  const onSnooze = (wakeAt: number) => {
-    snoozeThread(inboxMessageIds, wakeAt);
-    notify(`Snoozed until ${formatSnoozeToastTime(wakeAt)}`);
-  };
-  const onUnsnooze = () => {
-    unsnoozeThread(snoozedMessageIds);
-    notify("Moved back to inbox");
-  };
-  const onTrash = () => trashMessages(thread.messages.map((m) => m.id));
-  const onMoveToInbox = () => {
-    moveToInboxThread(doneMessageIds);
-    notify("Moved back to inbox");
-  };
+  const actions = useThreadActions(thread);
 
   return (
     <div className={s.strip} onClick={(e) => e.stopPropagation()}>
-      <ActionBtn title={thread.pinned ? "Unpin" : "Pin"} onClick={togglePin}>
+      <ActionBtn title={thread.pinned ? "Unpin (p)" : "Pin (p)"} onClick={actions.togglePin}>
         <Icon
           name="push_pin"
           className={clsx(s.iconBase, thread.pinned ? s.iconPrimary : s.iconMuted)}
         />
       </ActionBtn>
-      {hasInboxMessages && <SnoozeMenu onChoose={onSnooze} />}
-      {snoozedMessageIds.length > 0 && (
-        <ActionBtn title="Unsnooze" onClick={onUnsnooze}>
+      {actions.hasInboxMessages && <SnoozeMenu onChoose={actions.snooze} />}
+      {actions.hasSnoozedMessages && (
+        <ActionBtn title="Unsnooze" onClick={actions.unsnooze}>
           <Icon name="alarm_off" className={clsx(s.iconBase, s.iconMuted)} />
         </ActionBtn>
       )}
       {showDeleteActions && (
-        <ActionBtn title="Trash" onClick={onTrash}>
+        <ActionBtn title="Trash (#)" onClick={actions.trash}>
           <Icon name="delete" className={clsx(s.iconBase, s.iconMuted)} />
         </ActionBtn>
       )}
-      {hasInboxMessages && (
-        <ActionBtn title="Done" onClick={onDone}>
+      {actions.hasInboxMessages && (
+        <ActionBtn title="Done (e)" onClick={actions.done}>
           <Icon name="check" className={clsx(s.iconBase, s.iconMuted)} />
         </ActionBtn>
       )}
-      {!hasInboxMessages && doneMessageIds.length > 0 && (
-        <ActionBtn title="Move to inbox" onClick={onMoveToInbox}>
+      {!actions.hasInboxMessages && actions.hasDoneMessages && (
+        <ActionBtn title="Move to inbox" onClick={actions.moveToInbox}>
           <Icon name="move_to_inbox" className={clsx(s.iconBase, s.iconMuted)} />
         </ActionBtn>
       )}

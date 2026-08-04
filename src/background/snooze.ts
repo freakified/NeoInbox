@@ -3,6 +3,7 @@ import { log } from "../shared/log";
 import type { RawMessage, SnoozeRecord } from "../shared/types";
 import { archiveFolderIdsForAccount } from "./archiveFolders";
 import { applyMessageDetails, classifyMessage, doneMessage } from "./ingest";
+import { applyClassification } from "../classifier/version";
 import { applyLocalState, invalidateSnoozeIndex } from "./localState";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
@@ -117,9 +118,8 @@ export const wakeSnoozedMessage = async (
       return;
     }
 
-    const { category, incomplete } = await classifyMessage(restoredHeader);
-    const raw = headerToRawMessage(restoredHeader, "inbox", category);
-    raw.classifiedIncomplete = incomplete;
+    const raw = headerToRawMessage(restoredHeader, "inbox");
+    applyClassification(raw, await classifyMessage(restoredHeader));
     await applyLocalState(raw);
     if (reason === "alarm") raw.resurfacedAt = record.wakeAt;
     else if (reason === "unsnooze") raw.resurfacedAt = Date.now();

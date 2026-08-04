@@ -9,6 +9,7 @@ import { matchesSocial } from "./rules/social";
 import { matchesPromos } from "./rules/promos";
 import { matchesUpdates } from "./rules/updates";
 
+/** Changing any rule below means bumping CLASSIFIER_VERSION in ./version. */
 export const classifyByRules = (f: Features): Category | null => {
   if (matchesForums(f)) return "forums";
   if (matchesTravel(f)) return "travel";

@@ -1,50 +1,113 @@
 # NeoInbox
 
-A Thunderbird MailExtension that brings back the Google Inbox experience —
-auto-bundles, trip bundles, inline highlights, pin/snooze/done, and a single
-smooth list that expands in place.
+Google Inbox died in 2019. NeoInbox brings its reading experience back as a
+Thunderbird MailExtension — auto-bundles, trip bundles, pin/snooze/done, and a
+single smooth list that expands in place instead of throwing you into a
+three-pane layout.
 
-Status: **M2** — auto-classification into 7 bundles (Travel, Finance, Purchases, Social, Updates, Promos, Forums) via local heuristics stored in NeoInbox's local cache. See `/Users/dan/.claude/plans/remember-google-inbox-i-reactive-otter.md`.
+It works against any IMAP account Thunderbird can talk to. Nothing about it is
+Gmail-specific.
 
-## Build
+## What it does
+
+- **Bundles.** Mail is grouped into Travel, Finance, Purchases, Social, Updates,
+  Promos and Forums by a local rules engine, then collapsed into one row per
+  bundle. You can add your own bundles and rules, and correct any message's
+  bundle from its row.
+- **Trips.** Flight, hotel and rental confirmations get clustered into a single
+  trip bundle by date and PNR, with the trip's date range on the row.
+- **Pin, snooze, done.** The Inbox verbs. Sweep a whole section done in one
+  click; pinned threads survive the sweep.
+- **Reminders.** Free-standing rows in the stream that aren't backed by mail.
+- **In-place expansion.** Opening a conversation expands it inside the list
+  rather than replacing the view.
+
+## Privacy
+
+This is a mail client, so it's worth being precise:
+
+- **Classification is local.** Bundling is a heuristic rules engine that runs in
+  the extension. No message content is uploaded to classify it, and there is no
+  telemetry, analytics or crash reporting of any kind.
+- **Bundle state stays in NeoInbox.** Categories live in a local IndexedDB
+  cache, not in tags on the server, so NeoInbox does not litter your mailbox for
+  every other client that reads it. Pin and snooze use small NeoInbox tags,
+  because that state has to survive a reinstall.
+- **Remote content is blocked by default.** Message bodies render in a sandboxed
+  iframe under a `default-src 'none'` CSP, so tracking pixels, remote
+  stylesheets, webfonts, nested frames and `<object>` embeds are all inert until
+  you allow images — per message, or per sender.
+- **One outbound request exists in the entire codebase**, in
+  `src/spa/lib/translation.ts`. It is the optional translate-message feature, it
+  is off until you enter your own provider and key in Settings, and you can
+  point it at a LibreTranslate instance or a local OpenAI-compatible model
+  instead of a cloud API.
+
+## Keyboard shortcuts
+
+Press <kbd>?</kbd> in the app for the full list.
+
+| Key | Action |
+| --- | --- |
+| <kbd>j</kbd> / <kbd>k</kbd> | Next / previous conversation |
+| <kbd>Enter</kbd> | Open or close |
+| <kbd>Esc</kbd> | Close the open conversation |
+| <kbd>e</kbd> | Done |
+| <kbd>s</kbd> | Snooze until tomorrow |
+| <kbd>p</kbd> | Pin / unpin |
+| <kbd>#</kbd> | Trash (when delete actions are enabled) |
+| <kbd>g</kbd> then <kbd>i</kbd>/<kbd>s</kbd>/<kbd>d</kbd>/<kbd>t</kbd>/<kbd>r</kbd> | Go to Inbox / Snoozed / Done / Trips / Reminders |
+
+## Install
+
+Requires Thunderbird 115 or newer.
 
 ```sh
 npm install
 npm run build
 ```
 
-This produces `dist/` — an unpacked Thunderbird MailExtension.
+That produces `dist/`, an unpacked MailExtension.
 
-## Load in Thunderbird for development
+1. **Tools → Developer Tools → Debug Add-ons** (the `about:debugging` route is
+   under "this-thunderbird").
+2. **Load Temporary Add-on…**, and pick `dist/manifest.json`.
+3. Click the **Open NeoInbox** toolbar button.
 
-1. Open Thunderbird (tested against 115 ESR and 128 ESR).
-2. Menu → Tools → **Developer Tools** → **Debug Add-ons** (or visit `about:debugging#/runtime/this-firefox` via a temporarily opened tab — in Thunderbird the route is under "this-thunderbird").
-3. Click **Load Temporary Add-on…**.
-4. Select `dist/manifest.json`.
-5. A new toolbar button titled "Open NeoInbox" appears. Click it → the NeoInbox tab opens and lists your inbox messages.
+On first run the background script backfills and classifies up to 500 recent
+inbox messages; the header shows the progress.
 
-To iterate: `npm run dev` (watch mode). After a rebuild, click the **Reload** button next to the extension in Debug Add-ons.
+## Development
 
-## M1 verification checklist
+```sh
+npm run dev        # vite build --watch
+npm test           # vitest
+npm run typecheck  # tsc --noEmit
+```
 
-- [x] Toolbar button appears after loading.
-- [x] Clicking the button opens a new tab titled "NeoInbox".
-- [x] The tab shows up to 500 recent messages across all inbox folders.
-- [x] Unread messages render in bold.
-- [x] Receiving new mail in Thunderbird logs a line in the background script console.
+After a rebuild, hit **Reload** next to the extension in Debug Add-ons.
 
-## M2 verification checklist
+Layout:
 
-First install: on reload, the background script auto-runs a one-time backfill of up to 500 inbox messages. Expect a log line like `[NeoInbox] backfill: N/M classified`.
+| Path | What lives there |
+| --- | --- |
+| `src/background/` | Backfill, incremental sync, snooze alarms, trip scanning |
+| `src/classifier/` | Bundle rules and the feature extractors they run on |
+| `src/shared/` | Threading, trip clustering, types shared across both sides |
+| `src/spa/` | The React UI rendered in the NeoInbox tab |
+| `src/store/` | Zustand store and the Dexie/IndexedDB cache |
 
-- [ ] The NeoInbox tab now shows collapsed **bundle sections** (Travel, Finance, Purchases, Social, Updates, Promos, Forums) when those categories have messages.
-- [ ] Uncategorised messages appear below, in the "Inbox" section (always expanded).
-- [ ] Clicking a bundle toggles its expansion.
-- [ ] The **Re-classify** button re-runs the backfill (visible in bg-script console).
-- [ ] Open the Thunderbird native 3-pane view and confirm that bundle classification stays private to NeoInbox; no `neoinbox-*` bundle tags are added to messages.
+## Known sharp edges
 
-**Known v1 sharp edges** (see plan § Known risks):
+- Bundling is heuristic. Airline promos landing in Travel is the classic
+  failure; rules live in `src/classifier/rules/` and are easy to extend, and you
+  can correct any message from its row.
+- Trip extraction has been exercised against a limited set of real
+  confirmations. Unusual airlines and hotel chains will need parser work.
+- Backfill is capped at 500 messages and only covers inbox folders.
+- Trash, Spam and Contacts are placeholders in the drawer.
+- Inline `cid:` images in message bodies don't render yet.
 
-- Rules are heuristic; expect some misclassifications (e.g., airline promos → travel). The rules files are in `src/classifier/rules/` — easy to extend.
-- Backfill is capped at 500 messages and only processes inbox folders. Deeper backfill / reprocessing is a later milestone.
-- Bundle categories are stored in NeoInbox's local IndexedDB cache. Pin and snooze still use small NeoInbox tags for Thunderbird-visible state.
+## License
+
+[MPL-2.0](LICENSE).
