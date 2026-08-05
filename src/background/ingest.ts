@@ -114,6 +114,34 @@ export const getLiveHeader = async (
   }
 }
 
+/** Returned when a row needed re-resolution but the caller had no budget for it. */
+export const OVER_BUDGET = Symbol("over-budget");
+
+/**
+ * getLiveHeader for callers sweeping many rows at once.
+ *
+ * The cheap path — the cached id still points at the right message — is always
+ * taken. Re-resolution is not: finding a drifted id means searching the account
+ * by Message-ID, which costs about a second on a large mailbox, and archived
+ * rows drift in bulk. `allow` lets the caller ration those searches so a sweep
+ * over the archive backlog cannot saturate the background for hours.
+ */
+export const liveHeaderWithinBudget = async (
+  row: RawMessage,
+  allow: () => boolean,
+): Promise<messenger.messages.MessageHeader | null | typeof OVER_BUDGET> => {
+  try {
+    const header = await messenger.messages.get(row.id);
+    if (!row.headerMessageId || header.headerMessageId === row.headerMessageId) {
+      return header;
+    }
+  } catch {
+    /* id no longer resolves; needs the expensive path */
+  }
+  if (!allow()) return OVER_BUDGET;
+  return getLiveHeader(row);
+}
+
 export const pinMessage = async (id: number, pinned: boolean): Promise<void> => {
   const cached = await db.messages.get(id);
   const headerMessageId = cached?.headerMessageId

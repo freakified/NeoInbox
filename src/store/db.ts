@@ -181,6 +181,24 @@ class NeoInboxDb extends Dexie {
     this.version(12).stores({
       reservations: "key, status",
     });
+    // The version sweep used to find its work by reading every cached message
+    // and filtering in memory, once per chunk. On a mailbox with tens of
+    // thousands of archived rows that is a multi-second read repeated dozens of
+    // times, which starves the UI. Index the stamp so the sweep can ask for
+    // exactly the rows it needs. IndexedDB skips records whose index key is
+    // undefined, so the upgrade has to give every existing row a real 0.
+    this.version(13)
+      .stores({
+        messages: "id, date, accountId, folderId, [origin+classifierVersion]",
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table<RawMessage>("messages")
+          .toCollection()
+          .modify((m) => {
+            m.classifierVersion ??= 0;
+          });
+      });
   }
 }
 

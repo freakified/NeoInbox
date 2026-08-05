@@ -3,8 +3,10 @@ import {
   classifyMessage,
   extractMessageDetails,
   getLiveHeader,
+  liveHeaderWithinBudget,
   MESSAGE_DETAILS_VERSION,
   needsMessageDetails,
+  OVER_BUDGET,
 } from "./ingest";
 import {
   applyClassification,
@@ -425,8 +427,7 @@ const runScan = (mode: ScanMode): Promise<ScanCounters> => {
   });
 };
 
-export const runBackfill = (): Promise<{ scanned: number; classified: number }> =>
-  runScan("full");
+export const runBackfill = (): Promise<ScanCounters> => runScan("full");
 
 export const runIncrementalSync = async (): Promise<void> => {
   await runScan("incremental");
@@ -565,19 +566,47 @@ const CLASSIFIER_VERSION_KEY = "neoinbox-classifier-version";
 const VERSION_SWEEP_CHUNK = 500;
 /** Breather between passes so scans and live events get the chain back. */
 const VERSION_SWEEP_GAP_MS = 5_000;
+/**
+ * Re-resolutions allowed per pass.
+ *
+ * A row whose numeric id has drifted can only be found again by Message-ID,
+ * and that search walks the account — roughly a second on a large mailbox.
+ * Archived rows are the drift-prone population (nothing rescans them), so an
+ * uncapped pass over the archive backlog turns into hours of searching that
+ * starves both the UI and every other background job. Rows past the cap keep
+ * their old stamp and come back on a later pass.
+ */
+const VERSION_SWEEP_RESOLVE_BUDGET = 25;
 
 let sweepingVersion = false;
 let versionSweepTimer: ReturnType<typeof setTimeout> | undefined;
 
-/** Outdated rows, inbox before done: the inbox is what's actually on screen. */
+/**
+ * Outdated rows for one origin, newest first, straight off the
+ * [origin+classifierVersion] index — never a full table read.
+ */
+const outdatedByOrigin = async (
+  origin: MessageOrigin,
+  limit: number,
+): Promise<{ total: number; rows: RawMessage[] }> => {
+  const range = db.messages
+    .where("[origin+classifierVersion]")
+    .between([origin, -Infinity], [origin, CLASSIFIER_VERSION], true, false);
+  const total = await range.count();
+  if (!total || limit <= 0) return { total, rows: [] };
+  const rows = await range.limit(limit).toArray();
+  rows.sort((a, b) => b.date - a.date);
+  return { total, rows };
+};
+
+/** Inbox before done: the inbox is what is actually on screen. */
 const outdatedRows = async (limit: number): Promise<{ total: number; chunk: RawMessage[] }> => {
-  const rows = (await db.messages.toArray()).filter(
-    (m) => (m.origin === "inbox" || m.origin === "done") && classificationOutdated(m),
-  );
-  rows.sort((a, b) =>
-    a.origin === b.origin ? b.date - a.date : a.origin === "inbox" ? -1 : 1,
-  );
-  return { total: rows.length, chunk: rows.slice(0, limit) };
+  const inbox = await outdatedByOrigin("inbox", limit);
+  const done = await outdatedByOrigin("done", limit - inbox.rows.length);
+  return {
+    total: inbox.total + done.total,
+    chunk: [...inbox.rows, ...done.rows],
+  };
 };
 
 /**
@@ -628,26 +657,46 @@ export const runClassifierVersionSweep = async (): Promise<{
         broadcast({ type: "delta", updated });
         updated = [];
       };
+      let resolveBudget = VERSION_SWEEP_RESOLVE_BUDGET;
+      let deferred = 0;
+      let retired = 0;
+      const removedIds: number[] = [];
       for (const msg of chunk) {
         scanned++;
         try {
           const header = await withTimeout(
-            getLiveHeader(msg),
+            liveHeaderWithinBudget(msg, () => resolveBudget > 0 && resolveBudget-- > 0),
             `version sweep message ${msg.id}`,
           );
-          // Skipped rows keep their old stamp, so a scan that meets them again
-          // re-classifies them via ingestHeader; nothing is lost by moving on.
-          if (!header) continue;
-          const result = await classifyMessage(header);
+          if (header === OVER_BUDGET) {
+            // Left outdated on purpose: it comes back on a later pass rather
+            // than spending a search now. Not counted as scanned work.
+            deferred++;
+            scanned--;
+            continue;
+          }
+          // A row we spent budget on and still couldn't find keeps its category
+          // but takes the current stamp anyway. Leaving it outdated would put
+          // it at the front of every later pass, spending the budget again and
+          // never draining — the sweep would run forever.
+          const result = header
+            ? await classifyMessage(header)
+            : { category: msg.category, incomplete: msg.classifiedIncomplete ?? false };
+          const liveId = header?.id ?? msg.id;
           const row = await db.transaction("rw", db.messages, async () => {
             const fresh = await db.messages.get(msg.id);
             if (!fresh) return null;
-            const next: RawMessage = { ...fresh };
+            const next: RawMessage = { ...fresh, id: liveId };
             applyClassification(next, result);
+            // Re-key when the id had drifted, so the search that found it is
+            // spent once rather than again on every later touch of this row.
+            if (liveId !== msg.id) await db.messages.delete(msg.id);
             await db.messages.put(next);
             return next;
           });
           if (row) {
+            retired++;
+            if (row.id !== msg.id) removedIds.push(msg.id);
             if ((row.category ?? null) !== (msg.category ?? null)) moved++;
             updated.push(row);
             if (updated.length >= BATCH_FLUSH) flushUpdated();
@@ -660,12 +709,25 @@ export const runClassifierVersionSweep = async (): Promise<{
         }
       }
       flushUpdated();
-      // Derived from the chunk size rather than a re-query: rows the pass
-      // couldn't stamp (message gone, getFull still failing) stay outdated, and
-      // re-querying would leave the driver spinning forever on that tail. The
-      // last pass takes everything left and declares the version applied.
-      remaining = Math.max(total - chunk.length, 0);
+      if (removedIds.length) broadcast({ type: "delta", removedIds });
+      if (deferred) {
+        log.info(
+          "backfill",
+          `version sweep deferred ${deferred} rows with drifted ids (budget ${VERSION_SWEEP_RESOLVE_BUDGET}/pass)`,
+        );
+      }
+      // Measured by what actually left the outdated set, not by chunk size:
+      // rows deferred for budget are still outstanding and must bring the
+      // driver back. Every pass retires at least the non-drifted rows plus the
+      // budget, so this always converges.
+      remaining = Math.max(total - retired, 0);
       drained = remaining === 0;
+      if (retired === 0 && total > 0) {
+        // Nothing could be retired at all — every row threw. Stop rather than
+        // spin, but don't claim the version: the next background start retries.
+        log.warn("backfill", `version sweep made no progress on ${total} rows; stopping`);
+        remaining = 0;
+      }
       log.info(
         "backfill",
         `version sweep pass: ${moved}/${scanned} changed category, ${remaining} left`,
