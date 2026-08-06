@@ -1,3 +1,15 @@
+/**
+ * The travel heuristic. There is no Travel bundle, so this never names a
+ * category — it has exactly two jobs:
+ *
+ *  1. In the pipeline, it forces null: travel mail stays loose in the inbox
+ *     instead of falling through into Updates.
+ *  2. In isTripCandidate, it decides whether a message is worth fetching a
+ *     body for and running the reservation extractors over.
+ *
+ * The second never consults the first's result, which is what keeps trip
+ * detection independent of whatever bundle a route rule sends the mail to.
+ */
 import type { Features } from "../features";
 import { domainMatches } from "../features";
 

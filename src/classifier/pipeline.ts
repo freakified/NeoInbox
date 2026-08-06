@@ -9,10 +9,22 @@ import { matchesSocial } from "./rules/social";
 import { matchesPromos } from "./rules/promos";
 import { matchesUpdates } from "./rules/updates";
 
-/** Changing any rule below means bumping CLASSIFIER_VERSION in ./version. */
+/**
+ * Changing any rule below means bumping CLASSIFIER_VERSION in ./version.
+ *
+ * Travel yields null rather than a category: there is no Travel bundle, so
+ * itinerary mail belongs loose in the inbox until a trip claims it. It has to
+ * be an explicit early return, not an omission — drop it and a booking
+ * confirmation falls through to matchesUpdates and gets buried in Updates,
+ * which is the one place an unclustered reservation must never end up.
+ *
+ * Trip candidacy is decided separately (see isTripCandidate) and never depends
+ * on this result, so a user rule routing a travel sender elsewhere still wins
+ * the bundle without disabling trip detection for that sender.
+ */
 export const classifyByRules = (f: Features): Category | null => {
   if (matchesForums(f)) return "forums";
-  if (matchesTravel(f)) return "travel";
+  if (matchesTravel(f)) return null;
   if (matchesPurchases(f)) return "purchases";
   if (matchesFinance(f)) return "finance";
   if (matchesSocial(f)) return "social";

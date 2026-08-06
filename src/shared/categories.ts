@@ -9,13 +9,6 @@ export interface CategoryMeta {
 }
 
 export const CATEGORIES: Record<BuiltinCategory, CategoryMeta> = {
-  travel: {
-    key: "neoinbox-travel",
-    name: "Travel",
-    color: "#9C27B0",
-    icon: "travel",
-    order: 1,
-  },
   finance: {
     key: "neoinbox-finance",
     name: "Finance",
@@ -75,12 +68,19 @@ export const CATEGORIES: Record<BuiltinCategory, CategoryMeta> = {
  */
 export const LEGACY_PINNED_KEY = "neoinbox-pinned";
 export const LEGACY_SNOOZED_KEY = "neoinbox-snoozed";
+/**
+ * The Travel bundle is gone (trips replaced it), so its key no longer comes
+ * from CATEGORIES — but mailboxes tagged by older versions still carry it,
+ * and dropping it from this set would strand those tags forever.
+ */
+export const LEGACY_TRAVEL_KEY = "neoinbox-travel";
 
 export const NEO_TAG_KEYS: ReadonlySet<string> = new Set(
   [
     ...Object.values(CATEGORIES).map((m) => m.key).filter(Boolean),
     LEGACY_PINNED_KEY,
     LEGACY_SNOOZED_KEY,
+    LEGACY_TRAVEL_KEY,
   ],
 );
 

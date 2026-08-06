@@ -42,7 +42,6 @@ export const MessageBody = ({
   const [translatedBodyType, setTranslatedBodyType] = useState<"text" | "html">("text");
   const [showTranslation, setShowTranslation] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const { height, onLoad } = useIframeAutoHeight(iframeRef);
   const senderEmail = useMemo(() => {
     const email = parseSender(m.author).email;
     return email.includes("@") ? email : "";
@@ -141,6 +140,7 @@ export const MessageBody = ({
     [showImages, translatedBodyType, translatedText],
   );
   const activeSrcdoc = showTranslation && translatedSrcdoc ? translatedSrcdoc : srcdoc;
+  const { height, onLoad } = useIframeAutoHeight(iframeRef, activeSrcdoc);
 
   const requestTranslation = () => {
     setTranslationStatus("loading");

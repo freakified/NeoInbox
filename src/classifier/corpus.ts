@@ -53,17 +53,20 @@ export const corpus: CorpusCase[] = [
   },
 
   // ---------------------------------------------------------------- travel
+  // There is no Travel bundle: itinerary mail belongs to the trips layer, and
+  // until it lands in a trip it sits loose in the inbox. So the interesting
+  // assertion for these is trip candidacy, not category — see tripCandidacy.
   {
     name: "an airline itinerary from a sending subdomain",
     author: "United Airlines <no-reply@email.united.com>",
     subject: "Your itinerary for SFO to LHR",
-    expect: "travel",
+    expect: null,
   },
   {
     name: "a hotel booking confirmation",
     author: "Marriott <reservations@email.marriott.com>",
     subject: "Reservation confirmed — Lisbon, 14 Sep",
-    expect: "travel",
+    expect: null,
   },
   {
     name: "a booking confirmation from an unknown travel brand",
@@ -71,7 +74,7 @@ export const corpus: CorpusCase[] = [
     // sender — which is how most smaller operators send.
     author: "Bookings <bookings@some-boutique-hotel.example>",
     subject: "Your booking confirmation",
-    expect: "travel",
+    expect: null,
   },
   {
     name: "an airline fare sale is not itinerary mail",
@@ -245,11 +248,11 @@ export const corpus: CorpusCase[] = [
  * If you tighten one of these, move the case up into `corpus` with its new
  * expectation.
  *
- * The theme below is the domain-list fallthrough: `matchesFinance` and
- * `matchesTravel` both end with "if the sender is on our domain list and the
- * subject isn't obviously promotional, claim it". That is right for the
- * automated mail these brands overwhelmingly send, and wrong for the rare
- * human writing from the same domain.
+ * The theme below is the domain-list fallthrough: `matchesFinance` ends with
+ * "if the sender is on our domain list and the subject isn't obviously
+ * promotional, claim it". That is right for the automated mail these brands
+ * overwhelmingly send, and wrong for the rare human writing from the same
+ * domain.
  */
 export const knownLimitations: CorpusCase[] = [
   {
@@ -258,10 +261,64 @@ export const knownLimitations: CorpusCase[] = [
     subject: "lunch next week",
     expect: "finance",
   },
+];
+
+/**
+ * Trip candidacy: whether a message is worth fetching a body for and running
+ * the reservation extractors over. This is what the travel heuristic decides
+ * now that it no longer produces a category, and it is deliberately generous —
+ * a false positive costs one body fetch, a false negative loses a trip.
+ *
+ * Candidacy never means "this is in a trip": membership still requires an
+ * extracted reservation or a confirmation code matching an existing trip.
+ */
+export interface TripCandidacyCase {
+  name: string;
+  author: string;
+  subject: string;
+  expect: boolean;
+}
+
+export const tripCandidacy: TripCandidacyCase[] = [
   {
-    name: "a person writing from an airline's domain is bundled as travel",
-    author: "Robin Vance <robin.vance@united.com>",
-    subject: "notes from yesterday",
-    expect: "travel",
+    name: "an airline itinerary from a sending subdomain",
+    author: "United Airlines <no-reply@email.united.com>",
+    subject: "Your itinerary for SFO to LHR",
+    expect: true,
+  },
+  {
+    name: "a hotel booking confirmation",
+    author: "Marriott <reservations@email.marriott.com>",
+    subject: "Reservation confirmed — Lisbon, 14 Sep",
+    expect: true,
+  },
+  {
+    name: "a booking confirmation from an unknown travel brand",
+    author: "Bookings <bookings@some-boutique-hotel.example>",
+    subject: "Your booking confirmation",
+    expect: true,
+  },
+  {
+    name: "an airline fare sale is not itinerary mail",
+    author: "United Airlines <deals@email.united.com>",
+    subject: "Flash sale: 30% off fares this week only",
+    expect: false,
+  },
+  {
+    name: "policy mail from a travel brand is still worth a look",
+    // The case that motivated splitting candidacy from routing. Candidacy is
+    // true — it's from a known travel domain and isn't obviously promotional —
+    // but the extractors find no reservation in it, so it never joins a trip
+    // and is free to land in Updates. Candidacy costs a body fetch; only
+    // extracted evidence costs a trip membership.
+    author: "Amtrak <amtrak@e-mail.amtrak.com>",
+    subject: "Updates to our Terms & Conditions",
+    expect: true,
+  },
+  {
+    name: "ordinary mail from an unrelated sender",
+    author: "Sam <sam@example.com>",
+    subject: "lunch next week",
+    expect: false,
   },
 ];

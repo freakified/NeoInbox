@@ -656,16 +656,90 @@ export const useMailStore = create<MailStore>((set, get) => ({
   setTripMembership: (keys, tripId) => {
     if (keys.length === 0) return;
     const now = Date.now();
-    const records = keys.map(
-      (key): TripMembershipRecord => ({ key, tripId, source: "manual", addedAt: now }),
+    const destination = tripId ? get().tripsById[tripId] : undefined;
+    const previous = keys
+      .map((key) => get().tripMembershipByKey[key])
+      .filter((r): r is TripMembershipRecord => !!r);
+    // Trips these keys are leaving, and so might be the last mail in.
+    const vacated = new Set(
+      previous
+        .map((r) => r.tripId)
+        .filter((id): id is string => !!id && id !== tripId),
     );
-    set({
-      tripMembershipByKey: {
-        ...get().tripMembershipByKey,
-        ...Object.fromEntries(records.map((r) => [r.key, r])),
-      },
-    });
+
+    const records = keys.map(
+      (key): TripMembershipRecord => ({
+        key,
+        tripId,
+        source: "manual",
+        addedAt: now,
+        // Tombstones (tripId null) carry no reason — there's no membership to
+        // explain, and a stale one would surface on a later re-add.
+        reason: tripId ? { kind: "manual" } : undefined,
+      }),
+    );
+    const memberships = { ...get().tripMembershipByKey };
+    for (const r of records) memberships[r.key] = r;
+
+    // Google Inbox deleted a trip the moment its last message left, rather
+    // than leaving an empty shell to be tidied up by hand.
+    //
+    // "Empty" means no membership row points at it — never "no visible
+    // threads". The stream hides snoozed mail and, outside the trip view,
+    // archived mail, so a trip whose flights are all snoozed until next month
+    // has zero visible threads and is very much alive. Deciding this from the
+    // stream would delete it.
+    const trips = { ...get().tripsById };
+    const emptied: TripRecord[] = [];
+    for (const id of vacated) {
+      const trip = trips[id];
+      if (!trip) continue;
+      if (Object.values(memberships).some((r) => r.tripId === id)) continue;
+      emptied.push(trip);
+      delete trips[id];
+    }
+
+    set({ tripMembershipByKey: memberships, tripsById: trips });
     persistTripMemberships(records);
+    for (const trip of emptied) {
+      void db.trips
+        .delete(trip.id)
+        .catch((e) => log.warn("store", "empty trip delete failed", e));
+    }
+
+    const emptiedNames = emptied.map((t) => t.name).join(", ");
+    const message = destination
+      ? emptied.length
+        ? `Moved to ${destination.name} · ${emptiedNames} was empty and was deleted`
+        : `Moved to ${destination.name}`
+      : emptied.length
+        ? `Removed from trip · ${emptiedNames} was empty and was deleted`
+        : "Removed from trip";
+
+    get().notify(message, [
+      {
+        label: "Undo",
+        run: () => {
+          const restoredMemberships = { ...get().tripMembershipByKey };
+          for (const key of keys) delete restoredMemberships[key];
+          for (const r of previous) restoredMemberships[r.key] = r;
+          const restoredTrips = { ...get().tripsById };
+          for (const trip of emptied) restoredTrips[trip.id] = trip;
+          set({
+            tripMembershipByKey: restoredMemberships,
+            tripsById: restoredTrips,
+          });
+          for (const trip of emptied) persistTrip(trip);
+          if (previous.length) persistTripMemberships(previous);
+          const orphaned = keys.filter((key) => !previous.some((r) => r.key === key));
+          if (orphaned.length) {
+            void db.tripMemberships
+              .bulkDelete(orphaned)
+              .catch((e) => log.warn("store", "trip membership undo failed", e));
+          }
+        },
+      },
+    ]);
   },
 
   retryBackfill: () => {

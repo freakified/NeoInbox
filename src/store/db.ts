@@ -108,6 +108,32 @@ const migrateTagsToLocalState = async (tx: Transaction): Promise<void> => {
   if (fixed.length) await tx.table("snoozes").bulkPut(fixed);
 };
 
+/**
+ * The Travel bundle is retired — travel mail is the trips layer or nothing.
+ * Rules still pointing at it would render a stray grey "travel" bundle
+ * (getCategoryMeta falls back to the raw key), so repoint them at the
+ * unbundled inbox, and clear the category off any row that still carries it.
+ * The CLASSIFIER_VERSION bump re-runs the pipeline over those rows anyway;
+ * this just stops the dead category being visible in the meantime.
+ */
+const retireTravelCategory = async (tx: Transaction): Promise<void> => {
+  await tx
+    .table<RouteRuleRecord>("routeRules")
+    .toCollection()
+    .modify((rule) => {
+      if (rule.target === "travel") rule.target = "personal";
+    });
+  await tx
+    .table<RawMessage>("messages")
+    .toCollection()
+    .modify((m) => {
+      if (m.category === "travel") {
+        m.category = null;
+        m.classifierVersion = 0;
+      }
+    });
+};
+
 class NeoInboxDb extends Dexie {
   messages!: Table<RawMessage, number>;
   snoozes!: Table<SnoozeRecord, number>;
@@ -199,6 +225,7 @@ class NeoInboxDb extends Dexie {
             m.classifierVersion ??= 0;
           });
       });
+    this.version(14).upgrade(retireTravelCategory);
   }
 }
 

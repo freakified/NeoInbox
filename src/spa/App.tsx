@@ -27,32 +27,11 @@ import { Toaster } from "./components/Toaster";
 import { overlayIsOpen } from "./lib/overlays";
 import { moveRowFocus } from "./lib/rowNavigation";
 import { TRIP_COLOR, TripSliceRow } from "./components/TripSliceRow";
+import { isSameView, parseHashView, viewHash } from "./lib/routing";
 import s from "./App.module.css";
 
 const STREAM_PAGE_SIZE = 80;
 
-const parseHashView = (): StreamView => {
-  if (typeof window === "undefined") return { type: "inbox" };
-  const raw = decodeURIComponent(window.location.hash.replace(/^#/, ""));
-  if (raw === "snoozed") return { type: "snoozed" };
-  if (raw === "draft") return { type: "draft" };
-  if (raw === "sent") return { type: "sent" };
-  if (raw === "done") return { type: "done" };
-  if (raw === "reminders") return { type: "reminders" };
-  if (raw.startsWith("bundle/")) {
-    const category = raw.slice("bundle/".length);
-    if (category) return { type: "bundle", category };
-  }
-  return { type: "inbox" };
-};
-
-const viewHash = (view: StreamView): string => {
-  if (view.type === "bundle") return `#bundle/${encodeURIComponent(view.category)}`;
-  return `#${view.type}`;
-};
-
-const isSameView = (a: StreamView, b: StreamView): boolean =>
-  a.type === b.type && (a.type !== "bundle" || b.type !== "bundle" || a.category === b.category);
 
 const emptyTextForView = (view: StreamView, pinnedOnly: boolean): string => {
   if (view.type === "inbox" && pinnedOnly) return "No pinned messages.";
@@ -61,7 +40,7 @@ const emptyTextForView = (view: StreamView, pinnedOnly: boolean): string => {
   if (view.type === "sent") return "No sent messages.";
   if (view.type === "done") return "No done messages.";
   if (view.type === "reminders") return "No reminders — create one with the button below.";
-  if (view.type === "bundle" && view.category === "travel")
+  if (view.type === "trips")
     return "No trips yet — open a conversation's ⋮ menu and choose Move to → New trip.";
   if (view.type === "bundle") return "No messages in this bundle.";
   return "No messages found.";
@@ -76,10 +55,8 @@ const headerForView = (
   if (view.type === "done") return { title: "Done", color: "#5CA46F" };
   if (view.type === "sent") return { title: "Sent", color: "var(--color-md-primary)" };
   if (view.type === "reminders") return { title: "Reminders", color: "var(--color-md-primary)" };
+  if (view.type === "trips") return { title: "Trips", color: "#3F51B5" };
   if (view.type === "bundle") {
-    // The travel bundle's page is the trips list; the "Travel" label is only
-    // for the residual bundle of unassigned travel mail in the inbox.
-    if (view.category === "travel") return { title: "Trips", color: "#3F51B5" };
     const meta = getCategoryMeta(view.category, customBundles);
     return { title: meta.name, color: meta.color };
   }
@@ -121,7 +98,7 @@ const GO_TO_VIEWS: Record<string, StreamView> = {
   s: { type: "snoozed" },
   d: { type: "done" },
   r: { type: "reminders" },
-  t: { type: "bundle", category: "travel" },
+  t: { type: "trips" },
 };
 
 // Sweeps skip pinned threads, so a section of only pinned mail has nothing to sweep.
@@ -236,9 +213,7 @@ export const App = () => {
   // top-level drawer entry (each trip also rows up in the inbox on its own).
   const bundles = useMemo(
     () => [
-      ...Object.keys(CATEGORIES).filter(
-        (category) => category !== "personal" && category !== "travel",
-      ),
+      ...Object.keys(CATEGORIES).filter((category) => category !== "personal"),
       ...customBundles.map((bundle) => bundle.id),
     ].map((category) => ({
       id: category,
@@ -471,8 +446,8 @@ export const App = () => {
                   trip bundles individually rather than as one slice. */}
               <button
                 type="button"
-                className={navClass({ type: "bundle", category: "travel" })}
-                onClick={() => navigate({ type: "bundle", category: "travel" })}
+                className={navClass({ type: "trips" })}
+                onClick={() => navigate({ type: "trips" })}
               >
                 <Icon name="travel" className={s.navIcon} style={{ color: TRIP_COLOR }} />
                 <span>Trips</span>

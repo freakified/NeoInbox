@@ -1,5 +1,7 @@
+// No "travel": travel mail is either in a trip (its own layer, see TripRecord)
+// or loose in the inbox, exactly as in Google Inbox. The classifier's travel
+// heuristic survives as a trip-candidacy predicate only — see matchesTravel.
 export type BuiltinCategory =
-  | "travel"
   | "finance"
   | "purchases"
   | "social"
@@ -135,6 +137,30 @@ export interface TripRecord {
 }
 
 /**
+ * Why a message joined its trip. The clusterer knows this at join time and it
+ * is the only place the knowledge exists — recomputing it later would mean
+ * re-running the whole clustering pass — so it is persisted alongside the
+ * membership and surfaced in the UI ("why is this in my trip?").
+ */
+export type TripMembershipReasonKind =
+  /** Seeded the trip: a flight/lodging/train/rental reservation was extracted. */
+  | "reservation"
+  /** Shares a confirmation code with the trip. */
+  | "code-match"
+  /** Its dates fall within CLUSTER_GAP of a member's. */
+  | "date-range"
+  /** A separately booked flight home from somewhere the trip visited. */
+  | "return-leg"
+  /** The user put it there by hand. */
+  | "manual";
+
+export interface TripMembershipReason {
+  kind: TripMembershipReasonKind;
+  /** Short human detail: the shared code, the matched leg, the reservation. */
+  detail?: string;
+}
+
+/**
  * Assigns one message to a trip. Keyed by Message-ID (see pinKeyOf) so the
  * assignment survives archive moves and id renumbering. tripId null is a
  * tombstone: the user removed the message from all trips, and the phase-2
@@ -145,6 +171,8 @@ export interface TripMembershipRecord {
   tripId: string | null;
   source: "auto" | "manual";
   addedAt: number;
+  /** Absent on rows written before reasons were recorded. */
+  reason?: TripMembershipReason;
 }
 
 export type ReservationKind =

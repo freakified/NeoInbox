@@ -13,6 +13,7 @@
 import { cityOfAirport, isKnownAirport } from "./airports";
 import type {
   ReservationRecord,
+  TripMembershipReason,
   TripMembershipRecord,
   TripRecord,
 } from "./types";
@@ -68,12 +69,29 @@ interface Cluster {
    */
   spans: { start: number; end: number }[];
   keys: string[];
+  /**
+   * Why each key joined, captured at the moment the join decision is made —
+   * it cannot be recovered afterwards without re-running the whole pass, and
+   * the UI needs it to answer "why is this in my trip?".
+   */
+  reasons: Map<string, TripMembershipReason>;
   codes: Set<string>;
   airports: Set<string>;
   /** kind/destination pairs feeding the trip name. */
   flightDests: string[];
   textDests: string[];
 }
+
+/** The reservation itself, phrased for a one-line "why" chip. */
+const describeReservation = (r: ReservationRecord): string | undefined => {
+  const summary = r.segments.find((s) => s.summary)?.summary;
+  if (summary) return summary;
+  const kind = r.segments[0]?.kind;
+  return kind ? `${kind} reservation` : undefined;
+};
+
+const sharedCodeWith = (c: Cluster, r: ReservationRecord): string | undefined =>
+  r.confirmationCodes.find((code) => c.codes.has(code));
 
 const spanOf = (r: ReservationRecord): { start: number; end: number } | null => {
   let start = Infinity;
@@ -120,7 +138,11 @@ export const inferHomeAirport = (
   return best;
 };
 
-const addReservationToCluster = (c: Cluster, r: ReservationRecord): void => {
+const addReservationToCluster = (
+  c: Cluster,
+  r: ReservationRecord,
+  reason: TripMembershipReason,
+): void => {
   const span = spanOf(r);
   if (span) {
     if (span.start < c.start) c.start = span.start;
@@ -128,6 +150,7 @@ const addReservationToCluster = (c: Cluster, r: ReservationRecord): void => {
     c.spans.push(span);
   }
   c.keys.push(r.key);
+  c.reasons.set(r.key, reason);
   for (const code of r.confirmationCodes) c.codes.add(code);
   for (const s of r.segments) {
     if (s.kind === "flight") {
@@ -178,13 +201,14 @@ const clusterSharingCode = (
   return null;
 };
 
+/** The reason this reservation may join the cluster, or null if it may not. */
 const joinable = (
   c: Cluster,
   r: ReservationRecord,
   span: { start: number; end: number },
   home: string | null,
-): boolean => {
-  if (nearAnyMember(c, span) && withinSpanCap(c, span)) return true;
+): TripMembershipReason | null => {
+  if (nearAnyMember(c, span) && withinSpanCap(c, span)) return { kind: "date-range" };
   // Return leg booked separately: it flies HOME from an airport this trip
   // visited, reasonably soon after the trip's last known date. Both ends
   // matter — home is in every trip's airport set, so without excluding it,
@@ -192,16 +216,18 @@ const joinable = (
   // travel collapsed into one blob (seen in Dan's real mailbox). "The trip's
   // last known date" means the nearest actual member, not the envelope —
   // the envelope grows with every merge and stops meaning "recent."
-  if (!home) return false;
+  if (!home) return null;
   for (const s of r.segments) {
     if (s.kind !== "flight" || !s.origin || s.destination !== home) continue;
     if (s.origin === home || !c.airports.has(s.origin)) continue;
     const nearReturn = c.spans.some(
       (m) => span.start > m.end && span.start <= m.end + RETURN_WINDOW,
     );
-    if (nearReturn && withinSpanCap(c, span)) return true;
+    if (nearReturn && withinSpanCap(c, span)) {
+      return { kind: "return-leg", detail: s.summary ?? `${s.origin} → ${home}` };
+    }
   }
-  return false;
+  return null;
 };
 
 const mostCommon = (values: readonly string[]): string | null => {
@@ -245,10 +271,17 @@ export const clusterTrips = (input: TripClusterInput): TripClusterResult => {
   const clusters: Cluster[] = [];
   for (const { r, span } of creators) {
     let target = clusterSharingCode(clusters, r, span);
+    // Read the shared code before addReservationToCluster folds r's own codes
+    // into the cluster, or every join would report matching itself.
+    let reason: TripMembershipReason | null = target
+      ? { kind: "code-match", detail: sharedCodeWith(target, r) }
+      : null;
     if (!target) {
       for (const c of clusters) {
-        if (joinable(c, r, span, home)) {
+        const joined = joinable(c, r, span, home);
+        if (joined) {
           target = c;
+          reason = joined;
           break;
         }
       }
@@ -259,14 +292,16 @@ export const clusterTrips = (input: TripClusterInput): TripClusterResult => {
         end: span.end,
         spans: [],
         keys: [],
+        reasons: new Map(),
         codes: new Set(),
         airports: new Set(),
         flightDests: [],
         textDests: [],
       };
       clusters.push(target);
+      reason = { kind: "reservation", detail: describeReservation(r) };
     }
-    addReservationToCluster(target, r);
+    addReservationToCluster(target, r, reason ?? { kind: "reservation" });
   }
 
   // Attach-only pass: cancellations, dining/events, and code-only mail join
@@ -277,6 +312,9 @@ export const clusterTrips = (input: TripClusterInput): TripClusterResult => {
   for (const r of attachments) {
     const attachSpan = spanOf(r);
     let target = clusterSharingCode(clusters, r, attachSpan);
+    let reason: TripMembershipReason | null = target
+      ? { kind: "code-match", detail: sharedCodeWith(target, r) }
+      : null;
     if (!target && r.status !== "none") {
       const span = attachSpan;
       if (span) {
@@ -284,9 +322,13 @@ export const clusterTrips = (input: TripClusterInput): TripClusterResult => {
           clusters.find(
             (c) => span.start >= c.start - ATTACH_SLACK && span.end <= c.end + ATTACH_SLACK,
           ) ?? null;
+        if (target) reason = { kind: "date-range" };
       }
     }
-    if (target) target.keys.push(r.key);
+    if (target && reason) {
+      target.keys.push(r.key);
+      target.reasons.set(r.key, reason);
+    }
   }
 
   // Map clusters onto trips: any member already assigned to a live trip
@@ -335,8 +377,16 @@ export const clusterTrips = (input: TripClusterInput): TripClusterResult => {
       assignedKeys.add(key);
       const current = membershipByKey[key];
       if (current?.source === "manual") continue; // filtered above, belt+braces
-      if (current?.tripId === tripId) continue;
-      membershipsToPut.push({ key, tripId, source: "auto", addedAt: now });
+      // Rows written before reasons existed are rewritten once to backfill
+      // one; after that an unchanged assignment is left alone.
+      if (current?.tripId === tripId && current.reason) continue;
+      membershipsToPut.push({
+        key,
+        tripId,
+        source: "auto",
+        addedAt: now,
+        reason: c.reasons.get(key),
+      });
     }
   }
 
@@ -351,15 +401,17 @@ export const clusterTrips = (input: TripClusterInput): TripClusterResult => {
     membershipKeysToDelete.push(key);
   }
 
-  // GC trips this clusterer created and has now fully emptied: previously
-  // fed by auto rows, zero members after this diff applies, and never
-  // touched by the user (no custom name, no manual member — those are
-  // theirs to keep or delete).
+  // GC every trip this diff leaves with no members at all, the way Google
+  // Inbox did: emptying a trip deleted it rather than leaving a shell behind.
+  // A custom name and manual members used to buy a trip immunity here, which
+  // only meant the trips view silently accumulated empties the user then had
+  // to delete by hand.
+  //
+  // "No members" is counted over membership rows, never over threads visible
+  // in some view — snoozed and archived mail still belong to their trip.
   const deletedKeys = new Set(membershipKeysToDelete);
   const postCounts = new Map<string, number>();
-  const preAutoTripIds = new Set<string>();
   for (const [key, record] of Object.entries(membershipByKey)) {
-    if (record.source === "auto" && record.tripId) preAutoTripIds.add(record.tripId);
     const overridden = deletedKeys.has(key) || membershipsToPut.some((m) => m.key === key);
     if (!overridden && record.tripId) {
       postCounts.set(record.tripId, (postCounts.get(record.tripId) ?? 0) + 1);
@@ -369,13 +421,7 @@ export const clusterTrips = (input: TripClusterInput): TripClusterResult => {
     if (m.tripId) postCounts.set(m.tripId, (postCounts.get(m.tripId) ?? 0) + 1);
   }
   const tripIdsToDelete = Object.values(tripsById)
-    .filter(
-      (t) =>
-        !t.nameIsCustom &&
-        preAutoTripIds.has(t.id) &&
-        !(postCounts.get(t.id) ?? 0) &&
-        !tripsToPut.has(t.id),
-    )
+    .filter((t) => !(postCounts.get(t.id) ?? 0) && !tripsToPut.has(t.id))
     .map((t) => t.id);
 
   return {

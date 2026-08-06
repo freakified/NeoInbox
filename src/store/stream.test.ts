@@ -4,7 +4,7 @@
  * mailbox" is actually decided.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { deriveStream, TRIPS_CATEGORY, type StreamItem, type StreamView } from "./stream";
+import { deriveStream, type StreamItem, type StreamView } from "./stream";
 import type {
   RawMessage,
   ReminderRecord,
@@ -94,12 +94,6 @@ describe("inbox view", () => {
   it("hides snoozed mail", () => {
     const s = stream([msg({ snoozed: true }), msg()]);
     expect(kinds(s)).toEqual(["thread"]);
-  });
-
-  it("never renders a generic travel bundle", () => {
-    // Faithful to Google Inbox: travel mail is either in a trip card or loose.
-    const s = stream([msg({ category: TRIPS_CATEGORY }), msg({ category: TRIPS_CATEGORY })]);
-    expect(kinds(s).every((k) => k === "thread")).toBe(true);
   });
 
   it("orders rows newest first", () => {
@@ -196,7 +190,7 @@ describe("trips", () => {
     ({ key: m.headerMessageId, tripId: trip.id, source: "auto" }) as TripMembershipRecord;
 
   it("renders a trip as its own row in the inbox stream", () => {
-    const a = msg({ category: TRIPS_CATEGORY });
+    const a = msg();
     const s = stream(
       [a, msg()],
       { type: "inbox" },
@@ -214,7 +208,7 @@ describe("trips", () => {
     const a = msg({ category: "purchases" });
     const s = stream(
       [a],
-      { type: "bundle", category: TRIPS_CATEGORY },
+      { type: "trips" },
       {},
       false,
       {},
@@ -226,18 +220,27 @@ describe("trips", () => {
     expect(tripItem && tripItem.type === "trip" && tripItem.threads).toHaveLength(1);
   });
 
-  it("keeps an empty trip visible in the trips view but not in the inbox", () => {
-    const args = [{}, false, {}, { [trip.id]: trip }, {}] as const;
-    const inTripsView = stream([], { type: "bundle", category: TRIPS_CATEGORY }, ...args);
-    const inInbox = stream([], { type: "inbox" }, ...args);
+  it("shows a trip with no visible mail in the trips view but not the inbox", () => {
+    // A trip with zero members is deleted outright, so this is the live case:
+    // a real trip whose mail is currently snoozed. It must stay on the trips
+    // page — the mail is coming back — while staying out of today's inbox.
+    const a = msg({ snoozed: true });
+    const args = [
+      {},
+      false,
+      {},
+      { [trip.id]: trip },
+      { [a.headerMessageId]: membership(a) },
+    ] as const;
+    const inTripsView = stream([a], { type: "trips" }, ...args);
+    const inInbox = stream([a], { type: "inbox" }, ...args);
 
-    // An empty trip must stay reachable so it can be renamed or deleted.
     expect(kinds(inTripsView)).toEqual(["trip"]);
     expect(kinds(inInbox)).toEqual([]);
   });
 
   it("renders a membership pointing at a deleted trip as loose mail", () => {
-    const a = msg({ category: TRIPS_CATEGORY });
+    const a = msg();
     const s = stream(
       [a],
       { type: "inbox" },

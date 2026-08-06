@@ -20,6 +20,9 @@ export type StreamView =
   | { type: "sent" }
   | { type: "done" }
   | { type: "reminders" }
+  // Trips is not a bundle: membership is explicit (TripMembershipRecord), not
+  // a category, so it gets its own view rather than borrowing a category name.
+  | { type: "trips" }
   | { type: "bundle"; category: Category };
 
 export type StreamItem =
@@ -93,9 +96,6 @@ const reminderDateForView = (
   return null;
 };
 
-/** The bundle whose view groups member threads into trip cards. */
-export const TRIPS_CATEGORY: Category = "travel";
-
 export const deriveStream = (
   messagesById: Record<number, RawMessage>,
   myEmails: ReadonlySet<string>,
@@ -114,7 +114,7 @@ export const deriveStream = (
         ? ["draft"]
         : view.type === "done"
           ? ["done"]
-          : view.type === "bundle"
+          : view.type === "bundle" || view.type === "trips"
             ? ["inbox", "done"]
             : ["inbox"],
   );
@@ -129,18 +129,17 @@ export const deriveStream = (
     if (view.type === "draft") return m.origin === "draft";
     if (view.type === "sent") return m.origin === "sent";
     if (view.type === "done") return m.origin === "sent" || m.origin === "draft" || m.origin === "done";
-    // The bundle view is the whole bundle: done messages count alongside inbox.
-    // The trips bundle additionally pulls in any mail assigned to a trip,
-    // whatever its category — manual adds aren't limited to travel mail.
-    const inTrip =
-      view.category === TRIPS_CATEGORY &&
-      tripMembershipByKey[pinKeyOf(m)]?.tripId != null;
+    // Both remaining views (bundle, trips) are "the whole thing": done messages
+    // count alongside inbox. Trip membership is what selects, not category —
+    // manual adds aren't limited to travel-looking mail.
+    const belongs =
+      view.type === "trips"
+        ? tripMembershipByKey[pinKeyOf(m)]?.tripId != null
+        : m.category === view.category;
     return (
       m.origin === "sent" ||
       m.origin === "draft" ||
-      ((m.origin === "inbox" || m.origin === "done") &&
-        !m.snoozed &&
-        (m.category === view.category || inTrip))
+      ((m.origin === "inbox" || m.origin === "done") && !m.snoozed && belongs)
     );
   });
   let threads = buildThreads(visible, myEmails, anchorOrigins);
@@ -159,7 +158,7 @@ export const deriveStream = (
     threads = threads.filter((t) => t.pinned);
   }
   const showInboxBundles = view.type === "inbox";
-  const showTripsView = view.type === "bundle" && view.category === TRIPS_CATEGORY;
+  const showTripsView = view.type === "trips";
   // Faithful to Google Inbox: each trip is its own row in the inbox stream,
   // not a slice of the travel bundle.
   const groupTrips = showInboxBundles || showTripsView;
@@ -181,15 +180,7 @@ export const deriveStream = (
         byTrip.set(tripId, arr);
       }
       arr.push(t);
-    } else if (
-      // Like real Inbox, there is no generic travel bundle: travel mail is
-      // either in a trip or loose in the inbox. The category survives
-      // internally to feed the trips view's unassigned list and extraction.
-      showInboxBundles &&
-      t.category &&
-      t.category !== TRIPS_CATEGORY &&
-      !t.pinned
-    ) {
+    } else if (showInboxBundles && t.category && !t.pinned) {
       let arr = byCategory.get(t.category);
       if (!arr) {
         arr = [];

@@ -6,9 +6,10 @@
  * change hasn't moved mail that was already landing correctly.
  */
 import { describe, expect, it } from "vitest";
-import { corpus, knownLimitations, type CorpusCase } from "./corpus";
+import { corpus, knownLimitations, tripCandidacy, type CorpusCase } from "./corpus";
 import { classifyByRules } from "./pipeline";
 import { extractFeatures } from "./features";
+import { matchesTravel } from "./rules/travel";
 
 const classify = (entry: CorpusCase): string | null => {
   const header = { author: entry.author, subject: entry.subject } as messenger.messages.MessageHeader;
@@ -27,7 +28,6 @@ describe("classifier corpus", () => {
     const covered = new Set(corpus.map((c) => c.expect));
     for (const category of [
       "forums",
-      "travel",
       "purchases",
       "finance",
       "social",
@@ -36,6 +36,28 @@ describe("classifier corpus", () => {
       null,
     ]) {
       expect(covered).toContain(category);
+    }
+  });
+});
+
+describe("trip candidacy", () => {
+  // matchesTravel no longer feeds classifyByRules — it only decides whether a
+  // message is worth running the reservation extractors over, independently of
+  // whatever bundle a route rule sends it to.
+  for (const entry of tripCandidacy) {
+    it(`${entry.name} -> ${entry.expect ? "candidate" : "not a candidate"}`, () => {
+      const header = { author: entry.author, subject: entry.subject };
+      expect(matchesTravel(extractFeatures(header, {}))).toBe(entry.expect);
+    });
+  }
+
+  it("leaves candidates unbundled rather than dropping them into Updates", () => {
+    // An unclustered booking must stay visible in the inbox. Without the
+    // explicit null return in classifyByRules these fall through to
+    // matchesUpdates and vanish into a bundle.
+    for (const entry of tripCandidacy.filter((c) => c.expect)) {
+      const header = { author: entry.author, subject: entry.subject };
+      expect(classifyByRules(extractFeatures(header, {}))).toBeNull();
     }
   });
 });

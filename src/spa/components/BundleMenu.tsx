@@ -17,12 +17,12 @@ import { NewTripDialog } from "./NewTripDialog";
 import { TRIP_COLOR } from "./TripSliceRow";
 import s from "./BundleMenu.module.css";
 
-// Travel isn't offered: like real Inbox there's no travel bundle — travel
-// mail is either in a trip (listed below the bundles) or loose in the inbox.
+// Trips aren't in this list because they aren't categories — they're appended
+// separately below, from the live trip records.
 const MOVE_DESTINATIONS: BuiltinCategory[] = [
   "personal",
   ...(Object.entries(CATEGORIES)
-    .filter(([cat]) => cat !== "personal" && cat !== "travel")
+    .filter(([cat]) => cat !== "personal")
     .sort(([, a], [, b]) => a.order - b.order)
     .map(([cat]) => cat as BuiltinCategory)),
 ];
@@ -57,16 +57,17 @@ export const BundleMenu = ({
   );
   const currentTripId = tripIdOfThread(thread, tripMemberships);
 
-  const moveToTrip = (tripId: string, tripName: string) => {
+  // setTripMembership owns the toast: only it knows whether the move emptied
+  // (and so deleted) the trip the thread came from, and its Undo has to
+  // restore that trip as well as the membership rows.
+  const moveToTrip = (tripId: string) => {
     setMenuOpen(false);
     setTripMembership(tripKeysOfThread(thread), tripId);
-    notify(`Moved to ${tripName}`);
   };
 
   const removeFromTrip = () => {
     setMenuOpen(false);
     setTripMembership(tripKeysOfThread(thread), null);
-    notify("Removed from trip");
   };
 
   const sender = useMemo(
@@ -249,7 +250,7 @@ export const BundleMenu = ({
                     icon="travel"
                     color={TRIP_COLOR}
                     current={currentTripId === trip.id}
-                    onClick={() => moveToTrip(trip.id, trip.name)}
+                    onClick={() => moveToTrip(trip.id)}
                   />
                 ))}
               </div>

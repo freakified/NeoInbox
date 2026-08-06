@@ -1,26 +1,67 @@
 import { pinKeyOf } from "./pinKey";
-import type { Thread, TripMembershipRecord, TripRecord } from "./types";
+import type {
+  Thread,
+  TripMembershipReason,
+  TripMembershipRecord,
+  TripRecord,
+} from "./types";
 
 /** Membership keys for every message in the thread (see pinKeyOf). */
 export const tripKeysOfThread = (thread: Thread): string[] =>
   thread.messages.map((m) => pinKeyOf(m));
 
 /**
- * The trip a thread belongs to, or null. A thread joins a trip when any of
- * its messages has a membership; if messages disagree, the most recent
+ * The membership deciding where a thread sits. A thread joins a trip when any
+ * of its messages has a membership; if messages disagree, the most recent
  * assignment wins (tombstones included, so a later "remove" beats an earlier
  * add).
  */
-export const tripIdOfThread = (
+export const tripMembershipOfThread = (
   thread: Thread,
   membershipByKey: Record<string, TripMembershipRecord>,
-): string | null => {
+): TripMembershipRecord | null => {
   let latest: TripMembershipRecord | null = null;
   for (const key of tripKeysOfThread(thread)) {
     const record = membershipByKey[key];
     if (record && (!latest || record.addedAt > latest.addedAt)) latest = record;
   }
-  return latest?.tripId ?? null;
+  return latest;
+}
+
+/** The trip a thread belongs to, or null. */
+export const tripIdOfThread = (
+  thread: Thread,
+  membershipByKey: Record<string, TripMembershipRecord>,
+): string | null => tripMembershipOfThread(thread, membershipByKey)?.tripId ?? null;
+
+/**
+ * One line explaining why a message is in its trip. The clusterer records the
+ * reason at join time; anything written before it did so reads as a plain
+ * automatic add until the next recluster backfills it.
+ */
+export const describeTripReason = (
+  reason: TripMembershipReason | undefined,
+): string => {
+  switch (reason?.kind) {
+    case "reservation":
+      return reason.detail
+        ? `Reservation found in this message — ${reason.detail}`
+        : "A reservation was found in this message";
+    case "code-match":
+      return reason.detail
+        ? `Shares confirmation ${reason.detail} with this trip`
+        : "Shares a confirmation code with this trip";
+    case "date-range":
+      return "Its dates fall inside this trip";
+    case "return-leg":
+      return reason.detail
+        ? `Booked as the flight home — ${reason.detail}`
+        : "Booked as the flight home";
+    case "manual":
+      return "You added this to the trip";
+    default:
+      return "Added automatically";
+  }
 }
 
 /**

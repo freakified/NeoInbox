@@ -15,8 +15,10 @@ export interface Features {
   hasMailingList: boolean;
 }
 
+// Widened from MessageHeader to just the fields actually read, so cached
+// RawMessage rows can be run through the travel heuristic without a cast.
 export const extractFeatures = (
-  header: messenger.messages.MessageHeader,
+  header: Pick<messenger.messages.MessageHeader, "author" | "subject">,
   headers: Record<string, string[]>,
 ): Features => {
   const sender = parseSender(header.author ?? "");

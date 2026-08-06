@@ -21,6 +21,8 @@
  * and text snippets of the misses, for tuning the per-sender parsers.
  */
 import { EXTRACTOR_VERSION, hasSenderExtractor, runExtractors } from "../classifier/extractors";
+import { extractFeatures } from "../classifier/features";
+import { matchesTravel } from "../classifier/rules/travel";
 import { findAirports, findFlights } from "../classifier/extractors/flights";
 import { findConfirmationCodes, findDates, htmlToText } from "../classifier/extractors/text";
 import { withTimeout } from "./backfill";
@@ -49,9 +51,16 @@ const SWEEP_PACE_MS = 50;
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Candidacy is computed from the message itself, never from its stored
+ * category. Reading `category === "travel"` here used to mean a route rule
+ * ("send amtrak to Updates") could delete the signal that got a booking's body
+ * scanned at all, so a user's bundle preference silently disabled trip
+ * detection for that sender. Trips are evaluated independently of routing.
+ */
 export const isTripCandidate = (m: RawMessage, includeDone = false): boolean => {
   if (m.origin !== "inbox" && !(includeDone && m.origin === "done")) return false;
-  if (m.category === "travel") return true;
+  if (matchesTravel(extractFeatures(m, {}))) return true;
   const domain = parseSender(m.author).domain;
   if (domain && hasSenderExtractor(domain)) return true;
   return CANDIDATE_SUBJECT_RE.test(m.subject);
