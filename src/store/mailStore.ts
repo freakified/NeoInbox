@@ -303,6 +303,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   },
 
   pin: (messageId, pinned) => {
+    flushDelta(set, get);
     const map = { ...get().messagesById };
     const m = map[messageId];
     if (m) {
@@ -314,6 +315,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
 
   doneThread: (messageIds) => {
     if (messageIds.length === 0) return;
+    flushDelta(set, get);
     const prev = get().messagesById;
     const map = { ...prev };
     const pending = { ...get().pendingOps };
@@ -344,6 +346,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
 
   snoozeThread: (messageIds, wakeAt) => {
     if (messageIds.length === 0) return;
+    flushDelta(set, get);
     const prev = get().messagesById;
     const map = { ...prev };
     const pending = { ...get().pendingOps };
@@ -372,6 +375,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
 
   unsnoozeThread: (messageIds) => {
     if (messageIds.length === 0) return;
+    flushDelta(set, get);
     const prev = get().messagesById;
     const map = { ...prev };
     const pending = { ...get().pendingOps };
@@ -390,6 +394,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
 
   trashThread: (messageIds) => {
     if (messageIds.length === 0) return;
+    flushDelta(set, get);
     const prev = get().messagesById;
     const map = { ...prev };
     const pending = { ...get().pendingOps };
@@ -416,6 +421,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
 
   moveToInboxThread: (messageIds) => {
     if (messageIds.length === 0) return;
+    flushDelta(set, get);
     const prev = get().messagesById;
     const map = { ...prev };
     const pending = { ...get().pendingOps };
@@ -445,6 +451,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   },
 
   applyCategoryLocally: (messageIds, category) => {
+    flushDelta(set, get);
     const map = { ...get().messagesById };
     for (const id of messageIds) {
       const m = map[id];
@@ -582,6 +589,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   },
 
   healStaleMessage: (staleId, liveId) => {
+    flushDelta(set, get);
     const map = { ...get().messagesById };
     const stale = map[staleId];
     if (!stale) return;
@@ -767,6 +775,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   },
 
   undoToast: (toastId) => {
+    flushDelta(set, get);
     const timer = undoTimers.get(toastId);
     if (timer !== undefined) {
       clearTimeout(timer);
@@ -827,6 +836,71 @@ const failureLabel = (command: FailedCommand): string => {
   return "Couldn't move to trash";
 }
 
+/**
+ * Deltas are buffered and applied as one store write instead of one write
+ * each.
+ *
+ * A scan broadcasts a delta every hundred rows, and each write replaces
+ * messagesById — which invalidates the stream memo and costs a full re-thread
+ * (buildThreads unions every visible message) plus a re-render. A large
+ * mailbox paid for that a hundred times over while it synced. The flush lands
+ * on a timer, so deltas arriving faster than the event loop drains collapse
+ * into a single update, while an isolated delta still applies on the next tick.
+ */
+const REMOVED = Symbol("removed");
+type BufferedRow = RawMessage | typeof REMOVED;
+
+let pendingRows: Map<number, BufferedRow> | null = null;
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Applies the buffered deltas now.
+ *
+ * Every optimistic mutation calls this first. Without it, a delta queued in
+ * one turn and a click in the next would race: the flush would overwrite the
+ * row the click just changed with a copy that predates it, and the action
+ * would visibly revert until the next delta corrected it.
+ */
+const flushDelta = (
+  set: (partial: Partial<MailStore>) => void,
+  get: () => MailStore,
+): void => {
+  if (flushTimer !== null) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  const rows = pendingRows;
+  pendingRows = null;
+  if (!rows?.size) return;
+
+  const map = { ...get().messagesById };
+  const snoozesByMessageId = { ...get().snoozesByMessageId };
+  const pending = { ...get().pendingOps };
+  let pendingChanged = false;
+
+  for (const [id, row] of rows) {
+    if (row === REMOVED) {
+      delete map[id];
+      delete snoozesByMessageId[id];
+    } else {
+      map[id] = row;
+      // A message that comes back unsnoozed has woken; drop any stale record.
+      if (snoozesByMessageId[id] && !row.snoozed) delete snoozesByMessageId[id];
+    }
+    // Any delta naming a message settles the optimistic op waiting on it.
+    if (id in pending) {
+      delete pending[id];
+      pendingChanged = true;
+    }
+  }
+
+  set({
+    messagesById: map,
+    snoozesByMessageId,
+    ...(pendingChanged ? { pendingOps: pending } : {}),
+  });
+};
+
 const applyServerMsg = (
   set: (partial: Partial<MailStore>) => void,
   get: () => MailStore,
@@ -834,34 +908,15 @@ const applyServerMsg = (
 ): void => {
   switch (msg.type) {
     case "delta": {
-      const map = { ...get().messagesById };
-      if (msg.added) for (const m of msg.added) map[m.id] = m;
-      if (msg.updated) for (const m of msg.updated) map[m.id] = m;
-      if (msg.removedIds) for (const id of msg.removedIds) delete map[id];
-      const snoozesByMessageId = { ...get().snoozesByMessageId };
-      if (msg.removedIds) for (const id of msg.removedIds) delete snoozesByMessageId[id];
-      // A message that comes back unsnoozed has woken; drop any stale record.
-      for (const m of [...(msg.added ?? []), ...(msg.updated ?? [])]) {
-        if (snoozesByMessageId[m.id] && !m.snoozed) {
-          delete snoozesByMessageId[m.id];
-        }
-      }
-      set({ messagesById: map, snoozesByMessageId });
-      const settledIds = [
-        ...(msg.removedIds ?? []),
-        ...(msg.added ?? []).map((m) => m.id),
-        ...(msg.updated ?? []).map((m) => m.id),
-      ];
-      if (settledIds.length) {
-        const pending = { ...get().pendingOps };
-        let changed = false;
-        for (const id of settledIds) {
-          if (id in pending) {
-            delete pending[id];
-            changed = true;
-          }
-        }
-        if (changed) set({ pendingOps: pending });
+      // Last write per id wins, which is what applying the deltas in arrival
+      // order would produce: a row added then removed ends up removed, and a
+      // row removed then re-added ends up present.
+      const rows = (pendingRows ??= new Map());
+      if (msg.added) for (const m of msg.added) rows.set(m.id, m);
+      if (msg.updated) for (const m of msg.updated) rows.set(m.id, m);
+      if (msg.removedIds) for (const id of msg.removedIds) rows.set(id, REMOVED);
+      if (flushTimer === null) {
+        flushTimer = setTimeout(() => flushDelta(set, get), 0);
       }
       return;
     }
@@ -879,6 +934,9 @@ const applyServerMsg = (
       });
       return;
     case "command-failed": {
+      // The rollback restores the pre-op row, so it must land after any delta
+      // still buffered for that message rather than be overwritten by it.
+      flushDelta(set, get);
       const pending = { ...get().pendingOps };
       const op = pending[msg.messageId];
       const map = { ...get().messagesById };

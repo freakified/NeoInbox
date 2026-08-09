@@ -5,9 +5,9 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { boot, type Booted } from "../test/boot";
-import { categoriesOf, forumMail, INBOX, many, personalMail, promoMail, shapes } from "../test/fixtures";
+import { ARCHIVE, categoriesOf, forumMail, INBOX, many, personalMail, promoMail, SENT, shapes } from "../test/fixtures";
 import { CLASSIFIER_VERSION } from "../classifier/version";
-import type { FakeMessengerOptions } from "../test/fakeMessenger";
+import { settle, type FakeMessengerOptions } from "../test/fakeMessenger";
 import type { RawMessage } from "../shared/types";
 
 const cachedRow = (over: Partial<RawMessage> = {}): RawMessage => ({
@@ -397,5 +397,168 @@ describe("version sweep when Thunderbird has renumbered the cache", () => {
     // Retiring a row must not blank its bundle — it just stops being retried.
     const rows = await app.db.messages.toArray();
     expect(rows.map((m) => m.category)).toEqual(["promos", "promos", "promos"]);
+  });
+});
+
+/**
+ * A scan's cost is dominated by per-message round trips, not by the rules
+ * engine. These pin the round trips down: correctness tests above stay green
+ * whether a message is fetched once or three times, so nothing else notices a
+ * regression here until a real mailbox chugs.
+ *
+ * runBackfill kicks off details hydration detached, so every case settles
+ * rather than awaiting it directly — the in-flight guard would make a second
+ * call return immediately and read the cache mid-write.
+ */
+describe("per-message fetch cost of a scan", () => {
+  it("fetches each inbox message's body once, not once per consumer", async () => {
+    // The classifier wants List-* headers and the details extractor wants
+    // References/In-Reply-To — both out of the same getFull.
+    const app = await open(shapes.standard(many(10, promoMail)));
+
+    await app.backfill.runBackfill();
+    await settle();
+
+    const { getFull } = app.mail.calls;
+    expect(getFull).toHaveLength(10);
+    expect(new Set(getFull).size).toBe(10);
+  });
+
+  it("does not refetch bodies on a rescan that reclassifies nothing", async () => {
+    const app = await open(shapes.standard(many(10, promoMail)));
+    await app.backfill.runBackfill();
+    await settle();
+    app.mail.calls.getFull.length = 0;
+
+    await app.backfill.runIncrementalSync();
+    await settle();
+
+    expect(app.mail.calls.getFull).toHaveLength(0);
+  });
+
+  it("skips listAttachments for sent mail, whose attachments are discarded", async () => {
+    const app = await open(shapes.withSent(many(4, promoMail), many(6, personalMail)));
+
+    await app.backfill.runBackfill();
+    await settle();
+
+    // Sent rows are threading material only; the inbox still lists its own.
+    const sentIds = new Set(app.mail.idsIn(SENT));
+    expect(app.mail.calls.listAttachments.some((id) => sentIds.has(id))).toBe(false);
+    expect(new Set(app.mail.calls.listAttachments)).toEqual(
+      new Set(app.mail.idsIn(INBOX)),
+    );
+  });
+
+  it("still threads sent mail into its inbox conversation", async () => {
+    // The guard on the change above: dropping the attachment call must not
+    // cost the References header that threading runs on.
+    const app = await open(
+      shapes.withSent(
+        [personalMail({ headerMessageId: "<root@example.com>" })],
+        [
+          personalMail({
+            subject: "Re: Lunch on Thursday",
+            headers: { References: ["<root@example.com>"] },
+          }),
+        ],
+      ),
+    );
+
+    await app.backfill.runBackfill();
+    await settle();
+
+    const sent = (await app.db.messages.toArray()).find((m) => m.origin === "sent");
+    expect(sent?.references).toEqual(["root@example.com"]);
+  });
+});
+
+/**
+ * The scan's bookkeeping paths: drift detection and the stranded-row prune.
+ * Both were rewritten to work off indexes instead of reading the whole cache,
+ * and neither had coverage — a prune that quietly ate archived mail, or a
+ * drift check that fired on every sync, would both have looked like a pass.
+ */
+describe("drift detection", () => {
+  it("re-scans a folder in full when the cached count disagrees", async () => {
+    const app = await open(shapes.standard(many(3, promoMail)));
+    await app.backfill.runBackfill();
+
+    // Lands with no event and dated behind the cursor, so an incremental query
+    // looks straight past it. Only the count mismatch can reveal it.
+    app.mail.insert(INBOX, promoMail({ date: new Date(Date.now() - 90 * 86_400_000) }));
+
+    await app.backfill.runIncrementalSync();
+
+    expect(await app.db.messages.count()).toBe(4);
+  });
+
+  it("stays incremental when the cached count matches", async () => {
+    const app = await open(shapes.standard(many(3, promoMail)));
+    await app.backfill.runBackfill();
+    app.mail.calls.list = 0;
+
+    await app.backfill.runIncrementalSync();
+
+    // list() is the wholesale folder read; an incremental sweep uses query().
+    expect(app.mail.calls.list).toBe(0);
+  });
+
+  it("does not read a snoozed row as drift", async () => {
+    const app = await open(shapes.standard(many(3, promoMail)));
+    await app.backfill.runBackfill();
+
+    // Snoozing archives the message, so it leaves the inbox while the cached
+    // row still carries the old folder. Counting that row would show the cache
+    // one ahead of the mailbox and force a full rescan on every single sync.
+    const [first] = await app.db.messages.toArray();
+    await app.db.messages.put({ ...first!, snoozed: true });
+    await app.db.snoozes.put({
+      messageId: first!.id,
+      headerMessageId: first!.headerMessageId,
+      wakeAt: Date.now() + 86_400_000,
+      originFolderId: INBOX,
+      originAccountId: "a",
+    });
+    app.mail.remove(first!.id);
+    app.mail.calls.list = 0;
+
+    await app.backfill.runIncrementalSync();
+
+    expect(app.mail.calls.list).toBe(0);
+  });
+});
+
+describe("pruning rows from folders that lost their role", () => {
+  it("drops rows stranded in an unscanned folder", async () => {
+    const app = await open(shapes.standard(many(2, promoMail)));
+    await app.backfill.runBackfill();
+    await app.db.messages.put(cachedRow({ id: 9001, folderId: "a-folder-we-no-longer-scan" }));
+
+    await app.backfill.runBackfill();
+
+    expect(await app.db.messages.get(9001)).toBeUndefined();
+  });
+
+  it("keeps archived rows, which live outside the scanned folders by design", async () => {
+    const app = await open(shapes.standard(many(2, promoMail)));
+    await app.backfill.runBackfill();
+    await app.db.messages.put(cachedRow({ id: 9002, folderId: ARCHIVE, origin: "done" }));
+
+    await app.backfill.runBackfill();
+
+    expect(await app.db.messages.get(9002)).toBeDefined();
+  });
+
+  it("keeps snoozed rows, which are archived but still ours", async () => {
+    const app = await open(shapes.standard(many(2, promoMail)));
+    await app.backfill.runBackfill();
+    await app.db.messages.put(
+      cachedRow({ id: 9003, folderId: ARCHIVE, origin: "inbox", snoozed: true }),
+    );
+
+    await app.backfill.runBackfill();
+
+    expect(await app.db.messages.get(9003)).toBeDefined();
   });
 });

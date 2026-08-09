@@ -2,7 +2,12 @@ import { db } from "../store/db";
 import { log } from "../shared/log";
 import type { RawMessage, SnoozeRecord } from "../shared/types";
 import { archiveFolderIdsForAccount } from "./archiveFolders";
-import { applyMessageDetails, classifyMessage, doneMessage } from "./ingest";
+import {
+  applyMessageDetails,
+  classifyMessage,
+  doneMessage,
+  loadMessageBody,
+} from "./ingest";
 import { applyClassification } from "../classifier/version";
 import { applyLocalState, invalidateSnoozeIndex } from "./localState";
 import { headerToRawMessage } from "./messageMap";
@@ -119,11 +124,12 @@ export const wakeSnoozedMessage = async (
     }
 
     const raw = headerToRawMessage(restoredHeader, "inbox");
-    applyClassification(raw, await classifyMessage(restoredHeader));
+    const body = await loadMessageBody(restoredHeader.id);
+    applyClassification(raw, await classifyMessage(restoredHeader, body));
     await applyLocalState(raw);
     if (reason === "alarm") raw.resurfacedAt = record.wakeAt;
     else if (reason === "unsnooze") raw.resurfacedAt = Date.now();
-    await applyMessageDetails(raw);
+    await applyMessageDetails(raw, undefined, body);
     if (originalId !== raw.id) {
       await db.messages.delete(originalId);
       broadcast({ type: "delta", removedIds: [originalId] });

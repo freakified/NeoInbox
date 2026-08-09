@@ -76,22 +76,65 @@ const messageSettledOutOfFolder = async (
   );
 }
 
+/**
+ * One message body, fetched once and passed to everything that needs it.
+ *
+ * The classifier reads the List-* headers and the details extractor reads
+ * References/In-Reply-To — both out of the same getFull(), which on IMAP is a
+ * round trip. Ingesting a message used to pay for that trip twice.
+ */
+export interface MessageBody {
+  full: messenger.messages.MessagePart | null;
+  /** getFull() rejected, usually because IMAP hasn't synced the body yet. */
+  unavailable: boolean;
+}
+
+export const loadMessageBody = async (messageId: number): Promise<MessageBody> => {
+  try {
+    return { full: await messenger.messages.getFull(messageId), unavailable: false };
+  } catch (e) {
+    log.debug("ingest", "getFull failed", { id: messageId, e });
+    return { full: null, unavailable: true };
+  }
+}
+
+const INCOMPLETE_CLASSIFICATION_KEY = "neoinbox-incomplete-classifications";
+
+/**
+ * Whether any row may have been classified without its body.
+ *
+ * The retry sweep runs after every scan, and the rows it wants can't be found
+ * by index: classifiedIncomplete is a boolean, and IndexedDB cannot index one.
+ * So the choice is a full read of the cache after every scan or a flag saying
+ * whether a read would find anything — this is the flag.
+ *
+ * Absent means "never established", not "clean": an install upgrading into
+ * this code may already hold incomplete rows, so the first pass still looks.
+ */
+export const anyIncompleteClassifications = async (): Promise<boolean> => {
+  const stored = await messenger.storage.local.get(INCOMPLETE_CLASSIFICATION_KEY);
+  return stored[INCOMPLETE_CLASSIFICATION_KEY] !== false;
+}
+
+export const setIncompleteClassifications = async (present: boolean): Promise<void> => {
+  await messenger.storage.local.set({ [INCOMPLETE_CLASSIFICATION_KEY]: present });
+}
+
 export const classifyMessage = async (
   header: messenger.messages.MessageHeader,
+  body?: MessageBody,
 ): Promise<ClassificationResult> => {
-  let headers: Record<string, string[]> = {};
-  let incomplete = false;
-  try {
-    const full = await messenger.messages.getFull(header.id);
-    headers = full.headers ?? {};
-  } catch (e) {
-    incomplete = true;
-    log.debug("ingest", "getFull failed", { id: header.id, e });
+  const resolved = body ?? (await loadMessageBody(header.id));
+  if (resolved.unavailable) {
+    // Every classification funnels through here, so this is the one place that
+    // can tell the retry sweep it has work waiting.
+    void setIncompleteClassifications(true).catch((e) =>
+      log.debug("ingest", "recording an incomplete classification failed", e),
+    );
   }
-
-  const features = extractFeatures(header, headers);
+  const features = extractFeatures(header, resolved.full?.headers ?? {});
   const category = await classify(features);
-  return { category: category ?? null, incomplete };
+  return { category: category ?? null, incomplete: resolved.unavailable };
 }
 
 /**
@@ -325,26 +368,40 @@ const headerValues = (
   return [];
 }
 
+export interface DetailsOptions {
+  /** An already-fetched body, so this doesn't call getFull() a second time. */
+  body?: MessageBody;
+  /**
+   * Whether to list attachments. Sent and draft rows discard the list — they
+   * only need References/In-Reply-To for threading — so fetching it there is a
+   * round trip spent on a value the caller throws away.
+   */
+  attachments?: boolean;
+}
+
 export const extractMessageDetails = async (
   messageId: number,
+  options: DetailsOptions = {},
 ): Promise<MessageDetails> => {
-  let list: messenger.messages.MessageAttachment[];
-  try {
-    list = await messenger.messages.listAttachments(messageId);
-  } catch {
-    list = [];
+  let list: messenger.messages.MessageAttachment[] = [];
+  if (options.attachments ?? true) {
+    try {
+      list = await messenger.messages.listAttachments(messageId);
+    } catch {
+      list = [];
+    }
   }
 
+  const body = options.body ?? (await loadMessageBody(messageId));
   let cidRefs = new Set<string>();
   let references: string[] = [];
   let inReplyTo: string[] = [];
-  try {
-    const full = await messenger.messages.getFull(messageId);
-    cidRefs = scanCidRefs(full);
-    references = headerValues(full.headers, "references").flatMap(messageIdTokens);
-    inReplyTo = headerValues(full.headers, "in-reply-to").flatMap(messageIdTokens);
-  } catch {
-    /* no body available; render every attachment as a card */
+  // No body available: render every attachment as a card, and thread on
+  // subject/participant alone.
+  if (body.full) {
+    cidRefs = scanCidRefs(body.full);
+    references = headerValues(body.full.headers, "references").flatMap(messageIdTokens);
+    inReplyTo = headerValues(body.full.headers, "in-reply-to").flatMap(messageIdTokens);
   }
 
   const attachments = list
@@ -383,6 +440,7 @@ export const canReuseMessageDetails = (
 export const applyMessageDetails = async (
   raw: RawMessage,
   cached?: RawMessage,
+  body?: MessageBody,
 ): Promise<void> => {
   if (raw.origin === "inbox" && raw.resurfacedAt === undefined && cached?.resurfacedAt !== undefined) {
     raw.resurfacedAt = cached.resurfacedAt;
@@ -392,11 +450,11 @@ export const applyMessageDetails = async (
     raw.attachments = cached.attachments;
     raw.references = cached.references;
     raw.inReplyTo = cached.inReplyTo;
-    raw.detailsVersion = cached.detailsVersion;
+    raw.detailsVersion = cached.detailsVersion ?? 0;
     return;
   }
 
-  const details = await extractMessageDetails(raw.id);
+  const details = await extractMessageDetails(raw.id, { body });
   raw.attachments = details.attachments;
   raw.references = details.references;
   raw.inReplyTo = details.inReplyTo;
@@ -406,9 +464,10 @@ export const applyMessageDetails = async (
 export const applyMessageDetailsForOrigin = async (
   raw: RawMessage,
   cached?: RawMessage,
+  body?: MessageBody,
 ): Promise<void> => {
   if (raw.origin === "inbox") {
-    await applyMessageDetails(raw, cached);
+    await applyMessageDetails(raw, cached, body);
     return;
   }
 
@@ -419,11 +478,11 @@ export const applyMessageDetailsForOrigin = async (
     raw.attachments = cached.attachments;
     raw.references = cached.references;
     raw.inReplyTo = cached.inReplyTo;
-    raw.detailsVersion = cached.detailsVersion;
+    raw.detailsVersion = cached.detailsVersion ?? 0;
     return;
   }
 
-  const details = await extractMessageDetails(raw.id);
+  const details = await extractMessageDetails(raw.id, { body, attachments: false });
   raw.attachments = [];
   raw.references = details.references;
   raw.inReplyTo = details.inReplyTo;

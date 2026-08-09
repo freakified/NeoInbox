@@ -127,6 +127,70 @@ describe("optimistic done", () => {
   });
 });
 
+/**
+ * Deltas are buffered and flushed as one write. These cover the two things
+ * that buys and the one thing it puts at risk: fewer re-renders, unchanged
+ * net effect, and no clobbering of a click that lands mid-buffer.
+ */
+describe("delta coalescing", () => {
+  beforeEach(async () => {
+    await store().init();
+    await settle();
+  });
+
+  /** Emits without settling, so several deltas land in one buffer window. */
+  const emit = (msg: ServerMsg): void => {
+    app.mail.port?.onMessage.emitSync(msg);
+  };
+
+  it("applies a burst of deltas as a single store update", async () => {
+    let updates = 0;
+    const unsubscribe = app.useMailStore.subscribe(() => {
+      updates++;
+    });
+
+    for (let id = 1; id <= 20; id++) emit({ type: "delta", added: [row({ id })] });
+    // Still buffered: a scan's deltas must not each cost a re-thread.
+    expect(updates).toBe(0);
+    await settle();
+    unsubscribe();
+
+    expect(updates).toBe(1);
+    expect(Object.keys(store().messagesById)).toHaveLength(20);
+  });
+
+  it("nets out an add followed by a removal", async () => {
+    emit({ type: "delta", added: [row({ id: 1 })] });
+    emit({ type: "delta", removedIds: [1] });
+    await settle();
+
+    expect(store().messagesById[1]).toBeUndefined();
+  });
+
+  it("nets out a removal followed by a re-add", async () => {
+    await fromBackground({ type: "delta", added: [row({ id: 1 })] });
+
+    emit({ type: "delta", removedIds: [1] });
+    emit({ type: "delta", added: [row({ id: 1, read: true })] });
+    await settle();
+
+    expect(store().messagesById[1]?.read).toBe(true);
+  });
+
+  it("does not let a buffered delta overwrite a click that beats the flush", async () => {
+    await fromBackground({ type: "delta", added: [row({ id: 1 })] });
+
+    // The delta is still in the buffer when the user pins the row. Applying it
+    // afterwards would revert the pin on screen until the next delta arrived.
+    emit({ type: "delta", updated: [row({ id: 1, read: true })] });
+    store().pin(1, true);
+    await settle();
+
+    expect(store().messagesById[1]?.pinned).toBe(true);
+    expect(store().messagesById[1]?.read).toBe(true);
+  });
+});
+
 describe("deltas from the background", () => {
   beforeEach(async () => {
     await store().init();

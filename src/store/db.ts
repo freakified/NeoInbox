@@ -226,6 +226,30 @@ class NeoInboxDb extends Dexie {
           });
       });
     this.version(14).upgrade(retireTravelCategory);
+    // fillMissingDetails runs after every scan, including every incremental
+    // one, and used to find its work the same way the version sweep did:
+    // read every cached message, keep the handful still missing references.
+    // Index the stamp so it can ask for exactly those. As in version 13,
+    // undefined keys are left out of an IndexedDB index, so every row needs a
+    // real number — and a row whose detail arrays never materialised has to
+    // read as 0 whatever its stamp says, since that is the row needing work.
+    this.version(15)
+      .stores({
+        messages:
+          "id, date, accountId, folderId, detailsVersion, [origin+classifierVersion]",
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table<RawMessage>("messages")
+          .toCollection()
+          .modify((m) => {
+            const hydrated =
+              Array.isArray(m.attachments) &&
+              Array.isArray(m.references) &&
+              Array.isArray(m.inReplyTo);
+            m.detailsVersion = hydrated ? m.detailsVersion ?? 0 : 0;
+          });
+      });
   }
 }
 

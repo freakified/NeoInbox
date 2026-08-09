@@ -200,9 +200,16 @@ export class FakeMessenger {
   /**
    * Call counts, for asserting on cost rather than just correctness. `query`
    * matters most: a Message-ID lookup walks the account and is the expensive
-   * path a sweep has to ration.
+   * path a sweep has to ration. `getFull` and `listAttachments` are per-message
+   * round trips on IMAP, so ingesting a message should reach for each at most
+   * once.
    */
-  readonly calls = { getFull: [] as number[], query: 0, list: 0 };
+  readonly calls = {
+    getFull: [] as number[],
+    listAttachments: [] as number[],
+    query: 0,
+    list: 0,
+  };
 
   constructor(private options: FakeMessengerOptions) {
     for (const account of options.accounts) {
@@ -238,6 +245,15 @@ export class FakeMessenger {
       bodyUnavailable: spec.bodyUnavailable ?? false,
     });
     return id;
+  }
+
+  /**
+   * Removes a message without firing anything — mail that left the mailbox
+   * while NeoInbox wasn't listening, which is the state drift detection is
+   * there to notice. The counterpart to insert().
+   */
+  remove(id: number): void {
+    this.messages.delete(id);
   }
 
   /** Adds a message and fires onNewMailReceived, as a delivery would. */
@@ -478,6 +494,7 @@ export class FakeMessenger {
 
     listAttachments: async (id: number) => {
       this.require(id);
+      this.calls.listAttachments.push(id);
       return [];
     },
 

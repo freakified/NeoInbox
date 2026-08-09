@@ -1,6 +1,11 @@
 import { withTimeout } from "./backfill";
 import { isTripCandidate, scheduleTripExtraction } from "./extract";
-import { applyMessageDetailsForOrigin, classifyMessage } from "./ingest";
+import {
+  applyMessageDetailsForOrigin,
+  classifyMessage,
+  loadMessageBody,
+  type MessageBody,
+} from "./ingest";
 import {
   applyClassification,
   carryClassification,
@@ -72,12 +77,14 @@ const cacheOne = async (
     : origin;
   const raw = headerToRawMessage(fresh, logicalOrigin);
   // Done rows keep their bundle so archived mail still shows in bundle views.
+  let body: MessageBody | undefined;
   if (logicalOrigin === "inbox" || logicalOrigin === "done") {
-    applyClassification(raw, await classifyMessage(fresh));
+    body = await loadMessageBody(fresh.id);
+    applyClassification(raw, await classifyMessage(fresh, body));
   }
   await applyLocalState(raw);
   const cached = await db.messages.get(fresh.id);
-  await applyMessageDetailsForOrigin(raw, cached);
+  await applyMessageDetailsForOrigin(raw, cached, body);
   return raw;
 };
 
@@ -249,13 +256,15 @@ export const wireSyncEngine = (): void => {
           (cached?.origin === "inbox" ||
             (cached?.origin === "done" && cached.category !== null));
         const raw = headerToRawMessage(fresh, logicalOrigin);
+        let body: MessageBody | undefined;
         if (reusable) {
           carryClassification(raw, cached);
         } else if (logicalOrigin === "inbox" || logicalOrigin === "done") {
-          applyClassification(raw, await classifyMessage(fresh));
+          body = await loadMessageBody(fresh.id);
+          applyClassification(raw, await classifyMessage(fresh, body));
         }
         await applyLocalState(raw);
-        await applyMessageDetailsForOrigin(raw, cached);
+        await applyMessageDetailsForOrigin(raw, cached, body);
         await db.messages.put(raw);
         broadcast({ type: "delta", updated: [raw] });
       } catch (e) {

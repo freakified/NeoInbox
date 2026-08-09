@@ -53,7 +53,7 @@ const account = (
   id: string,
   prefix: string,
   messages: FakeMessageSpec[],
-  opts: { archive?: boolean; legacyType?: boolean } = {},
+  opts: { archive?: boolean; legacyType?: boolean; sent?: FakeMessageSpec[] } = {},
 ): FakeAccountSpec => {
   const role = (name: string) =>
     opts.legacyType ? { type: name } : { specialUse: [name] };
@@ -62,7 +62,7 @@ const account = (
     identities: [{ email: `${id}@example.com` }],
     folders: [
       { id: `inbox-${prefix}`, name: "Inbox", ...role("inbox"), messages },
-      { id: `sent-${prefix}`, name: "Sent", ...role("sent") },
+      { id: `sent-${prefix}`, name: "Sent", ...role("sent"), messages: opts.sent },
       { id: `drafts-${prefix}`, name: "Drafts", ...role("drafts") },
       ...(opts.archive === false
         ? []
@@ -75,6 +75,17 @@ export const shapes = {
   /** One account, inbox + sent + drafts + archives. The happy path. */
   standard: (messages: FakeMessageSpec[] = []): FakeMessengerOptions => ({
     accounts: [account("a", "a", messages)],
+  }),
+
+  /**
+   * Inbox plus a populated Sent folder. Sent mail is scanned for threading
+   * only, so it exercises the headers-first path the inbox never takes.
+   */
+  withSent: (
+    messages: FakeMessageSpec[],
+    sent: FakeMessageSpec[],
+  ): FakeMessengerOptions => ({
+    accounts: [account("a", "a", messages, { sent })],
   }),
 
   /** Two accounts, each with its own folder set. */

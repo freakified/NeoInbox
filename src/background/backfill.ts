@@ -1,12 +1,16 @@
 import {
+  anyIncompleteClassifications,
   applyMessageDetails,
   classifyMessage,
   extractMessageDetails,
   getLiveHeader,
   liveHeaderWithinBudget,
+  loadMessageBody,
   MESSAGE_DETAILS_VERSION,
+  type MessageBody,
   needsMessageDetails,
   OVER_BUDGET,
+  setIncompleteClassifications,
 } from "./ingest";
 import {
   applyClassification,
@@ -188,8 +192,14 @@ const ingestHeader = async (
   let classified = false;
   let ranPipeline = false;
   const raw = headerToRawMessage(header, origin);
+  // Fetched here only when the classifier needs it, then handed to
+  // applyMessageDetails so the two share one getFull. When classification is
+  // skipped, applyMessageDetails still fetches lazily — and often not at all,
+  // since it reuses the cached row's details when the size matches.
+  let body: MessageBody | undefined;
   if (origin === "inbox" && (!cached || outdated)) {
-    const result = await classifyMessage(header);
+    body = await loadMessageBody(header.id);
+    const result = await classifyMessage(header, body);
     applyClassification(raw, result);
     ranPipeline = true;
     if (result.category) classified = true;
@@ -198,7 +208,7 @@ const ingestHeader = async (
   }
   await applyLocalState(raw);
   if (origin === "inbox") {
-    await applyMessageDetails(raw, cached);
+    await applyMessageDetails(raw, cached, body);
   } else {
     applyHeadersFirstDetails(raw, cached);
   }
@@ -303,7 +313,11 @@ const visitFolder = async (
  * cache, some event was missed and the folder gets a full revisit. Sent is
  * skipped because the scan window makes counts differ by design.
  */
-const folderDrifted = async (folder: InboxFolder, origin: MessageOrigin): Promise<boolean> => {
+const folderDrifted = async (
+  folder: InboxFolder,
+  origin: MessageOrigin,
+  snoozedByFolder: ReadonlyMap<string, number>,
+): Promise<boolean> => {
   if (origin === "sent") return false;
   try {
     const info = await withTimeout(
@@ -312,8 +326,11 @@ const folderDrifted = async (folder: InboxFolder, origin: MessageOrigin): Promis
       FOLDER_OP_TIMEOUT_MS,
     );
     if (typeof info.totalMessageCount !== "number") return false;
-    const cachedRows = await db.messages.where("folderId").equals(folder.id).toArray();
-    const cachedCount = cachedRows.filter((m) => !m.snoozed).length;
+    // count() off the index rather than toArray(): this runs for every folder
+    // on every incremental sync, and it only ever needed the number.
+    const cachedCount =
+      (await db.messages.where("folderId").equals(folder.id).count()) -
+      (snoozedByFolder.get(folder.id) ?? 0);
     if (cachedCount === info.totalMessageCount) return false;
     log.info("backfill", "folder drift detected", {
       folder: folder.name,
@@ -327,19 +344,42 @@ const folderDrifted = async (folder: InboxFolder, origin: MessageOrigin): Promis
   }
 };
 
+/**
+ * Snoozed rows per folder, for the drift check.
+ *
+ * Snoozing archives the message, so a snoozed row's folder is normally not a
+ * scanned one at all — but between the local snooze and the move settling it
+ * still carries its old folder, and counting it would fake a drift. Snoozes
+ * are user-scale, so driving off that table costs a few point lookups instead
+ * of a read of every cached row.
+ */
+const snoozedCountsByFolder = async (): Promise<Map<string, number>> => {
+  const counts = new Map<string, number>();
+  for (const snooze of await db.snoozes.toArray()) {
+    const row = await db.messages.get(snooze.messageId);
+    if (!row?.snoozed) continue;
+    counts.set(row.folderId, (counts.get(row.folderId) ?? 0) + 1);
+  }
+  return counts;
+};
+
 /** Removes rows stranded in folders that no longer play a scanned role. */
 const pruneUnknownFolders = async (knownFolderIds: readonly string[]): Promise<void> => {
   const known = new Set(knownFolderIds);
-  const stale = (await db.messages.toArray())
-    .filter(
-      (m) =>
-        m.folderId !== "" &&
-        !known.has(m.folderId) &&
-        m.origin !== "done" &&
-        !m.snoozed &&
-        !wasCachedDuringScan(m.id),
-    )
-    .map((m) => m.id);
+  // Ask the index which folders the cache actually holds and read rows only
+  // from the ones that lost their role. That set is almost always empty, so
+  // the common case reads no rows at all.
+  const cachedFolderIds = (await db.messages.orderBy("folderId").uniqueKeys()) as string[];
+  const unknown = cachedFolderIds.filter((id) => id !== "" && !known.has(id));
+  if (!unknown.length) return;
+  const stale: number[] = [];
+  for (const folderId of unknown) {
+    const rows = await db.messages.where("folderId").equals(folderId).toArray();
+    for (const m of rows) {
+      if (m.origin === "done" || m.snoozed || wasCachedDuringScan(m.id)) continue;
+      stale.push(m.id);
+    }
+  }
   if (!stale.length) return;
   await db.messages.bulkDelete(stale);
   broadcast({ type: "delta", removedIds: stale });
@@ -375,11 +415,13 @@ const runScan = (mode: ScanMode): Promise<ScanCounters> => {
         ...sents.map((f): [InboxFolder, MessageOrigin] => [f, "sent"]),
         ...drafts.map((f): [InboxFolder, MessageOrigin] => [f, "draft"]),
       ];
+      const snoozedByFolder =
+        mode === "incremental" ? await snoozedCountsByFolder() : new Map<string, number>();
       for (const [folder, origin] of scheduled) {
         let folderMode = mode;
         if (mode === "incremental") {
           const cursor = await db.folderCursors.get(folder.id);
-          if (!cursor?.fullScanAt || (await folderDrifted(folder, origin))) {
+          if (!cursor?.fullScanAt || (await folderDrifted(folder, origin, snoozedByFolder))) {
             folderMode = "full";
           }
         }
@@ -449,7 +491,12 @@ export const fillMissingDetails = async (limit = DETAILS_FILL_LIMIT): Promise<vo
   if (fillingDetails) return;
   fillingDetails = true;
   try {
-    const pending = (await db.messages.toArray())
+    // Straight off the detailsVersion index — the unhydrated rows only, not
+    // the whole cache filtered down to them. needsMessageDetails still runs as
+    // the authority on what counts, over a set that is normally tiny.
+    const pending = (
+      await db.messages.where("detailsVersion").below(MESSAGE_DETAILS_VERSION).toArray()
+    )
       .filter(needsMessageDetails)
       .sort((a, b) => b.date - a.date)
       .slice(0, limit);
@@ -464,7 +511,9 @@ export const fillMissingDetails = async (limit = DETAILS_FILL_LIMIT): Promise<vo
     for (const msg of pending) {
       try {
         const details = await withTimeout(
-          extractMessageDetails(msg.id),
+          // Only inbox rows keep an attachment list (see the write below), so
+          // everything else skips that call rather than fetching and dropping it.
+          extractMessageDetails(msg.id, { attachments: msg.origin === "inbox" }),
           `details for message ${msg.id}`,
         );
         const row = await db.transaction("rw", db.messages, async () => {
@@ -508,9 +557,14 @@ const DONE_CATEGORY_SWEEP_FLAG = "neoinbox-done-category-sweep-v1";
 export const classifyCachedDoneMessages = async (): Promise<void> => {
   const stored = await messenger.storage.local.get(DONE_CATEGORY_SWEEP_FLAG);
   if (stored[DONE_CATEGORY_SWEEP_FLAG]) return;
-  const pending = (await db.messages.toArray()).filter(
-    (m) => m.origin === "done" && m.category === null,
-  );
+  // Scoped to done rows off the [origin+classifierVersion] index rather than
+  // read whole; the archive backlog is the biggest thing in the cache.
+  const pending = (
+    await db.messages
+      .where("[origin+classifierVersion]")
+      .between(["done", -Infinity], ["done", Infinity], true, true)
+      .toArray()
+  ).filter((m) => m.category === null);
   if (pending.length) {
     log.info("backfill", `classifying ${pending.length} cached done messages`);
   }
@@ -776,12 +830,24 @@ let retryingClassifications = false;
  */
 export const retryIncompleteClassifications = async (limit = DETAILS_FILL_LIMIT): Promise<void> => {
   if (retryingClassifications) return;
+  // The rows this wants can't be reached by index (see
+  // anyIncompleteClassifications), so the read below is a full one. Gate it on
+  // whether anything was ever classified without a body, or every scan pays
+  // for a read of the whole cache to learn there is nothing to do.
+  if (!(await anyIncompleteClassifications())) return;
   retryingClassifications = true;
   try {
-    const pending = (await db.messages.toArray())
-      .filter((m) => (m.origin === "inbox" || m.origin === "done") && m.classifiedIncomplete)
-      .slice(0, limit);
-    if (!pending.length) return;
+    const matching = (await db.messages.toArray()).filter(
+      (m) => (m.origin === "inbox" || m.origin === "done") && m.classifiedIncomplete,
+    );
+    const pending = matching.slice(0, limit);
+    // Anything past this pass's limit, plus anything the pass fails to fix,
+    // keeps the flag set so a later scan tries again.
+    let stillIncomplete = matching.length - pending.length;
+    if (!pending.length) {
+      await setIncompleteClassifications(false);
+      return;
+    }
     log.info("backfill", `retrying classification for ${pending.length} messages`);
     let updated: RawMessage[] = [];
     const flushUpdated = (): void => {
@@ -795,9 +861,15 @@ export const retryIncompleteClassifications = async (limit = DETAILS_FILL_LIMIT)
           getLiveHeader(msg),
           `retry classify message ${msg.id}`,
         );
-        if (!header) continue;
+        if (!header) {
+          stillIncomplete++;
+          continue;
+        }
         const { category, incomplete } = await classifyMessage(header);
-        if (incomplete) continue;
+        if (incomplete) {
+          stillIncomplete++;
+          continue;
+        }
         const row = await db.transaction("rw", db.messages, async () => {
           const fresh = await db.messages.get(msg.id);
           if (!fresh) return null;
@@ -815,6 +887,7 @@ export const retryIncompleteClassifications = async (limit = DETAILS_FILL_LIMIT)
           if (updated.length >= BATCH_FLUSH) flushUpdated();
         }
       } catch (e) {
+        stillIncomplete++;
         log.debug("backfill", "classification retry skipped a message", {
           id: msg.id,
           e: String(e),
@@ -822,6 +895,7 @@ export const retryIncompleteClassifications = async (limit = DETAILS_FILL_LIMIT)
       }
     }
     flushUpdated();
+    if (stillIncomplete === 0) await setIncompleteClassifications(false);
   } finally {
     retryingClassifications = false;
   }
@@ -860,12 +934,13 @@ export const reclassifyAll = (): Promise<{ scanned: number; updated: number }> =
             `reclassify message ${cachedMsg.id}`,
           );
           if (!header) continue;
-          const result = await classifyMessage(header);
+          const body = await loadMessageBody(header.id);
+          const result = await classifyMessage(header, body);
           if (result.category !== cachedMsg.category) updated++;
           const raw = headerToRawMessage(header, "inbox");
           applyClassification(raw, result);
           await applyLocalState(raw);
-          await applyMessageDetails(raw, cachedMsg);
+          await applyMessageDetails(raw, cachedMsg, body);
           batch.push(raw);
           if (batch.length >= BATCH_FLUSH) await flush();
         } catch (e) {

@@ -10,6 +10,7 @@ import {
   classifyMessage,
   doneMessage,
   getLiveHeader,
+  loadMessageBody,
   pinMessage,
   trashMessage,
   verifiedOpId,
@@ -50,9 +51,10 @@ const reclassifyMessages = async (cached: RawMessage[]): Promise<{ scanned: numb
         continue;
       }
       const raw = headerToRawMessage(header, "inbox");
-      applyClassification(raw, await classifyMessage(header));
+      const body = await loadMessageBody(header.id);
+      applyClassification(raw, await classifyMessage(header, body));
       await applyLocalState(raw);
-      await applyMessageDetails(raw, cmsg);
+      await applyMessageDetails(raw, cmsg, body);
       if (raw.id === cmsg.id) {
         updated.push(raw);
       } else {
