@@ -1,6 +1,5 @@
 import { handleSnoozeAlarm, snoozeAlarmName, wakeSnoozedMessage } from "./snooze";
 import {
-  classifyCachedDoneMessages,
   retryIncompleteClassifications,
   runBackfill,
   runIncrementalSync,
@@ -125,9 +124,6 @@ installTripScan();
 installTripExtract();
 installClassifyDump();
 void cleanupLegacyTags().catch((e) => log.warn("legacy-tags", "cleanup failed", e));
-void classifyCachedDoneMessages().catch((e) =>
-  log.warn("backfill", "done category sweep failed", e),
-);
 // Carries a classifier rules change to mail that is already cached. Runs in
 // chunks behind whatever scan onInstalled/onStartup kicked off, and no-ops
 // entirely when the stored version already matches.

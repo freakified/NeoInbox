@@ -1,4 +1,5 @@
 import Dexie, { type Table, type Transaction } from "dexie";
+import { DETAILS_LAZY, MESSAGE_DETAILS_VERSION } from "../shared/details";
 import {
   LEGACY_PINNED_KEY,
   LEGACY_SNOOZED_KEY,
@@ -250,6 +251,21 @@ class NeoInboxDb extends Dexie {
             m.detailsVersion = hydrated ? m.detailsVersion ?? 0 : 0;
           });
       });
+    // Sent and draft details are no longer fetched in the background: getting
+    // References/In-Reply-To costs a body fetch each, and the details sweep was
+    // working through a year of Sent one message at a time. Park the ones
+    // already cached at DETAILS_LAZY so they fall outside the sweep's index
+    // range; opening a conversation hydrates them.
+    this.version(16).upgrade(async (tx) => {
+      await tx
+        .table<RawMessage>("messages")
+        .toCollection()
+        .modify((m) => {
+          if (m.origin !== "sent" && m.origin !== "draft") return;
+          if ((m.detailsVersion ?? 0) >= MESSAGE_DETAILS_VERSION) return;
+          m.detailsVersion = DETAILS_LAZY;
+        });
+    });
   }
 }
 

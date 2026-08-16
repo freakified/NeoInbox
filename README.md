@@ -33,6 +33,14 @@ This is a mail client, so it's worth being precise:
   cache, not in tags on the server, so NeoInbox does not litter your mailbox for
   every other client that reads it. Pin and snooze use small NeoInbox tags,
   because that state has to survive a reinstall.
+- **It reads the Inbox and nothing else.** NeoInbox scans your inbox folders,
+  and lists Sent and Drafts by their headers. It never enumerates your archive
+  and never fetches a message body out of it — which matters on Gmail, where
+  Thunderbird treats All Mail as the archive folder, so reading it means
+  downloading the whole mailbox. Done and Snooze still perform a real archive
+  (a server-side move, the same one Thunderbird's own Archive does); NeoInbox
+  simply records where the message went instead of reading the folder back.
+  `src/background/inboxOnly.test.ts` holds this to it.
 - **Remote content is blocked by default.** Message bodies render in a sandboxed
   iframe under a `default-src 'none'` CSP, so tracking pixels, remote
   stylesheets, webfonts, nested frames and `<object>` embeds are all inert until
@@ -74,8 +82,10 @@ That produces `dist/`, an unpacked MailExtension.
 2. **Load Temporary Add-on…**, and pick `dist/manifest.json`.
 3. Click the **Open NeoInbox** toolbar button.
 
-On first run the background script backfills and classifies up to 500 recent
-inbox messages; the header shows the progress.
+On first run the background script backfills and classifies the newest 1,000
+inbox messages; the header shows the progress. If your inbox is bigger than
+that, the bottom of the stream offers **Fetch older mail**, which widens the
+window by another 1,000 and rescans.
 
 ## Development
 
@@ -104,7 +114,13 @@ Layout:
   can correct any message from its row.
 - Trip extraction has been exercised against a limited set of real
   confirmations. Unusual airlines and hotel chains will need parser work.
-- Backfill is capped at 500 messages and only covers inbox folders.
+- Bundles cover your inbox plus whatever you have marked done from inside
+  NeoInbox. Mail archived elsewhere — from Thunderbird's three-pane, or another
+  client — stays out of the Done view, because finding it would mean reading the
+  archive folder.
+- Your own replies thread into a conversation by subject and participant until
+  you open it, which is when their `References` headers are fetched. A reply
+  whose subject was rewritten mid-thread may sit apart until then.
 - Trash, Spam and Contacts are placeholders in the drawer.
 - Inline `cid:` images in message bodies don't render yet.
 

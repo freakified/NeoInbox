@@ -450,9 +450,20 @@ describe("per-message fetch cost of a scan", () => {
     );
   });
 
-  it("still threads sent mail into its inbox conversation", async () => {
-    // The guard on the change above: dropping the attachment call must not
-    // cost the References header that threading runs on.
+  it("does not fetch sent bodies during a scan", async () => {
+    const app = await open(shapes.withSent(many(2, promoMail), many(6, personalMail)));
+
+    await app.backfill.runBackfill();
+    await settle();
+
+    // Sent rows are cached from their headers alone. Fetching References for
+    // them costs a body each, and a year of Sent is a lot of bodies — they are
+    // hydrated on demand instead, when a conversation is opened.
+    const sentIds = new Set(app.mail.idsIn(SENT));
+    expect(app.mail.calls.getFull.some((id) => sentIds.has(id))).toBe(false);
+  });
+
+  it("threads sent mail into its conversation once the thread is opened", async () => {
     const app = await open(
       shapes.withSent(
         [personalMail({ headerMessageId: "<root@example.com>" })],
@@ -468,8 +479,15 @@ describe("per-message fetch cost of a scan", () => {
     await app.backfill.runBackfill();
     await settle();
 
-    const sent = (await app.db.messages.toArray()).find((m) => m.origin === "sent");
-    expect(sent?.references).toEqual(["root@example.com"]);
+    const sentId = app.mail.idsIn(SENT)[0]!;
+    expect((await app.db.messages.get(sentId))?.references).toEqual([]);
+
+    await app.backfill.hydrateDetails([sentId]);
+    await settle();
+
+    expect((await app.db.messages.get(sentId))?.references).toEqual([
+      "root@example.com",
+    ]);
   });
 });
 

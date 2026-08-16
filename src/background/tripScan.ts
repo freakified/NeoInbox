@@ -5,9 +5,10 @@
  * Not wired into any UI. Run from the background debug console
  * (Tools → Developer Tools → Debug Add-ons → Inspect → Console):
  *
- *   await neoTripScan()                       // travel candidates only
- *   await neoTripScan({ everything: true })   // getFull every message (slow)
+ *   await neoTripScan()                          // inbox, travel candidates only
+ *   await neoTripScan({ everything: true })      // getFull every message (slow)
  *   await neoTripScan({ fromDate: "2018-01-01", max: 5000 })
+ *   await neoTripScan({ includeArchive: true })  // also walks All Mail (very slow)
  *
  * The full per-message hits (including parsed JSON-LD payloads) are kept at
  * globalThis.neoTripScanLast for poking around after a run.
@@ -25,6 +26,12 @@ interface TripScanOptions {
   max?: number;
   /** Only look at messages on/after this date (Date, ms, or parseable string). */
   fromDate?: Date | number | string;
+  /**
+   * Also walk the archive. Off by default: on a Gmail account the archive is
+   * All Mail, so this enumerates the entire mailbox and fetches a body per
+   * travel-looking message in it. Opt in knowingly.
+   */
+  includeArchive?: boolean;
 }
 
 interface TripScanHit {
@@ -186,7 +193,10 @@ export const scanTripMarkup = async (
     hits: [],
   };
 
-  const folders = [...(await collectInboxFolders()), ...(await collectArchiveFolders())];
+  const folders = [
+    ...(await collectInboxFolders()),
+    ...(options.includeArchive ? await collectArchiveFolders() : []),
+  ];
   const seen = new Set<string>();
 
   scan: for (const folder of folders) {

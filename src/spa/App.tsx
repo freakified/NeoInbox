@@ -135,6 +135,9 @@ export const App = () => {
   const sync = useSyncProgress();
   const connectionState = useConnectionState();
   const retryBackfill = useMailStore((st) => st.retryBackfill);
+  const inboxWindow = useMailStore((st) => st.inboxWindow);
+  const loadingMoreInbox = useMailStore((st) => st.loadingMoreInbox);
+  const loadMoreInbox = useMailStore((st) => st.loadMoreInbox);
   const customBundles = useMailStore((st) => st.customBundles);
   const showDeleteActions = useShowDeleteActions();
 
@@ -291,6 +294,13 @@ export const App = () => {
     [stream.sections, visibleItemLimit],
   );
   const hasMoreItems = visibleStream.visibleCount < visibleStream.totalCount;
+  // Older mail only exists to fetch in the views actually backed by the inbox
+  // scan; Done, Sent and Drafts are not reached by widening that window.
+  const canLoadOlderMail =
+    (activeView.type === "inbox" ||
+      activeView.type === "bundle" ||
+      activeView.type === "trips") &&
+    (inboxWindow?.skipped ?? 0) > 0;
 
   return (
     <div
@@ -632,6 +642,26 @@ export const App = () => {
               Load more
               <span className={s.loadMoreCount}>
                 {visibleStream.visibleCount} of {visibleStream.totalCount}
+              </span>
+            </button>
+          </div>
+        )}
+        {/*
+          Only once everything already cached is on screen: the button above
+          pages what NeoInbox has, this one goes back to the mailbox for older
+          inbox mail that the scan window left alone.
+        */}
+        {!hasMoreItems && canLoadOlderMail && (
+          <div className={s.loadMoreWrap}>
+            <button
+              type="button"
+              className={s.loadMoreBtn}
+              onClick={loadMoreInbox}
+              disabled={loadingMoreInbox}
+            >
+              {loadingMoreInbox ? "Fetching older mail…" : "Fetch older mail"}
+              <span className={s.loadMoreCount}>
+                {inboxWindow?.skipped.toLocaleString()} older in this inbox
               </span>
             </button>
           </div>

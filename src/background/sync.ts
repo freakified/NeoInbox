@@ -16,6 +16,7 @@ import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
 import { wakeSnoozesForNewMail } from "./snooze";
 import { db } from "../store/db";
+import { sanitizeTags } from "../shared/categories";
 import { collectArchiveFolders, collectDraftFolders, collectInboxFolders, collectSentFolders } from "../shared/folders";
 import { log } from "../shared/log";
 import type { MessageOrigin, RawMessage } from "../shared/types";
@@ -72,13 +73,11 @@ const cacheOne = async (
   origin: MessageOrigin,
 ): Promise<RawMessage> => {
   const fresh = await messenger.messages.get(header.id);
-  const logicalOrigin = origin === "done" && (await isSnoozedHeader(fresh))
-    ? "inbox"
-    : origin;
-  const raw = headerToRawMessage(fresh, logicalOrigin);
-  // Done rows keep their bundle so archived mail still shows in bundle views.
+  const raw = headerToRawMessage(fresh, origin);
+  // Only inbox mail is classified, and only inbox mail costs a body fetch.
+  // Archived mail never reaches here at all — see originForFolder.
   let body: MessageBody | undefined;
-  if (logicalOrigin === "inbox" || logicalOrigin === "done") {
+  if (origin === "inbox") {
     body = await loadMessageBody(fresh.id);
     applyClassification(raw, await classifyMessage(fresh, body));
   }
@@ -108,18 +107,61 @@ const cacheMessages = async (
   return out;
 };
 
+/**
+ * The origin a folder implies, for folders NeoInbox actually reads.
+ *
+ * Archive folders are deliberately absent. "Done" is a NeoInbox-local fact —
+ * "you pressed Done on this" — not "this message lives in the archive folder".
+ * Mapping the archive to an origin here is what used to make every archive
+ * event fetch a body and run the classifier, which on a Gmail account means
+ * doing that for All Mail. Archive arrivals are now handled by
+ * `reKeyArchivedRow`, which only touches rows NeoInbox already knows about.
+ */
 const originForFolder = async (folderId: string): Promise<MessageOrigin | undefined> => {
-  const [inboxIds, sentIds, draftIds, archiveIds] = await Promise.all([
+  const [inboxIds, sentIds, draftIds] = await Promise.all([
     getFolderIds(collectInboxFolders),
     getFolderIds(collectSentFolders),
     getFolderIds(collectDraftFolders),
-    getFolderIds(collectArchiveFolders),
   ]);
   if (sentIds.has(folderId)) return "sent";
   if (draftIds.has(folderId)) return "draft";
-  if (archiveIds.has(folderId)) return "done";
   if (inboxIds.has(folderId)) return "inbox";
   return undefined;
+};
+
+const isArchiveFolderId = async (folderId: string): Promise<boolean> => {
+  if (!folderId) return false;
+  return (await getFolderIds(collectArchiveFolders)).has(folderId);
+};
+
+/**
+ * Follows a row NeoInbox already has into the archive, without reading it.
+ *
+ * A message we archived keeps its cached row — same subject, same category,
+ * already classified — so landing in the archive is a re-key, not an ingest:
+ * take the new id and folder from the move event and keep everything else.
+ * Returns null for mail NeoInbox has no row for, which is how archiving done
+ * in Thunderbird proper (or on your phone) stays invisible here rather than
+ * pulling a body per message.
+ */
+const reKeyArchivedRow = async (
+  originalId: number,
+  moved: messenger.messages.MessageHeader,
+): Promise<RawMessage | null> => {
+  const cached = await db.messages.get(originalId);
+  if (!cached) return null;
+  const next: RawMessage = {
+    ...cached,
+    id: moved.id,
+    folderId: folderIdOf(moved),
+    origin: "done",
+    read: moved.read ?? cached.read,
+    tags: sanitizeTags(moved.tags),
+  };
+  await applyLocalState(next);
+  if (moved.id !== originalId) await db.messages.delete(originalId);
+  await db.messages.put(next);
+  return next;
 };
 
 const removeSentDraft = async (draftId: number): Promise<void> => {
@@ -237,6 +279,23 @@ export const wireSyncEngine = (): void => {
         const fresh = await messenger.messages.get(header.id);
         const cached = await db.messages.get(header.id);
         const folderId = folderIdOf(fresh);
+        // A flag change on archived mail: refresh what the event already told
+        // us and stop. Anything else here would classify it, and a mailbox-wide
+        // "mark all read" in All Mail would then fetch a body per message.
+        if (await isArchiveFolderId(folderId)) {
+          if (!cached) return;
+          const next: RawMessage = {
+            ...cached,
+            origin: "done",
+            folderId,
+            read: fresh.read ?? cached.read,
+            tags: sanitizeTags(fresh.tags),
+          };
+          await applyLocalState(next);
+          await db.messages.put(next);
+          broadcast({ type: "delta", updated: [next] });
+          return;
+        }
         let origin = cached?.origin;
         if (!origin || cached?.folderId !== folderId) {
           origin = await originForFolder(folderId);
@@ -306,6 +365,8 @@ export const wireSyncEngine = (): void => {
         if (!ids.length) return;
         const byOrigin = new Map<MessageOrigin, messenger.messages.MessageHeader[]>();
         const snoozedOriginalIds = new Set<number>();
+        /** Rows re-keyed into the archive; already written, just need announcing. */
+        const archived: RawMessage[] = [];
         for (let idx = 0; idx < (movedMessages.messages ?? []).length; idx++) {
           const moved = movedMessages.messages[idx]!;
           const originalId = originalMessages.messages[idx]?.id;
@@ -319,6 +380,14 @@ export const wireSyncEngine = (): void => {
             if (originalId !== undefined) snoozedOriginalIds.add(originalId);
             continue;
           }
+          // Into the archive: re-key our own row if we have one, and ignore
+          // the message entirely if we don't. Never a body fetch either way.
+          if (await isArchiveFolderId(folderIdOf(fresh))) {
+            if (originalId === undefined) continue;
+            const reKeyed = await reKeyArchivedRow(originalId, fresh);
+            if (reKeyed) archived.push(reKeyed);
+            continue;
+          }
           const origin = await originForFolder(folderIdOf(fresh));
           if (!origin) continue;
           const arr = byOrigin.get(origin) ?? [];
@@ -328,7 +397,7 @@ export const wireSyncEngine = (): void => {
         // Cache the moved copies before dropping the old rows and ship one
         // combined delta: removing first would leave a visible gap (e.g. a
         // trip card showing empty) for as long as classification takes.
-        const added = [];
+        const added = [...archived];
         for (const [origin, headers] of byOrigin) {
           added.push(...await cacheMessages(headers, origin));
         }

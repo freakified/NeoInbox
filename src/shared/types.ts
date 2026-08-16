@@ -230,6 +230,16 @@ export interface SnoozeRecord {
   originAccountId: string;
   /** Identifies the message across the archive move (which changes its numeric id). */
   headerMessageId?: string;
+  /**
+   * Where snoozing parked the message. Snoozing archives, so waking has to
+   * find it again — and it used to do that by paging the archive folder, which
+   * on a Gmail account means walking All Mail. Recorded at snooze time instead,
+   * so the wake is a direct lookup. Absent on records written before this, and
+   * on the rare snooze whose destination couldn't be pinned down; both fall
+   * back to a folder-scoped search.
+   */
+  archivedId?: number;
+  archivedFolderId?: string;
 }
 
 /**

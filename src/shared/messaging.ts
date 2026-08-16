@@ -21,6 +21,14 @@ export type ClientMsg =
   | { type: "set-custom-bundle"; bundle: CustomBundleRecord }
   | { type: "delete-custom-bundle"; id: string }
   | { type: "retry-backfill" }
+  /**
+   * Fetch the details (References/In-Reply-To, attachments) of rows cached
+   * from their headers alone — sent and draft mail. Sent by the SPA when a
+   * conversation is opened, which is the only time those headers matter.
+   */
+  | { type: "hydrate-details"; messageIds: number[] }
+  /** Widen the inbox scan window by one step and rescan. */
+  | { type: "load-more-inbox" }
   /** Re-run the classify pipeline; all cached inbox messages when no ids given. */
   | { type: "reclassify"; messageIds?: number[] };
 
@@ -43,6 +51,12 @@ export type ServerMsg =
       reason: string;
     }
   | { type: "reclassify-done"; scanned: number; moved: number }
+  /**
+   * How far into the inbox the last full scan reached. `skipped` counts the
+   * older messages left outside the window, so the SPA knows whether to offer
+   * Load more.
+   */
+  | { type: "inbox-window"; cap: number; skipped: number }
   /**
    * Auto-clusterer output (already persisted to Dexie by the background).
    * memberships only ever carry source "auto" rows; the SPA must keep any

@@ -15,17 +15,24 @@ import {
   trashMessage,
   verifiedOpId,
 } from "./ingest";
+import type { ArchivedCopy } from "./archiveFolders";
 import { applyClassification, carryClassification } from "../classifier/version";
 import { headerToRawMessage } from "./messageMap";
 import { snoozeMessage, wakeSnoozedMessage } from "./snooze";
-import { getLastProgress, runBackfill, serialized } from "./backfill";
+import {
+  getLastProgress,
+  hydrateDetails,
+  raiseInboxScanCap,
+  runBackfill,
+  serialized,
+} from "./backfill";
 import { scanActive } from "./scanGuard";
 import { pushMyEmails } from "./sync";
 import { applyLocalState } from "./localState";
 import { broadcast } from "./port";
 import { invalidateRouteRules } from "../classifier/routeRules";
 import { db } from "../store/db";
-import { collectArchiveFolders, collectInboxFolders } from "../shared/folders";
+import { collectInboxFolders } from "../shared/folders";
 import { ruleMatchesMessage } from "../shared/routeRules";
 import { log } from "../shared/log";
 import type { ClientMsg } from "../shared/messaging";
@@ -104,20 +111,6 @@ const reclassifyRuleMatches = async (rule: RouteRuleRecord): Promise<void> => {
   await sweep();
 }
 
-const folderIdOf = (header: messenger.messages.MessageHeader): string => {
-  return (
-    header as messenger.messages.MessageHeader & {
-      folder?: { id?: string };
-    }
-  ).folder?.id ?? "";
-}
-
-const isArchiveFolder = async (folderId: string): Promise<boolean> => {
-  if (!folderId) return false;
-  const folders = await collectArchiveFolders();
-  return folders.some((folder) => folder.id === folderId);
-}
-
 export const handleCommand = async (msg: ClientMsg): Promise<void> => {
 
   switch (msg.type) {
@@ -129,6 +122,16 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
     }
     case "retry-backfill": {
       void runBackfill().catch((e) => log.warn("backfill", "retry failed", e));
+      return;
+    }
+    case "hydrate-details": {
+      await hydrateDetails(msg.messageIds);
+      return;
+    }
+    case "load-more-inbox": {
+      const cap = await raiseInboxScanCap();
+      log.info("backfill", `inbox window widened to ${cap}; rescanning`);
+      void runBackfill().catch((e) => log.warn("backfill", "load-more rescan failed", e));
       return;
     }
     case "pin": {
@@ -151,8 +154,9 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
     }
     case "done": {
       const cached = await db.messages.get(msg.messageId);
+      let archived: ArchivedCopy | null = null;
       try {
-        await doneMessage(msg.messageId);
+        archived = await doneMessage(msg.messageId);
       } catch (e) {
         log.warn("command", "done failed", { id: msg.messageId, e: String(e) });
         broadcast({
@@ -163,28 +167,25 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
         });
         return;
       }
-      try {
-        const header = await messenger.messages.get(msg.messageId);
-        if (await isArchiveFolder(folderIdOf(header))) {
-          const raw = headerToRawMessage(header, "done");
-          carryClassification(raw, cached);
-          await applyLocalState(raw);
-          await applyMessageDetails(raw, cached);
-          await db.messages.put(raw);
-          broadcast({ type: "delta", added: [raw] });
-          return;
-        }
-      } catch {
-        /* The move may have assigned a new message id; onMoved/backfill will cache it. */
-      }
-      // Keep an optimistic done row rather than deleting: done/trip views
-      // would otherwise show a gap until onMoved re-caches the archived copy.
-      // The old id may be stale for a moment; body loads and destructive ops
-      // verify ids anyway, and onMoved swaps in the live row.
+      // Done is a NeoInbox-local fact, and this is where it gets recorded. The
+      // archive itself already happened; we carry the existing row over to the
+      // destination doneMessage reported rather than reading the message back
+      // out of the archive folder.
       if (cached) {
-        const optimistic = { ...cached, origin: "done" as const };
-        await db.messages.put(optimistic);
-        broadcast({ type: "delta", updated: [optimistic] });
+        const row: RawMessage = {
+          ...cached,
+          origin: "done",
+          ...(archived ? { id: archived.id, folderId: archived.folderId } : {}),
+        };
+        await applyLocalState(row);
+        if (archived && archived.id !== cached.id) {
+          await db.messages.delete(cached.id);
+          await db.messages.put(row);
+          broadcast({ type: "delta", removedIds: [cached.id], added: [row] });
+        } else {
+          await db.messages.put(row);
+          broadcast({ type: "delta", updated: [row] });
+        }
         return;
       }
       await db.messages.delete(msg.messageId);

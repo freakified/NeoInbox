@@ -1,7 +1,10 @@
 import { db } from "../store/db";
 import { log } from "../shared/log";
 import type { RawMessage, SnoozeRecord } from "../shared/types";
-import { archiveFolderIdsForAccount } from "./archiveFolders";
+import {
+  archiveFolderIdsForAccount,
+  findByHeaderMessageIdInFolder,
+} from "./archiveFolders";
 import {
   applyMessageDetails,
   classifyMessage,
@@ -14,7 +17,6 @@ import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
 
 const ALARM_PREFIX = "neoinbox-snooze-";
-const SEARCH_PAGE_LIMIT = 20;
 
 interface SnoozeRecordWithHeader extends SnoozeRecord {
   headerMessageId: string;
@@ -51,7 +53,13 @@ export const snoozeMessage = async (
   invalidateSnoozeIndex();
 
   try {
-    await doneMessage(messageId);
+    const archived = await doneMessage(messageId);
+    if (archived) {
+      record.archivedId = archived.id;
+      record.archivedFolderId = archived.folderId;
+      await db.snoozes.put(record);
+      invalidateSnoozeIndex();
+    }
   } catch (e) {
     log.warn("snooze", "archive failed; rolling back snooze record", {
       messageId,
@@ -91,10 +99,7 @@ export const wakeSnoozedMessage = async (
       | undefined;
     if (!record) return;
 
-    const restored = await findByHeaderMessageId(
-      record.headerMessageId,
-      record.originAccountId,
-    );
+    const restored = await findSnoozedMessage(record);
     let restoredHeader = restored;
 
     if (restored) {
@@ -211,41 +216,45 @@ const removeCachedSnoozedCopies = async (
   broadcast({ type: "delta", removedIds: staleIds });
 }
 
-const findByHeaderMessageId = async (
-  headerMessageId: string,
-  accountId: string,
+/**
+ * Finds the snoozed message so it can be moved back.
+ *
+ * Snoozing records where it parked the message, so the common path is a single
+ * `messages.get` on a known id, verified by Message-ID in case Thunderbird
+ * remapped it. Only records written before that existed — or a snooze whose
+ * destination couldn't be pinned down — fall back to searching, and even then
+ * it's a folder-scoped query per archive folder, never an enumeration.
+ */
+const findSnoozedMessage = async (
+  record: SnoozeRecordWithHeader,
 ): Promise<messenger.messages.MessageHeader | undefined> => {
+  const { headerMessageId } = record;
   if (!headerMessageId) return undefined;
-  const folders = await archiveFolderIdsForAccount(accountId);
-  for (const folderId of folders) {
-    const found = await scanFolderForHeader(folderId, headerMessageId);
+
+  if (record.archivedId !== undefined) {
+    try {
+      const header = await messenger.messages.get(record.archivedId);
+      if (header.headerMessageId === headerMessageId) return header;
+      log.debug("snooze", "recorded archive id points elsewhere; searching", {
+        messageId: record.messageId,
+        archivedId: record.archivedId,
+      });
+    } catch {
+      /* id no longer resolves; fall through to the search */
+    }
+  }
+
+  if (record.archivedFolderId) {
+    const found = await findByHeaderMessageIdInFolder(
+      record.archivedFolderId,
+      headerMessageId,
+    );
+    if (found) return found;
+  }
+
+  for (const folderId of await archiveFolderIdsForAccount(record.originAccountId)) {
+    const found = await findByHeaderMessageIdInFolder(folderId, headerMessageId);
     if (found) return found;
   }
   return undefined;
-}
-
-const scanFolderForHeader = async (
-  folderId: string,
-  headerMessageId: string,
-): Promise<messenger.messages.MessageHeader | undefined> => {
-  let pages = 0;
-  let page = await messenger.messages.list(
-    folderId as unknown as messenger.folders.MailFolderId,
-  );
-  while (true) {
-    for (const m of page.messages) {
-      const h = (m as HeaderWithFolder).headerMessageId;
-      if (h && h === headerMessageId) return m;
-    }
-    if (!page.id || ++pages >= SEARCH_PAGE_LIMIT) return undefined;
-    page = await messenger.messages.continueList(page.id);
-  }
-}
-
-const findByHeaderMessageIdInFolder = async (
-  folderId: string,
-  headerMessageId: string,
-): Promise<messenger.messages.MessageHeader | undefined> => {
-  if (!folderId || !headerMessageId) return undefined;
-  return scanFolderForHeader(folderId, headerMessageId);
 }

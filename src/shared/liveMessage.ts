@@ -33,6 +33,27 @@ export const resolveLiveMessageId = async (m: {
     if (!m.headerMessageId) return null;
     /* id no longer resolves; fall through to the Message-ID lookup */
   }
+  // Try the folder we last saw it in before widening. Most drift is a
+  // re-indexing within the same folder, and a folder-scoped query is a single
+  // indexed lookup — where the account-wide one below walks every folder,
+  // including the big ones nothing else here ever touches.
+  if (m.folderId) {
+    try {
+      const page = (await messenger.messages.query({
+        headerMessageId: m.headerMessageId,
+        folderId: m.folderId as unknown as messenger.folders.MailFolderId,
+      } as unknown as Parameters<typeof messenger.messages.query>[0])) as {
+        messages?: Header[];
+      };
+      const found = page.messages?.[0];
+      if (found) return found.id;
+    } catch (e) {
+      log.debug("live-message", "folder-scoped lookup failed; widening", {
+        id: m.id,
+        e: String(e),
+      });
+    }
+  }
   try {
     // Scope to the account: an unscoped query walks every folder of every
     // account and can take seconds on a large mailbox.

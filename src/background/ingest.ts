@@ -8,14 +8,18 @@ import { scanCidRefs } from "../spa/lib/srcdoc";
 import { db } from "../store/db";
 import type { AttachmentSummary, RawMessage } from "../shared/types";
 import {
+  type ArchivedCopy,
   findByHeaderMessageIdInFolder,
+  locateArchivedCopy,
   messageStillIn,
   messageStillInFolderByHeader,
   resolveArchiveFolder,
 } from "./archiveFolders";
 import { setPinned } from "./localState";
 
-export const MESSAGE_DETAILS_VERSION = 2;
+import { DETAILS_LAZY, MESSAGE_DETAILS_VERSION } from "../shared/details";
+
+export { DETAILS_LAZY, MESSAGE_DETAILS_VERSION };
 
 export class ArchiveFailedError extends Error {
   constructor(message: string, readonly cause?: unknown) {
@@ -56,6 +60,15 @@ export const verifiedOpId = async (id: number): Promise<number | null> => {
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Whether a moved message has actually left its source folder.
+ *
+ * IMAP moves settle asynchronously, so this polls with a backoff. Both checks
+ * are single lookups — a `messages.get` on the known id, and a folder-scoped
+ * Message-ID query for the case where the move left a copy behind under a new
+ * id. It previously paged the source folder up to 25 pages on each of these
+ * five rounds, which meant every Done could enumerate the inbox.
+ */
 const messageSettledOutOfFolder = async (
   messageId: number,
   sourceFolderId: string,
@@ -193,25 +206,36 @@ export const pinMessage = async (id: number, pinned: boolean): Promise<void> => 
   await setPinned(pinKeyOf({ headerMessageId, id }), pinned);
 }
 
-export const doneMessage = async (id: number): Promise<void> => {
+/**
+ * Archives a message for real — this is a server-side move out of the inbox,
+ * exactly as Thunderbird's own Archive does. Returns where the message landed
+ * so the caller can record it; NeoInbox never reads the archive folder back,
+ * so this return value is the only trace of the destination it keeps.
+ * Null means the destination couldn't be pinned down (or the message was
+ * already gone), which is not an error — the archive itself still happened.
+ */
+export const doneMessage = async (id: number): Promise<ArchivedCopy | null> => {
   const opId = await verifiedOpId(id);
   if (opId === null) {
     log.info("archive", "message no longer exists; treating archive as settled", { id });
-    return;
+    return null;
   }
   id = opId;
   let sourceFolderId = "";
   let headerMessageId = "";
+  let accountId = "";
   try {
     const msg = await messenger.messages.get(id);
-    sourceFolderId = (msg as messenger.messages.MessageHeader & {
-      folder?: { id?: string };
-    }).folder?.id ?? "";
+    const folder = (msg as messenger.messages.MessageHeader & {
+      folder?: { id?: string; accountId?: string };
+    }).folder;
+    sourceFolderId = folder?.id ?? "";
+    accountId = folder?.accountId ?? "";
     headerMessageId = msg.headerMessageId ?? "";
   } catch (e) {
     if (isMessageNotFound(e)) {
       log.info("archive", "message already gone; treating archive as settled", { id });
-      return;
+      return null;
     }
     throw e;
   }
@@ -222,13 +246,15 @@ export const doneMessage = async (id: number): Promise<void> => {
   } catch (e) {
     if (isMessageNotFound(e)) {
       log.info("archive", "message disappeared during archive; treating as settled", { id });
-      return;
+      return null;
     }
     archiveError = e;
     log.warn("archive", "messages.archive threw", { id, sourceFolderId, e: String(e) });
   }
 
-  if (await messageSettledOutOfFolder(id, sourceFolderId, headerMessageId)) return;
+  if (await messageSettledOutOfFolder(id, sourceFolderId, headerMessageId)) {
+    return locateArchivedCopy(accountId, sourceFolderId, headerMessageId);
+  }
 
   log.warn("archive", "archive() did not move the message; attempting fallback", {
     id,
@@ -245,11 +271,16 @@ export const doneMessage = async (id: number): Promise<void> => {
     );
   }
 
+  let movedId = moveId;
   try {
-    await messenger.messages.move(
+    // move() hands back the copies it created, whose ids differ from the
+    // originals'. Taking the id from here is what lets the caller record the
+    // destination instead of searching the archive for it later.
+    const moved = (await messenger.messages.move(
       [moveId],
       resolved.archiveFolderId as unknown as messenger.folders.MailFolderId,
-    );
+    )) as { messages?: { id: number }[] } | undefined;
+    movedId = moved?.messages?.[0]?.id ?? moveId;
   } catch (e) {
     log.warn("archive", "fallback move failed", {
       id: moveId,
@@ -266,6 +297,8 @@ export const doneMessage = async (id: number): Promise<void> => {
       archiveError,
     );
   }
+  // The fallback path knows its own destination, so no search is needed.
+  return { id: movedId, folderId: resolved.archiveFolderId };
 }
 
 export const trashMessage = async (id: number): Promise<void> => {

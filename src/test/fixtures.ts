@@ -53,7 +53,12 @@ const account = (
   id: string,
   prefix: string,
   messages: FakeMessageSpec[],
-  opts: { archive?: boolean; legacyType?: boolean; sent?: FakeMessageSpec[] } = {},
+  opts: {
+    archive?: boolean;
+    legacyType?: boolean;
+    sent?: FakeMessageSpec[];
+    archived?: FakeMessageSpec[];
+  } = {},
 ): FakeAccountSpec => {
   const role = (name: string) =>
     opts.legacyType ? { type: name } : { specialUse: [name] };
@@ -66,7 +71,12 @@ const account = (
       { id: `drafts-${prefix}`, name: "Drafts", ...role("drafts") },
       ...(opts.archive === false
         ? []
-        : [{ id: `archive-${prefix}`, name: "Archives", ...role("archives") }]),
+        : [{
+            id: `archive-${prefix}`,
+            name: "Archives",
+            ...role("archives"),
+            messages: opts.archived,
+          }]),
     ],
   };
 };
@@ -86,6 +96,18 @@ export const shapes = {
     sent: FakeMessageSpec[],
   ): FakeMessengerOptions => ({
     accounts: [account("a", "a", messages, { sent })],
+  }),
+
+  /**
+   * Inbox plus an archive that already holds mail — a stand-in for Gmail's All
+   * Mail, which is what Thunderbird flags as the archive on a Gmail account.
+   * NeoInbox must never enumerate or fetch bodies out of it.
+   */
+  withArchive: (
+    messages: FakeMessageSpec[],
+    archived: FakeMessageSpec[],
+  ): FakeMessengerOptions => ({
+    accounts: [account("a", "a", messages, { archived })],
   }),
 
   /** Two accounts, each with its own folder set. */

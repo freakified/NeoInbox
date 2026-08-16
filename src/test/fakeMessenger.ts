@@ -209,6 +209,22 @@ export class FakeMessenger {
     listAttachments: [] as number[],
     query: 0,
     list: 0,
+    /**
+     * Folders walked end to end, by id — every list(), plus any query() broad
+     * enough to need one (no headerMessageId to narrow it). Enumerating a
+     * folder is what makes Thunderbird sync that folder's headers, so this is
+     * the list a test asserts against: the archive appearing here means
+     * NeoInbox just pulled headers for all of All Mail.
+     *
+     * `undefined` marks an unscoped query, which walks every folder there is.
+     */
+    enumeratedFolders: [] as (string | undefined)[],
+    /**
+     * Folder ids resolved by a single Message-ID lookup. Cheap and indexed —
+     * finding one archived message this way is fine, which is what lets Done
+     * and Snooze work without ever reading the archive.
+     */
+    pointLookups: [] as (string | undefined)[],
   };
 
   constructor(private options: FakeMessengerOptions) {
@@ -264,6 +280,14 @@ export class FakeMessenger {
       messages: [{ id }],
     });
     return id;
+  }
+
+  /**
+   * Moves messages and fires onMoved — what archiving from Thunderbird's own
+   * UI, or from another client, looks like to the extension.
+   */
+  async moveTo(ids: number[], targetId: string): Promise<void> {
+    await this.moveInternal(ids, targetId);
   }
 
   /**
@@ -428,6 +452,7 @@ export class FakeMessenger {
       if (blocked) return blocked;
       this.calls.list++;
       const folderId = this.folderIdOf(ref);
+      this.calls.enumeratedFolders.push(folderId);
       return this.paginate([...this.messages.values()].filter((m) => m.folderId === folderId));
     },
 
@@ -448,10 +473,14 @@ export class FakeMessenger {
       const blocked = this.guard("query");
       if (blocked) return blocked;
       this.calls.query++;
+      const scope = q.folderId === undefined ? undefined : this.folderIdOf(q.folderId);
+      // A Message-ID narrows the query to one message however wide its folder
+      // scope is; anything else has to walk whatever it was pointed at.
+      if (q.headerMessageId !== undefined) this.calls.pointLookups.push(scope);
+      else this.calls.enumeratedFolders.push(scope);
       let rows = [...this.messages.values()];
-      if (q.folderId !== undefined) {
-        const folderId = this.folderIdOf(q.folderId);
-        rows = rows.filter((m) => m.folderId === folderId);
+      if (scope !== undefined) {
+        rows = rows.filter((m) => m.folderId === scope);
       }
       if (q.accountId !== undefined) {
         rows = rows.filter((m) => this.folderOwner.get(m.folderId) === q.accountId);

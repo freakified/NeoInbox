@@ -96,29 +96,44 @@ export const cleanupLegacyTags = async (): Promise<void> => {
   const stored = await messenger.storage.local.get(CLEANUP_FLAG);
   if (stored[CLEANUP_FLAG]) return;
 
+  const registry = resolveRegistry();
+
+  // Only query for keys the registry actually still holds. Query-by-tag is
+  // unscoped — it walks every folder of every account — and this runs on every
+  // background start until the flag sticks, so an install that never had these
+  // tags (or has already had them stripped) must not pay for that walk at all.
+  let present: Set<string>;
+  try {
+    present = new Set(
+      ((await registry.list?.()) ?? [])
+        .map((tag) => tag.key)
+        .filter((key) => NEO_TAG_KEYS.has(key)),
+    );
+  } catch (e) {
+    log.warn("legacy-tags", "registry list failed; retrying next startup", e);
+    return;
+  }
+  if (!present.size) {
+    await messenger.storage.local.set({ [CLEANUP_FLAG]: true });
+    log.info("legacy-tags", "no legacy keys in the registry; nothing to clean up");
+    return;
+  }
+
   // Strip messages before touching the registry: deleting a registry key
   // first would make query-by-tag stop matching while the keyword stays
   // behind on the server.
   let strippedAll = true;
-  for (const key of NEO_TAG_KEYS) {
+  for (const key of present) {
     strippedAll = (await stripKeyFromMessages(key)) && strippedAll;
   }
-
-  const registry = resolveRegistry();
-  if (registry.list && registry.delete) {
-    try {
-      const existing = await registry.list();
-      for (const tag of existing) {
-        if (!NEO_TAG_KEYS.has(tag.key)) continue;
-        try {
-          await registry.delete(tag.key);
-          log.info("legacy-tags", "removed tag from registry", tag.key);
-        } catch (e) {
-          log.warn("legacy-tags", "registry delete failed", { key: tag.key, e: String(e) });
-        }
+  if (registry.delete) {
+    for (const key of present) {
+      try {
+        await registry.delete(key);
+        log.info("legacy-tags", "removed tag from registry", key);
+      } catch (e) {
+        log.warn("legacy-tags", "registry delete failed", { key, e: String(e) });
       }
-    } catch (e) {
-      log.warn("legacy-tags", "registry list failed", e);
     }
   } else {
     log.warn("legacy-tags", "tag registry delete unavailable; leaving registry entries");

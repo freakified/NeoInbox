@@ -24,6 +24,7 @@ export const ThreadView = ({
   const snoozeThread = useMailStore((st) => st.snoozeThread);
   const unsnoozeThread = useMailStore((st) => st.unsnoozeThread);
   const notify = useMailStore((st) => st.notify);
+  const hydrateThreadDetails = useMailStore((st) => st.hydrateThreadDetails);
   const inboxMessageIds = useMemo(
     () => t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
     [t],
@@ -50,6 +51,14 @@ export const ThreadView = ({
   useEffect(() => {
     setTranslatedSubject("");
   }, [t.id]);
+
+  // Sent and draft rows arrive with headers only; opening the conversation is
+  // what pays for their details, so nothing downloads a year of Sent behind
+  // your back. Threading already works without them — this sharpens it.
+  const threadMessageIds = useMemo(() => t.messages.map((m) => m.id), [t]);
+  useEffect(() => {
+    hydrateThreadDetails(threadMessageIds);
+  }, [hydrateThreadDetails, threadMessageIds]);
 
   if (!latestInbox || !latestMessage) return null;
 

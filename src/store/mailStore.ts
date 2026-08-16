@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { db } from "./db";
 import { deriveStream, type Stream, type StreamView } from "./stream";
+import { MESSAGE_DETAILS_VERSION } from "../shared/details";
 import { log } from "../shared/log";
 import {
   PORT_NAME,
@@ -79,6 +80,12 @@ interface MailStore {
   myEmails: ReadonlySet<string>;
   hydrated: boolean;
   syncProgress: SyncProgress | null;
+  /**
+   * How far the last full scan reached into the inbox. Null until a full scan
+   * reports; `skipped: 0` means the whole inbox is in the window.
+   */
+  inboxWindow: { cap: number; skipped: number } | null;
+  loadingMoreInbox: boolean;
   customBundles: CustomBundleRecord[];
   routeRules: RouteRuleRecord[];
   connectionState: ConnectionState;
@@ -129,6 +136,10 @@ interface MailStore {
    */
   setTripMembership: (keys: string[], tripId: string | null) => void;
   retryBackfill: () => void;
+  /** Fetch details for a conversation's headers-only rows as it opens. */
+  hydrateThreadDetails: (messageIds: number[]) => void;
+  /** Widen the inbox scan window by one step and rescan. */
+  loadMoreInbox: () => void;
   retryToast: (toastId: string) => void;
   undoToast: (toastId: string) => void;
   dismissToast: (toastId: string) => void;
@@ -219,6 +230,8 @@ export const useMailStore = create<MailStore>((set, get) => ({
   myEmails: new Set(),
   hydrated: false,
   syncProgress: null,
+  inboxWindow: null,
+  loadingMoreInbox: false,
   customBundles: [],
   routeRules: [],
   connectionState: "connected",
@@ -750,6 +763,24 @@ export const useMailStore = create<MailStore>((set, get) => ({
     ]);
   },
 
+  hydrateThreadDetails: (messageIds) => {
+    // Sent and draft rows are cached from headers alone so nothing downloads
+    // them in the background; opening the conversation is what asks for them.
+    // The background skips ids it has already hydrated, so this is cheap to
+    // fire on every open.
+    const pending = messageIds.filter((id) => {
+      const m = get().messagesById[id];
+      return m && (m.detailsVersion ?? 0) < MESSAGE_DETAILS_VERSION;
+    });
+    if (pending.length) send({ type: "hydrate-details", messageIds: pending });
+  },
+
+  loadMoreInbox: () => {
+    if (get().loadingMoreInbox) return;
+    set({ loadingMoreInbox: true });
+    send({ type: "load-more-inbox" });
+  },
+
   retryBackfill: () => {
     const prev = get().syncProgress;
     set({
@@ -931,6 +962,12 @@ const applyServerMsg = (
           done: msg.done,
           error: msg.error ?? null,
         },
+      });
+      return;
+    case "inbox-window":
+      set({
+        inboxWindow: { cap: msg.cap, skipped: msg.skipped },
+        loadingMoreInbox: false,
       });
       return;
     case "command-failed": {

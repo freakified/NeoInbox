@@ -2,6 +2,7 @@ import {
   anyIncompleteClassifications,
   applyMessageDetails,
   classifyMessage,
+  DETAILS_LAZY,
   extractMessageDetails,
   getLiveHeader,
   liveHeaderWithinBudget,
@@ -51,6 +52,50 @@ const FOLDER_OP_TIMEOUT_MS = 60_000;
 /** Max messages hydrated per fillMissingDetails run; the periodic sweep continues the rest. */
 const DETAILS_FILL_LIMIT = 400;
 
+/**
+ * How many inbox messages a full scan takes on, newest first, and how much
+ * "Load more" adds each time.
+ *
+ * Classifying a message costs a body fetch, so an uncapped scan of a large
+ * inbox is thousands of them before the app is usable. The cap bounds that;
+ * anything older is left alone until you ask for it. Only full scans are
+ * capped — incremental ones are bounded by the folder cursor instead, so new
+ * mail always arrives however far the window reaches.
+ */
+export const INBOX_SCAN_STEP = 1000;
+const INBOX_CAP_KEY = "neoinbox-inbox-cap";
+
+export const getInboxScanCap = async (): Promise<number> => {
+  try {
+    const stored = await messenger.storage.local.get(INBOX_CAP_KEY);
+    const cap = Number(stored[INBOX_CAP_KEY]);
+    return Number.isFinite(cap) && cap > 0 ? cap : INBOX_SCAN_STEP;
+  } catch (e) {
+    log.warn("backfill", "reading the inbox cap failed; using the default", e);
+    return INBOX_SCAN_STEP;
+  }
+};
+
+/** Widens the window by one step and returns the new cap. */
+export const raiseInboxScanCap = async (): Promise<number> => {
+  const next = (await getInboxScanCap()) + INBOX_SCAN_STEP;
+  await messenger.storage.local.set({ [INBOX_CAP_KEY]: next });
+  return next;
+};
+
+const dateOf = (header: messenger.messages.MessageHeader): number =>
+  header.date ? new Date(header.date).getTime() : 0;
+
+/** Keeps the newest `cap` headers and drops the rest, in place. */
+const trimToNewest = (
+  headers: messenger.messages.MessageHeader[],
+  cap: number,
+): void => {
+  if (headers.length <= cap) return;
+  headers.sort((a, b) => dateOf(b) - dateOf(a));
+  headers.length = cap;
+};
+
 type ScanMode = "full" | "incremental";
 
 interface ScanCounters {
@@ -64,6 +109,8 @@ interface ScanCounters {
    * should have. This separates the two.
    */
   reclassified: number;
+  /** Inbox messages left outside the scan window; drives the Load more control. */
+  skippedOlder: number;
 }
 
 let fullScanQueued = false;
@@ -162,7 +209,11 @@ const isUnchanged = (
   Array.isArray(cached.references) &&
   Array.isArray(cached.inReplyTo);
 
-/** Sent/draft details (references for threading) are filled later by fillMissingDetails. */
+/**
+ * Sent/draft rows are cached from their headers alone. Details are fetched on
+ * demand when a conversation is opened (see DETAILS_LAZY), never swept for in
+ * the background — that sweep was a body fetch per sent message.
+ */
 const applyHeadersFirstDetails = (raw: RawMessage, cached?: RawMessage): void => {
   if (cached && Array.isArray(cached.references) && Array.isArray(cached.inReplyTo)) {
     raw.attachments = Array.isArray(cached.attachments) ? cached.attachments : [];
@@ -174,7 +225,7 @@ const applyHeadersFirstDetails = (raw: RawMessage, cached?: RawMessage): void =>
   raw.attachments = [];
   raw.references = [];
   raw.inReplyTo = [];
-  raw.detailsVersion = 0;
+  raw.detailsVersion = DETAILS_LAZY;
 };
 
 const ingestHeader = async (
@@ -245,13 +296,9 @@ const visitFolder = async (
     broadcast({ type: "delta", added: rows });
   };
 
-  for await (const header of iterateFolder(folder.id, fromDate)) {
+  const ingestOne = async (header: messenger.messages.MessageHeader): Promise<void> => {
     counters.scanned++;
     liveIds.add(header.id);
-    // Future-dated messages must not push the cursor past "now" or new mail
-    // would fall behind the next incremental window.
-    const dateMs = Math.min(header.date ? new Date(header.date).getTime() : 0, now);
-    if (dateMs > maxDate) maxDate = dateMs;
     try {
       const { raw, classified, ranPipeline } = await withTimeout(
         ingestHeader(header, origin),
@@ -278,8 +325,46 @@ const visitFolder = async (
         done: false,
       });
     }
+  };
+
+  // Only a full inbox sweep is capped. Enumerating headers is cheap; it is
+  // classifying them that costs a body fetch each, so the window is applied
+  // between the two — every header is seen (the cursor and the drift check
+  // depend on that), only the newest `cap` are ingested.
+  const cap = mode === "full" && origin === "inbox" ? await getInboxScanCap() : null;
+  const window: messenger.messages.MessageHeader[] = [];
+  let seen = 0;
+
+  for await (const header of iterateFolder(folder.id, fromDate)) {
+    seen++;
+    // Future-dated messages must not push the cursor past "now" or new mail
+    // would fall behind the next incremental window.
+    const dateMs = Math.min(dateOf(header), now);
+    if (dateMs > maxDate) maxDate = dateMs;
+    if (cap === null) {
+      await ingestOne(header);
+      continue;
+    }
+    window.push(header);
+    // Trimming on a multiple of the cap keeps this O(n log cap) overall rather
+    // than sorting on every push, while bounding what's held to 2x the window.
+    if (window.length >= cap * 2) trimToNewest(window, cap);
+  }
+
+  if (cap !== null) {
+    trimToNewest(window, cap);
+    for (const header of window) await ingestOne(header);
   }
   await flush();
+
+  const skipped = cap === null ? 0 : Math.max(seen - window.length, 0);
+  counters.skippedOlder += skipped;
+  if (skipped) {
+    log.info("backfill", `inbox window: ingested ${window.length} of ${seen} in ${folder.name}`, {
+      cap,
+      skipped,
+    });
+  }
 
   if (mode === "full") {
     const cachedRows = await db.messages.where("folderId").equals(folder.id).toArray();
@@ -393,7 +478,7 @@ const runScan = (mode: ScanMode): Promise<ScanCounters> => {
   const duplicate = mode === "full" ? fullScanQueued : fullScanQueued || incrementalScanQueued;
   if (duplicate) {
     if (lastProgress) broadcast(lastProgress);
-    return Promise.resolve({ scanned: 0, classified: 0, reclassified: 0 });
+    return Promise.resolve({ scanned: 0, classified: 0, reclassified: 0, skippedOlder: 0 });
   }
   if (mode === "full") fullScanQueued = true;
   else incrementalScanQueued = true;
@@ -402,7 +487,7 @@ const runScan = (mode: ScanMode): Promise<ScanCounters> => {
   const announce = mode === "full";
   return serialized(async () => {
     beginScan();
-    const counters: ScanCounters = { scanned: 0, classified: 0, reclassified: 0 };
+    const counters: ScanCounters = { scanned: 0, classified: 0, reclassified: 0, skippedOlder: 0 };
     let errored: string | null = null;
     try {
       const [inboxes, sents, drafts] = await Promise.all([
@@ -429,6 +514,12 @@ const runScan = (mode: ScanMode): Promise<ScanCounters> => {
       }
       if (mode === "full") {
         await pruneUnknownFolders(scheduled.map(([f]) => f.id));
+        // Tells the SPA whether older inbox mail is waiting behind Load more.
+        broadcast({
+          type: "inbox-window",
+          cap: await getInboxScanCap(),
+          skipped: counters.skippedOlder,
+        });
       }
       log.info(
         "backfill",
@@ -483,9 +574,12 @@ export const runStartupSync = async (): Promise<void> => {
 };
 
 /**
- * Hydrates references/inReplyTo (and inbox attachments) for rows ingested
+ * Hydrates references/inReplyTo and attachments for inbox rows ingested
  * headers-first, newest first, a bounded chunk per run. Runs after every scan
  * and keeps going on the periodic sweep until nothing is left.
+ *
+ * Sent and draft rows sit at DETAILS_LAZY, below the bottom of this range, and
+ * are hydrated only when a conversation is opened.
  */
 export const fillMissingDetails = async (limit = DETAILS_FILL_LIMIT): Promise<void> => {
   if (fillingDetails) return;
@@ -495,7 +589,10 @@ export const fillMissingDetails = async (limit = DETAILS_FILL_LIMIT): Promise<vo
     // the whole cache filtered down to them. needsMessageDetails still runs as
     // the authority on what counts, over a set that is normally tiny.
     const pending = (
-      await db.messages.where("detailsVersion").below(MESSAGE_DETAILS_VERSION).toArray()
+      await db.messages
+        .where("detailsVersion")
+        .between(DETAILS_LAZY, MESSAGE_DETAILS_VERSION, false, false)
+        .toArray()
     )
       .filter(needsMessageDetails)
       .sort((a, b) => b.date - a.date)
@@ -546,68 +643,43 @@ export const fillMissingDetails = async (limit = DETAILS_FILL_LIMIT): Promise<vo
   }
 };
 
-const DONE_CATEGORY_SWEEP_FLAG = "neoinbox-done-category-sweep-v1";
-
 /**
- * Done rows cached before bundle views included archived mail were never
- * classified (the sync engine only classified inbox mail), so they all carry
- * category null and can't match any bundle. One-time sweep to classify the
- * backlog; new done rows are classified on the way in.
+ * Fetches details for specific rows, on demand.
+ *
+ * This is the other half of DETAILS_LAZY: sent and draft mail is cached from
+ * headers alone, and the SPA calls this for the messages in a conversation as
+ * it opens. Rows already hydrated cost nothing, so the SPA can call it freely.
  */
-export const classifyCachedDoneMessages = async (): Promise<void> => {
-  const stored = await messenger.storage.local.get(DONE_CATEGORY_SWEEP_FLAG);
-  if (stored[DONE_CATEGORY_SWEEP_FLAG]) return;
-  // Scoped to done rows off the [origin+classifierVersion] index rather than
-  // read whole; the archive backlog is the biggest thing in the cache.
-  const pending = (
-    await db.messages
-      .where("[origin+classifierVersion]")
-      .between(["done", -Infinity], ["done", Infinity], true, true)
-      .toArray()
-  ).filter((m) => m.category === null);
-  if (pending.length) {
-    log.info("backfill", `classifying ${pending.length} cached done messages`);
-  }
-  let updated: RawMessage[] = [];
-  const flushUpdated = (): void => {
-    if (!updated.length) return;
-    broadcast({ type: "delta", updated });
-    updated = [];
-  };
-  for (const msg of pending) {
+export const hydrateDetails = async (messageIds: readonly number[]): Promise<void> => {
+  const updated: RawMessage[] = [];
+  for (const id of messageIds) {
+    const cached = await db.messages.get(id);
+    if (!cached) continue;
+    if ((cached.detailsVersion ?? 0) >= MESSAGE_DETAILS_VERSION) continue;
     try {
-      const header = await withTimeout(
-        getLiveHeader(msg),
-        `classify done message ${msg.id}`,
+      const details = await withTimeout(
+        extractMessageDetails(id, { attachments: cached.origin === "inbox" }),
+        `on-demand details for message ${id}`,
       );
-      if (!header) continue;
-      const { category, incomplete } = await classifyMessage(header);
-      if (category === null && !incomplete) continue;
       const row = await db.transaction("rw", db.messages, async () => {
-        const fresh = await db.messages.get(msg.id);
-        if (!fresh || fresh.origin !== "done") return null;
+        const fresh = await db.messages.get(id);
+        if (!fresh) return null;
         const next: RawMessage = {
           ...fresh,
-          category,
-          classifiedIncomplete: incomplete,
-          classifierVersion: CLASSIFIER_VERSION,
+          attachments: fresh.origin === "inbox" ? details.attachments : [],
+          references: details.references,
+          inReplyTo: details.inReplyTo,
+          detailsVersion: MESSAGE_DETAILS_VERSION,
         };
         await db.messages.put(next);
         return next;
       });
-      if (row) {
-        updated.push(row);
-        if (updated.length >= BATCH_FLUSH) flushUpdated();
-      }
+      if (row) updated.push(row);
     } catch (e) {
-      log.debug("backfill", "done category sweep skipped a message", {
-        id: msg.id,
-        e: String(e),
-      });
+      log.debug("backfill", "on-demand details fetch failed", { id, e: String(e) });
     }
   }
-  flushUpdated();
-  await messenger.storage.local.set({ [DONE_CATEGORY_SWEEP_FLAG]: true });
+  if (updated.length) broadcast({ type: "delta", updated });
 };
 
 const CLASSIFIER_VERSION_KEY = "neoinbox-classifier-version";
@@ -653,14 +725,16 @@ const outdatedByOrigin = async (
   return { total, rows };
 };
 
-/** Inbox before done: the inbox is what is actually on screen. */
+/**
+ * Inbox only. Done rows used to be swept too, which meant every bump of
+ * CLASSIFIER_VERSION re-fetched the body of every archived message NeoInbox
+ * had ever cached — the comment on VERSION_SWEEP_CHUNK still describes that
+ * backlog running to tens of thousands. Archived mail keeps whatever category
+ * it had when you pressed Done; it is not on screen and not worth a download.
+ */
 const outdatedRows = async (limit: number): Promise<{ total: number; chunk: RawMessage[] }> => {
   const inbox = await outdatedByOrigin("inbox", limit);
-  const done = await outdatedByOrigin("done", limit - inbox.rows.length);
-  return {
-    total: inbox.total + done.total,
-    chunk: [...inbox.rows, ...done.rows],
-  };
+  return { total: inbox.total, chunk: inbox.rows };
 };
 
 /**
@@ -823,10 +897,12 @@ export const startClassifierVersionSweep = (): void => {
 let retryingClassifications = false;
 
 /**
- * Re-attempts classification for inbox and done rows whose category was
- * decided without the full message body (classifyMessage's getFull() call
- * failed). Runs alongside fillMissingDetails after every scan; rows that
- * still fail getFull() keep the flag and are retried on the next sweep.
+ * Re-attempts classification for inbox rows whose category was decided
+ * without the full message body (classifyMessage's getFull() call failed).
+ * Runs alongside fillMissingDetails after every scan; rows that still fail
+ * getFull() keep the flag and are retried on the next sweep.
+ *
+ * Inbox only — retrying done rows would fetch bodies out of the archive.
  */
 export const retryIncompleteClassifications = async (limit = DETAILS_FILL_LIMIT): Promise<void> => {
   if (retryingClassifications) return;
@@ -838,7 +914,7 @@ export const retryIncompleteClassifications = async (limit = DETAILS_FILL_LIMIT)
   retryingClassifications = true;
   try {
     const matching = (await db.messages.toArray()).filter(
-      (m) => (m.origin === "inbox" || m.origin === "done") && m.classifiedIncomplete,
+      (m) => m.origin === "inbox" && m.classifiedIncomplete,
     );
     const pending = matching.slice(0, limit);
     // Anything past this pass's limit, plus anything the pass fails to fix,
