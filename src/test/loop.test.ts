@@ -9,7 +9,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { settle, waitFor } from "./fakeMessenger";
 import { boot, type Booted } from "./boot";
-import { ARCHIVE, INBOX, forumMail, personalMail, promoMail, shapes } from "./fixtures";
+import {
+  ARCHIVE,
+  INBOX,
+  forumMail,
+  headerOnlyPromoMail,
+  personalMail,
+  promoMail,
+  shapes,
+} from "./fixtures";
 import type { StreamItem } from "../store/stream";
 
 /** The inbox as the SPA would render it. */
@@ -63,13 +71,13 @@ describe("new mail arriving", () => {
     // The exact shape of the original complaint: a backlog arrives with no
     // bodies, classification falls back to headers, and rows land loose.
     const app = await open();
-    const id = await app.mail.deliver(INBOX, promoMail({ bodyUnavailable: true }));
+    const id = await app.mail.deliver(INBOX, headerOnlyPromoMail({ bodyUnavailable: true }));
     await settle();
 
     expect(bundleFor(app, "promos")).toBeUndefined();
     expect(looseThreads(app)).toHaveLength(1);
 
-    app.mail.insert(INBOX, promoMail({ id })); // IMAP catches up
+    app.mail.insert(INBOX, headerOnlyPromoMail({ id })); // IMAP catches up
     await app.backfill.retryIncompleteClassifications();
     await settle();
 

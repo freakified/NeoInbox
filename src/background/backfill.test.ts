@@ -5,7 +5,18 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { boot, type Booted } from "../test/boot";
-import { ARCHIVE, categoriesOf, forumMail, INBOX, many, personalMail, promoMail, SENT, shapes } from "../test/fixtures";
+import {
+  ARCHIVE,
+  categoriesOf,
+  forumMail,
+  headerOnlyPromoMail,
+  INBOX,
+  many,
+  personalMail,
+  promoMail,
+  SENT,
+  shapes,
+} from "../test/fixtures";
 import { CLASSIFIER_VERSION } from "../classifier/version";
 import { settle, type FakeMessengerOptions } from "../test/fakeMessenger";
 import type { RawMessage } from "../shared/types";
@@ -122,10 +133,11 @@ describe("full scan classification", () => {
 });
 
 describe("classification without a downloaded body", () => {
-  // promoMail depends on its List-Unsubscribe header, so losing getFull loses
-  // the category. (forumMail would still match on its googlegroups.com domain.)
+  // headerOnlyPromoMail depends on its List-Unsubscribe header, so losing
+  // getFull loses the category. (forumMail would still match on its
+  // googlegroups.com domain, and plain promoMail on its `deals@` sender.)
   it("records a header-only result as incomplete instead of a settled category", async () => {
-    const app = await open(shapes.standard([promoMail({ bodyUnavailable: true })]));
+    const app = await open(shapes.standard([headerOnlyPromoMail({ bodyUnavailable: true })]));
 
     await app.backfill.runBackfill();
 
@@ -135,11 +147,11 @@ describe("classification without a downloaded body", () => {
   });
 
   it("repairs the category once the body becomes available", async () => {
-    const app = await open(shapes.standard([promoMail({ id: 1, bodyUnavailable: true })]));
+    const app = await open(shapes.standard([headerOnlyPromoMail({ id: 1, bodyUnavailable: true })]));
     await app.backfill.runBackfill();
     expect((await app.db.messages.get(1))!.category).toBeNull();
 
-    app.mail.insert(INBOX, promoMail({ id: 1 })); // IMAP catches up
+    app.mail.insert(INBOX, headerOnlyPromoMail({ id: 1 })); // IMAP catches up
     await app.backfill.retryIncompleteClassifications();
 
     const row = await app.db.messages.get(1);

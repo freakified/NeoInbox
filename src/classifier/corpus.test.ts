@@ -113,8 +113,11 @@ describe("header lookup", () => {
     expect(upper).toBe("forums");
   });
 
-  it("treats a message with no headers at all as unbundled", () => {
-    // What a header-only classification sees when getFull fails.
+  it("never reads a message with no headers as bulk", () => {
+    // What a classification sees when getFull fails: no List-*, no Precedence,
+    // no platform fingerprint. Promos requires bulk evidence, so it cannot
+    // fire here however promotional the subject reads. The message is still
+    // stamped classifiedIncomplete and re-run once the body syncs.
     expect(
       classify({
         name: "no headers",
@@ -122,6 +125,6 @@ describe("header lookup", () => {
         subject: "Save 40% — today only",
         expect: null,
       }),
-    ).toBeNull();
+    ).not.toBe("promos");
   });
 });

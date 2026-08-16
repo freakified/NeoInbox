@@ -112,6 +112,11 @@ Layout:
 - Bundling is heuristic. Airline promos landing in Travel is the classic
   failure; rules live in `src/classifier/rules/` and are easy to extend, and you
   can correct any message from its row.
+- The rules bundle organisational mail aggressively: a shared mailbox
+  (`support@`, `info@`, `billing@`) writing to you out of the blue lands in
+  Updates, and only a thread it is replying into keeps it loose. A small
+  business's first mail to you is the case that gets this wrong — see
+  `knownLimitations` in `src/classifier/corpus.ts`.
 - Trip extraction has been exercised against a limited set of real
   confirmations. Unusual airlines and hotel chains will need parser work.
 - Bundles cover your inbox plus whatever you have marked done from inside

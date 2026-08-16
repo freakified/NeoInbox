@@ -36,6 +36,18 @@ export const promoMail = (over: FakeMessageSpec = {}): FakeMessageSpec => ({
   ...over,
 });
 
+/**
+ * A campaign whose *only* signal is its List-Unsubscribe header.
+ *
+ * promoMail sends from `deals@`, which the sender rules recognise on its own,
+ * so it still classifies with no headers at all. That makes it useless for the
+ * tests about repairing a header-only classification, which need a message
+ * that genuinely cannot be classified until the body syncs: this sender is
+ * neither a machine nor a shared mailbox, and its domain is on no list.
+ */
+export const headerOnlyPromoMail = (over: FakeMessageSpec = {}): FakeMessageSpec =>
+  promoMail({ author: "Rowan Vale <rowanvale@brand.example>", ...over });
+
 /** Plain correspondence: matches no rule, so it stays loose in the inbox. */
 export const personalMail = (over: FakeMessageSpec = {}): FakeMessageSpec => ({
   author: "Alex <alex@example.com>",

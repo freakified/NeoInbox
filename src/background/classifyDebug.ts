@@ -9,7 +9,15 @@
  * becomes a fix.
  */
 import { classifyByRules } from "../classifier/pipeline";
-import { extractFeatures } from "../classifier/features";
+import { CAMPAIGN_HEADER_PREFIXES, extractFeatures } from "../classifier/features";
+import {
+  isPersonLocalPart,
+  MACHINE_SENDER_RE,
+  ROLE_SENDER_RE,
+} from "../classifier/signals";
+import { FORUM_HEADER_PREFIXES } from "../classifier/rules/forums";
+import { SOCIAL_HEADER_PREFIXES } from "../classifier/rules/social";
+import { SERVICE_HEADER_PREFIXES } from "../classifier/rules/updates";
 import { db } from "../store/db";
 import { log } from "../shared/log";
 import type { Category, RawMessage } from "../shared/types";
@@ -38,35 +46,76 @@ interface DumpEntry {
   expect: Category | null;
 }
 
-/** Header names any rule looks at; nothing else is worth dumping or storing. */
-const RELEVANT_HEADERS = ["list-id", "list-post", "list-unsubscribe", "mailing-list"];
+/**
+ * Headers whose *value* a rule reads, so they are dumped verbatim. List-Id in
+ * particular decides Forums by its host, and Precedence by its word.
+ */
+const VERBATIM_HEADERS = [
+  "list-id",
+  "list-post",
+  "list-unsubscribe",
+  "mailing-list",
+  "precedence",
+  "auto-submitted",
+];
 
-/** Local-part prefixes the rules match on, which must survive redaction. */
-const MEANINGFUL_PREFIX =
-  /^(no-?reply|noreply|donotreply|do-not-reply|notifications?|auto|automated|mailer-daemon|postmaster|orders?|receipts?|shipment|shipping|delivery|store|reservations?|itinerary|bookings?)/;
+/**
+ * Headers where only presence is a signal. Their values carry message-ids and
+ * per-account campaign identifiers, so they are dumped as a placeholder: a
+ * corpus case built from one classifies identically without carrying anything
+ * that points back at the account.
+ */
+const PRESENCE_ONLY_HEADERS = ["in-reply-to", "references"];
+
+const PRESENCE_ONLY_PREFIXES = [
+  ...CAMPAIGN_HEADER_PREFIXES,
+  ...FORUM_HEADER_PREFIXES,
+  ...SOCIAL_HEADER_PREFIXES,
+  ...SERVICE_HEADER_PREFIXES,
+];
+
+const PRESENCE_PLACEHOLDER = ["<redacted>"];
 
 /**
  * Anonymises a sender without changing how it classifies.
  *
- * The domain is kept verbatim (every domain-list rule needs it) and a
- * meaningful local-part prefix is preserved (several rules key on those).
- * Everything else goes, including the display name — no rule reads it, and it
- * is usually the most identifying part of the header.
+ * The domain is kept verbatim (every domain-list rule needs it) and whatever
+ * the rules key on in the local part is preserved: the machine or role prefix
+ * that MACHINE_SENDER_RE and ROLE_SENDER_RE match, or — for an address the
+ * rules read as a person — the fact that it is `first.last` shaped, which is
+ * what keeps a human sender out of a bundle. Everything else goes, including
+ * the display name, which no rule reads and which is usually the most
+ * identifying part of the header.
+ *
+ * Both regexes capture the prefix they matched in group 1, so the placeholder
+ * is the real prefix rather than a guess at one.
  */
 export const redactAuthor = (author: string): string => {
   const match = /([^\s<@]+)@([^\s>]+)/.exec(author);
   if (!match) return author;
-  const [, local = "", domain = ""] = match;
-  const prefix = MEANINGFUL_PREFIX.exec(local.toLowerCase())?.[0];
-  return `${prefix ?? "someone"}@${domain.replace(/[>,;]+$/, "")}`;
+  const [, rawLocal = "", rawDomain = ""] = match;
+  const local = rawLocal.toLowerCase();
+  const domain = rawDomain.replace(/[>,;]+$/, "").toLowerCase();
+  const prefix =
+    MACHINE_SENDER_RE.exec(local)?.[1] ??
+    ROLE_SENDER_RE.exec(local)?.[1] ??
+    (isPersonLocalPart(local, domain) ? "first.last" : "someone");
+  return `${prefix}@${domain}`;
 };
 
-const relevantHeaders = (
+export const relevantHeaders = (
   headers: Record<string, string[]>,
 ): Record<string, string[]> | undefined => {
   const kept: Record<string, string[]> = {};
   for (const [key, values] of Object.entries(headers)) {
-    if (RELEVANT_HEADERS.includes(key.toLowerCase())) kept[key] = values;
+    const name = key.toLowerCase();
+    if (VERBATIM_HEADERS.includes(name)) kept[key] = values;
+    else if (
+      PRESENCE_ONLY_HEADERS.includes(name) ||
+      PRESENCE_ONLY_PREFIXES.some((p) => name.startsWith(p))
+    ) {
+      kept[key] = PRESENCE_PLACEHOLDER;
+    }
   }
   return Object.keys(kept).length ? kept : undefined;
 };

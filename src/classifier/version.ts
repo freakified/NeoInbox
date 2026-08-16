@@ -11,7 +11,7 @@ import type { Category, RawMessage } from "../shared/types";
  * Rows below the current version are re-classified by the version sweep on the
  * next background start.
  */
-export const CLASSIFIER_VERSION = 2;
+export const CLASSIFIER_VERSION = 3;
 
 export interface ClassificationResult {
   category: Category | null;
