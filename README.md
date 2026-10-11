@@ -97,11 +97,28 @@ npm run typecheck  # tsc --noEmit
 
 After a rebuild, hit **Reload** next to the extension in Debug Add-ons.
 
+### Without Thunderbird
+
+```sh
+npm run harness    # http://localhost:5199/dev.html
+npm run shot       # headless Chrome screenshot -> shots/inbox.png
+```
+
+The harness runs the real background and SPA in a plain browser tab against
+the fake `messenger` from the tests, seeded with a mailbox that fills every
+bundle, a few threads and a trip (`src/dev/seed.ts`). Each load starts fresh.
+`window.neo` drives it from the console — `await neo.deliver("promo")`,
+`neo.mail.hang("getFull")`, `neo.store()`. `npm run shot` takes steps in
+order (`--click "text=Promos" --shot promos --eval "neo.deliver()"`); see
+`scripts/shot.mjs`. Anything the fake doesn't model (real MIME, compose,
+Thunderbird quirks) still needs the real thing.
+
 Layout:
 
 | Path | What lives there |
 | --- | --- |
 | `src/background/` | Backfill, incremental sync, snooze alarms, trip scanning |
+| `src/dev/` | Browser harness: fake-Thunderbird boot and seed mailbox |
 | `src/classifier/` | Bundle rules and the feature extractors they run on |
 | `src/shared/` | Threading, trip clustering, types shared across both sides |
 | `src/spa/` | The React UI rendered in the NeoInbox tab |

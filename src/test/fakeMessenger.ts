@@ -133,6 +133,8 @@ export interface FakeMessageSpec {
   headers?: Record<string, string[]>;
   /** HTML body, only needed by attachment/cid tests. */
   html?: string;
+  /** Plain-text body, served as a text/plain part alongside any HTML. */
+  text?: string;
   /**
    * When true getFull() rejects, reproducing an IMAP message whose body has
    * not been synced yet. This is the state a backlog arrives in, and the
@@ -178,6 +180,7 @@ interface StoredMessage {
   bccList: string[];
   headers: Record<string, string[]>;
   html?: string;
+  text?: string;
   bodyUnavailable: boolean;
 }
 
@@ -225,6 +228,8 @@ export class FakeMessenger {
      * and Snooze work without ever reading the archive.
      */
     pointLookups: [] as (string | undefined)[],
+    /** Compose windows the SPA asked Thunderbird to open, in order. */
+    compose: [] as { kind: "new" | "reply" | "forward"; args: unknown[] }[],
   };
 
   constructor(private options: FakeMessengerOptions) {
@@ -258,6 +263,7 @@ export class FakeMessenger {
       bccList: spec.bccList ?? [],
       headers: spec.headers ?? {},
       html: spec.html,
+      text: spec.text,
       bodyUnavailable: spec.bodyUnavailable ?? false,
     });
     return id;
@@ -441,9 +447,14 @@ export class FakeMessenger {
       return {
         contentType: "message/rfc822",
         headers: msg.headers,
-        parts: msg.html
-          ? [{ contentType: "text/html", body: msg.html, parts: [] }]
-          : [],
+        parts: [
+          ...(msg.text !== undefined
+            ? [{ contentType: "text/plain", body: msg.text, parts: [] }]
+            : []),
+          ...(msg.html !== undefined
+            ? [{ contentType: "text/html", body: msg.html, parts: [] }]
+            : []),
+        ],
       } as unknown as messenger.messages.MessagePart;
     },
 
@@ -621,6 +632,18 @@ export class FakeMessenger {
       },
       browserAction: { onClicked: new Event<[]>() },
       compose: {
+        beginNew: async (...args: unknown[]) => {
+          self.calls.compose.push({ kind: "new", args });
+          return { id: 1 };
+        },
+        beginReply: async (...args: unknown[]) => {
+          self.calls.compose.push({ kind: "reply", args });
+          return { id: 1 };
+        },
+        beginForward: async (...args: unknown[]) => {
+          self.calls.compose.push({ kind: "forward", args });
+          return { id: 1 };
+        },
         onAfterSend: new Event<[unknown, unknown]>(),
         onAfterSave: new Event<[unknown, unknown]>(),
         onBeforeSend: new Event<[unknown, unknown]>(),

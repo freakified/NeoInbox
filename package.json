@@ -10,7 +10,9 @@
     "build": "vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "harness": "vite --port 5199 --strictPort",
+    "shot": "node scripts/shot.mjs"
   },
   "dependencies": {
     "@fontsource-variable/material-symbols-rounded": "^5.2.43",
@@ -31,6 +33,7 @@
     "@vitest/coverage-v8": "^4.1.10",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1",
+    "playwright": "^1.64.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",
     "vitest": "^4.1.10"
