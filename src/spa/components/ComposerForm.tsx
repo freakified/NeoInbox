@@ -10,7 +10,9 @@ import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import type { ComposeMode } from "../lib/composePrefs";
 import { useKnownContacts } from "../lib/contacts";
 import { useIdentities } from "../lib/identities";
+import { sanitizeComposerHtml } from "../lib/richText";
 import { Icon } from "./Icon";
+import { captureSelection, FormatBar, RichTextEditor } from "./RichTextEditor";
 import s from "./ComposerForm.module.css";
 
 export interface ComposerValue {
@@ -19,7 +21,10 @@ export interface ComposerValue {
   to: string[];
   cc: string[];
   subject: string;
+  /** The message as plain text, kept in step with `html`. */
   text: string;
+  /** The editor's markup, unsanitized; see composerBody. */
+  html: string;
 }
 
 export const emptyComposerValue = (): ComposerValue => ({
@@ -27,6 +32,13 @@ export const emptyComposerValue = (): ComposerValue => ({
   cc: [],
   subject: "",
   text: "",
+  html: "",
+});
+
+/** The message body as a ComposeDraft carries it. */
+export const composerBody = (v: ComposerValue): { text: string; html: string } => ({
+  text: v.text,
+  html: sanitizeComposerHtml(v.html),
 });
 
 export const isComposerEmpty = (v: ComposerValue): boolean =>
@@ -131,7 +143,11 @@ const AddressSummary = ({ label, addresses }: { label: string; addresses: string
 
 /**
  * The fields and actions shared by the in-thread reply and the floating new
- * message panel. Plain text in, Thunderbird does the formatting.
+ * message panel. Basic formatting (bold, lists, links) goes along as HTML;
+ * Thunderbird does the rest.
+ *
+ * In send mode a pop-out button ("finish in Thunderbird") sits at the top
+ * right, unless the host shows its own (`hidePopOut`).
  *
  * With `compactAddresses` the From/To/Cc fields start folded into one line
  * that reads like a message header ("Me to Priya, Bob"); clicking it opens
@@ -145,6 +161,7 @@ export const ComposerForm = ({
   leading,
   avatar,
   compactAddresses,
+  hidePopOut,
   identityContext,
   placeholder = "Write your message",
   focus = "text",
@@ -161,6 +178,8 @@ export const ComposerForm = ({
   /** Show the sending identity's avatar, like a message in the thread. */
   avatar?: boolean;
   compactAddresses?: boolean;
+  /** The host puts the pop-out elsewhere (e.g. in its own title bar). */
+  hidePopOut?: boolean;
   /** What the default From is chosen from (see pickIdentity). */
   identityContext?: { accountId?: string; addresses?: readonly string[] };
   placeholder?: string;
@@ -175,7 +194,9 @@ export const ComposerForm = ({
   const [fieldsOpen, setFieldsOpen] = useState(!compactAddresses);
   /** Cc was opened by hand (not prefilled), so it should take the cursor. */
   const [ccRequested, setCcRequested] = useState(false);
-  const textRef = useRef<HTMLTextAreaElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+  const [linking, setLinking] = useState(false);
+  const linkRange = useRef<Range | null>(null);
   const identities = useIdentities();
   const identityId =
     (value.identityId && identities.some((i) => i.id === value.identityId)
@@ -193,14 +214,6 @@ export const ComposerForm = ({
   useEffect(() => {
     if (focus === "text") textRef.current?.focus();
   }, [focus]);
-
-  // Grow with the text instead of scrolling inside a tiny box.
-  useEffect(() => {
-    const el = textRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [value.text]);
 
   const primary = () => {
     if (mode === "send" && !hasRecipients) return;
@@ -303,6 +316,17 @@ export const ComposerForm = ({
               <Icon name="unfold_less" className={s.iconBtnIcon} />
             </button>
           )}
+          {mode === "send" && !hidePopOut && (
+            <button
+              type="button"
+              className={s.popOutBtn}
+              onClick={() => onSubmit(false, identityId)}
+              title="Pop out to Thunderbird (attachments, more formatting)"
+              aria-label="Pop out to Thunderbird"
+            >
+              <Icon name="open_in_new" className={s.iconBtnIcon} />
+            </button>
+          )}
         </div>
         {showSubject && (
           <input
@@ -313,14 +337,15 @@ export const ComposerForm = ({
             onChange={(e) => onChange({ ...value, subject: e.target.value })}
           />
         )}
-        <textarea
-          ref={textRef}
-          className={s.text}
+        <RichTextEditor
+          editorRef={textRef}
+          html={value.html}
           placeholder={placeholder}
-          aria-label="Message"
-          rows={3}
-          value={value.text}
-          onChange={(e) => onChange({ ...value, text: e.target.value })}
+          onChange={(body) => onChange({ ...value, ...body })}
+          onLinkShortcut={() => {
+            linkRange.current = captureSelection(textRef.current);
+            setLinking(true);
+          }}
         />
         <div className={s.actions}>
           {mode === "send" ? (
@@ -344,16 +369,12 @@ export const ComposerForm = ({
               Finish in Thunderbird
             </button>
           )}
-          {mode === "send" && (
-            <button
-              type="button"
-              className={s.iconBtn}
-              onClick={() => onSubmit(false, identityId)}
-              title="Finish in Thunderbird (attachments, formatting)"
-            >
-              <Icon name="open_in_new" className={s.iconBtnIcon} />
-            </button>
-          )}
+          <FormatBar
+            editorRef={textRef}
+            linking={linking}
+            onLinkingChange={setLinking}
+            savedRange={linkRange}
+          />
           <span className={s.spacer} />
           <button type="button" className={s.iconBtn} onClick={onDiscard} title="Discard">
             <Icon name="delete" className={s.iconBtnIcon} />

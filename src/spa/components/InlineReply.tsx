@@ -8,6 +8,7 @@ import { useMailStore } from "../../store/mailStore";
 import { senderName } from "../lib/avatar";
 import type { ComposeMode } from "../lib/composePrefs";
 import {
+  composerBody,
   ComposerForm,
   emptyComposerValue,
   isComposerEmpty,
@@ -197,7 +198,7 @@ export const InlineReply = ({
         identityId,
         to: state.value.to,
         cc: state.value.cc,
-        text: state.value.text,
+        ...composerBody(state.value),
       },
       send,
     );

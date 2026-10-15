@@ -50,6 +50,22 @@
   cursor: pointer;
 }
 
+.popOutBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  margin-top: 2px;
+  margin-left: auto;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.popOutBtn:hover,
 .collapseBtn:hover {
   background: var(--color-md-hover);
 }
@@ -226,24 +242,11 @@
   color: var(--color-md-on-surface);
 }
 
-.text {
-  min-height: 72px;
-  max-height: 60vh;
-  border: none;
-  outline: none;
-  resize: none;
-  background: transparent;
-  font: inherit;
-  font-size: 14px;
-  line-height: 1.5;
-  padding: 10px 0;
-  color: var(--color-md-on-surface);
-}
-
 .actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: 4px 8px;
   padding-top: 4px;
 }
 
@@ -263,6 +266,9 @@
   font: inherit;
   font-size: 14px;
   font-weight: 500;
+  /* MD1 buttons shouted. */
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   cursor: pointer;
   box-shadow: var(--shadow-elevation-1);
 }

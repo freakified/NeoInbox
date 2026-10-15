@@ -22,8 +22,13 @@ export interface ComposeDraft {
   cc: string[];
   /** Only used for new mail; replies and forwards keep Thunderbird's subject. */
   subject?: string;
-  /** What the user typed, as plain text. */
+  /** What the user typed, as plain text (for plain-text compose). */
   text: string;
+  /**
+   * The same message with its formatting, as sanitized HTML (for HTML
+   * compose). Absent means build it from `text`.
+   */
+  html?: string;
 }
 
 /**

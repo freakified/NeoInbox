@@ -32,7 +32,7 @@ const begin = (draft: ComposeDraft): Promise<messenger.tabs.Tab> => {
   );
 };
 
-const insertText = async (tabId: number, text: string): Promise<void> => {
+const insertText = async (tabId: number, text: string, html?: string): Promise<void> => {
   if (!text.trim()) return;
   const current = await messenger.compose.getComposeDetails(tabId);
   if (current.isPlainText) {
@@ -41,7 +41,10 @@ const insertText = async (tabId: number, text: string): Promise<void> => {
     });
   } else {
     await messenger.compose.setComposeDetails(tabId, {
-      body: prependToHtmlBody(current.body ?? "", textToHtml(text)),
+      body: prependToHtmlBody(
+        current.body ?? "",
+        html ? `<div>${html}</div><br>` : textToHtml(text),
+      ),
     });
   }
 };
@@ -60,7 +63,7 @@ export const runCompose = async (
   if (tabId === undefined) return { outcome: "failed", error: "No compose window" };
 
   try {
-    await insertText(tabId, draft.text);
+    await insertText(tabId, draft.text, draft.html);
   } catch (e) {
     // The window is open with Thunderbird's own reply; let the user finish it.
     log.warn("compose", "couldn't insert text", e);

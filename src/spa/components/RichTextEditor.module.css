@@ -1,0 +1,105 @@
+.editor {
+  position: relative;
+  min-height: 72px;
+  max-height: 60vh;
+  overflow-y: auto;
+  outline: none;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 10px 0;
+  color: var(--color-md-on-surface);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.editor ul,
+.editor ol {
+  margin: 0;
+  padding-left: 24px;
+}
+
+.editor a {
+  color: var(--color-md-primary-dark);
+}
+
+.blank::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  color: var(--color-md-secondary-text);
+  pointer-events: none;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--color-md-hover);
+}
+
+.btnActive,
+.btnActive:hover {
+  background: #e8f0fe;
+}
+
+.btnActive .icon {
+  color: var(--color-md-primary-dark);
+}
+
+.icon {
+  font-size: 20px;
+  color: var(--color-md-secondary-text);
+}
+
+.linkField {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 4px;
+}
+
+.linkInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-bottom: 1px solid var(--color-md-primary);
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  padding: 4px 0;
+  color: var(--color-md-on-surface);
+}
+
+.applyBtn {
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-md-primary-dark);
+  cursor: pointer;
+}
+
+.applyBtn:hover {
+  background: #e8f0fe;
+}

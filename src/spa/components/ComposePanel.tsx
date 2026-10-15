@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMailStore } from "../../store/mailStore";
 import type { ComposeMode } from "../lib/composePrefs";
 import {
+  composerBody,
   ComposerForm,
   emptyComposerValue,
   isComposerEmpty,
@@ -36,6 +37,22 @@ export const ComposePanel = ({
     to ? { ...emptyComposerValue(), to } : (unsentNewMessage ?? emptyComposerValue()),
   );
 
+  const submit = (send: boolean, identityId: string | undefined) => {
+    composeMessage(
+      {
+        kind: "new",
+        identityId,
+        to: value.to,
+        cc: value.cc,
+        subject: value.subject,
+        ...composerBody(value),
+      },
+      send,
+    );
+    unsentNewMessage = null;
+    onClose();
+  };
+
   const close = () => {
     unsentNewMessage = isComposerEmpty(value) ? null : value;
     onClose();
@@ -45,6 +62,17 @@ export const ComposePanel = ({
     <div className={s.panel} role="dialog" aria-label="New message">
       <div className={s.titleBar}>
         <span className={s.title}>{value.subject.trim() || "New message"}</span>
+        {mode === "send" && (
+          <button
+            type="button"
+            className={s.closeBtn}
+            onClick={() => submit(false, value.identityId)}
+            title="Pop out to Thunderbird (attachments, more formatting)"
+            aria-label="Pop out to Thunderbird"
+          >
+            <Icon name="open_in_new" className={s.closeIcon} />
+          </button>
+        )}
         <button type="button" className={s.closeBtn} onClick={close} title="Close (keeps your message)">
           <Icon name="close" className={s.closeIcon} />
         </button>
@@ -55,22 +83,9 @@ export const ComposePanel = ({
           onChange={setValue}
           mode={mode}
           showSubject
+          hidePopOut
           focus={value.to.length ? "text" : "to"}
-          onSubmit={(send, identityId) => {
-            composeMessage(
-              {
-                kind: "new",
-                identityId,
-                to: value.to,
-                cc: value.cc,
-                subject: value.subject,
-                text: value.text,
-              },
-              send,
-            );
-            unsentNewMessage = null;
-            onClose();
-          }}
+          onSubmit={submit}
           onDiscard={() => {
             const previous = value;
             unsentNewMessage = null;
