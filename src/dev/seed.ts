@@ -166,6 +166,30 @@ export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
     ],
     now,
   );
+  // A reply to Mom saved in Drafts but never sent, quote and all, the way
+  // Thunderbird stores one.
+  const reunionPhotos = reunion.inbox[0]!.headerMessageId!;
+  const reunionDraftId = mid();
+  const reunionDraft: FakeMessageSpec = {
+    headerMessageId: reunionDraftId,
+    author: `You <${ME}>`,
+    recipients: ["Mom <mom@family.example>"],
+    ccList: ["Aunt Jo <jo@family.example>"],
+    subject: "Re: Photos from the reunion",
+    date: new Date(now - 20 * HOUR),
+    read: true,
+    headers: {
+      "Message-ID": [reunionDraftId],
+      "In-Reply-To": [reunionPhotos],
+      References: [reunionPhotos],
+      "x-identity-key": ["dev-id0"],
+    },
+    html:
+      "<html><body><div>These are wonderful! Could you send the big one of all of us " +
+      "on the porch? I'd love to <b>frame it</b>.</div><br>" +
+      '<div class="moz-cite-prefix">On Tue, Mom wrote:<br></div>' +
+      '<blockquote type="cite">Here are the photos! Aunt Jo looks great.</blockquote></body></html>',
+  };
 
   // Corpus cases, spread back over two weeks. Their bodies are filler: the
   // classifier never reads them, but opening one in the UI should show text.
@@ -200,7 +224,7 @@ export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
         folders: [
           { id: INBOX, name: "Inbox", specialUse: ["inbox"], messages: inbox },
           { id: SENT, name: "Sent", specialUse: ["sent"], messages: [...hike.sent, ...lease.sent] },
-          { id: "drafts", name: "Drafts", specialUse: ["drafts"] },
+          { id: "drafts", name: "Drafts", specialUse: ["drafts"], messages: [reunionDraft] },
           { id: ARCHIVE, name: "Archives", specialUse: ["archives"] },
         ],
       },

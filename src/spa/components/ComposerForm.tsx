@@ -212,7 +212,12 @@ export const ComposerForm = ({
   }, [value.cc.length]);
 
   useEffect(() => {
-    if (focus === "text") textRef.current?.focus();
+    const el = textRef.current;
+    if (focus !== "text" || !el) return;
+    el.focus();
+    // Pick up where a restored reply or draft left off, not at its start.
+    if (el.childNodes.length) window.getSelection()?.selectAllChildren(el);
+    window.getSelection()?.collapseToEnd();
   }, [focus]);
 
   const primary = () => {

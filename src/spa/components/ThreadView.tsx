@@ -7,7 +7,7 @@ import { useBulkActions } from "./BulkActionConfirm";
 import { BundleMenu } from "./BundleMenu";
 import { Icon } from "./Icon";
 import { InlineMessage } from "./InlineMessage";
-import { InlineReply } from "./InlineReply";
+import { InlineReply, isEditableDraft } from "./InlineReply";
 import { useComposeMode } from "../lib/composePrefs";
 import { ReplyFooter } from "./ReplyFooter";
 import { SnoozeMenu } from "./SnoozeMenu";
@@ -41,13 +41,23 @@ export const ThreadView = ({
     const inbox = t.messages.filter((m) => m.origin === "inbox");
     return inbox[inbox.length - 1] ?? t.messages[t.messages.length - 1];
   }, [t]);
-  const latestMessage = t.messages[t.messages.length - 1];
   const replyTarget = [...t.messages].reverse().find((m) => m.origin === "inbox");
   const latestDraft = [...t.messages].reverse().find((m) => m.origin === "draft");
   // Inline replies can answer your own sent mail too (it goes to its recipients).
   const inlineReplyTarget =
     replyTarget ?? [...t.messages].reverse().find((m) => m.origin !== "draft");
   const composeMode = useComposeMode();
+  const inlineCompose = composeMode !== "thunderbird" && !!inlineReplyTarget;
+  // With inline compose the latest draft sits at the bottom as an editable
+  // card (see InlineReply) instead of in the message list.
+  const messages = useMemo(
+    () =>
+      inlineCompose && isEditableDraft(latestDraft)
+        ? t.messages.filter((m) => m !== latestDraft)
+        : t.messages,
+    [t, inlineCompose, latestDraft],
+  );
+  const latestMessage = messages[messages.length - 1];
 
   const [openIds, setOpenIds] = useState<Set<number>>(() => new Set());
   const [showMiddle, setShowMiddle] = useState(false);
@@ -96,7 +106,7 @@ export const ThreadView = ({
       [latestMessage.id]: (prev[latestMessage.id] ?? 0) + 1,
     }));
   };
-  const shouldCollapseMiddleMessages = t.messages.length > MIDDLE_COLLAPSE_THREAD_THRESHOLD;
+  const shouldCollapseMiddleMessages = messages.length > MIDDLE_COLLAPSE_THREAD_THRESHOLD;
 
   return (
     <div>
@@ -159,7 +169,7 @@ export const ThreadView = ({
 
       <div className={s.messages}>
         {!shouldCollapseMiddleMessages ? (
-          t.messages.map((m) => (
+          messages.map((m) => (
             <InlineMessage
               key={m.id}
               message={m}
@@ -173,17 +183,17 @@ export const ThreadView = ({
         ) : (
           <>
             <InlineMessage
-              key={t.messages[0]!.id}
-              message={t.messages[0]!}
-              isOpen={openIds.has(t.messages[0]!.id)}
-              onToggle={() => toggleMsg(t.messages[0]!.id)}
-              translationRequest={translationRequests[t.messages[0]!.id] ?? 0}
+              key={messages[0]!.id}
+              message={messages[0]!}
+              isOpen={openIds.has(messages[0]!.id)}
+              onToggle={() => toggleMsg(messages[0]!.id)}
+              translationRequest={translationRequests[messages[0]!.id] ?? 0}
               onTranslatedSubject={
-                t.messages[0]!.id === latestMessage.id ? setTranslatedSubject : undefined
+                messages[0]!.id === latestMessage.id ? setTranslatedSubject : undefined
               }
             />
             {showMiddle ? (
-              t.messages.slice(1, -1).map((m) => (
+              messages.slice(1, -1).map((m) => (
                 <InlineMessage
                   key={m.id}
                   message={m}
@@ -200,10 +210,10 @@ export const ThreadView = ({
                   e.stopPropagation();
                   setShowMiddle(true);
                 }}
-                title={`Show ${t.messages.length - 2} hidden replies`}
+                title={`Show ${messages.length - 2} hidden replies`}
               >
                 <span className={s.middleRail} aria-hidden="true" />
-                <span className={s.middleCount}>{t.messages.length - 2}</span>
+                <span className={s.middleCount}>{messages.length - 2}</span>
                 <span className={s.middleRail} aria-hidden="true" />
               </button>
             )}
@@ -220,7 +230,7 @@ export const ThreadView = ({
         )}
       </div>
 
-      {composeMode !== "thunderbird" && inlineReplyTarget ? (
+      {inlineCompose && inlineReplyTarget ? (
         <InlineReply
           thread={t}
           replyTarget={inlineReplyTarget}

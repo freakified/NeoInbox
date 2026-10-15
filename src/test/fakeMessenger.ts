@@ -248,10 +248,15 @@ export class FakeMessenger {
       messenger.compose.ComposeDetails;
     const id = this.nextComposeTab++;
     const quote = kind === "new" ? "" : "<blockquote>quoted</blockquote>";
+    // beginNew(messageId) reopens a saved draft: what was written, then the quote.
+    const body =
+      kind === "new" && typeof args[0] === "number"
+        ? '<div>Old draft text</div><br><div class="moz-cite-prefix">On Mon, Ann wrote:</div><blockquote type="cite">quoted</blockquote>'
+        : quote;
     this.composeTabs.set(id, {
       ...details,
       isPlainText: false,
-      body: `<html><body>${quote}</body></html>`,
+      body: `<html><body>${body}</body></html>`,
     });
     return { id, windowId: id };
   }

@@ -5,8 +5,11 @@ import { replyRecipients, type ComposeKind } from "../../shared/compose";
 import { resolveLiveMessageId } from "../../shared/liveMessage";
 import type { RawMessage, Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
-import { senderName } from "../lib/avatar";
+import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import type { ComposeMode } from "../lib/composePrefs";
+import { formatDate } from "../lib/dateBucket";
+import { loadDraftValue } from "../lib/draftValue";
+import { useIdentities } from "../lib/identities";
 import {
   composerBody,
   ComposerForm,
@@ -17,18 +20,28 @@ import {
 import { Icon } from "./Icon";
 import s from "./InlineReply.module.css";
 
-type ReplyKind = Exclude<ComposeKind, "new">;
+type ReplyKind = Exclude<ComposeKind, "new" | "draft">;
 
-interface ReplyState {
-  kind: ReplyKind;
-  value: ComposerValue;
-}
+type ReplyState =
+  | { kind: ReplyKind; value: ComposerValue }
+  /** Editing a draft saved in Thunderbird, which send or discard then replaces. */
+  | { kind: "draft"; draftId: number; value: ComposerValue };
 
 /**
  * Unsent replies by thread, so closing a conversation (or switching away and
  * back) doesn't throw away what was typed. Lives for the tab's lifetime.
  */
 const unsentReplies = new Map<string, ReplyState>();
+
+/**
+ * Drafts just sent from here. Thunderbird deletes them once the send lands;
+ * until then they stay hidden instead of reappearing as a card.
+ */
+const sentDraftIds = new Set<number>();
+
+/** Whether the thread shows this draft as an editable card (see ThreadView). */
+export const isEditableDraft = (draft: RawMessage | undefined): draft is RawMessage =>
+  !!draft && !sentDraftIds.has(draft.id);
 
 const KINDS: { kind: ReplyKind; label: string; icon: string }[] = [
   { kind: "replyAll", label: "Reply all", icon: "reply_all" },
@@ -132,10 +145,93 @@ const loadReplyTo = async (m: RawMessage): Promise<string | undefined> => {
   }
 };
 
+/**
+ * A saved draft, folded like a message in the thread: who it's to and what
+ * it says so far. Clicking it opens it in the composer.
+ */
+const DraftCard = ({
+  draft,
+  edited,
+  onOpen,
+  onDiscard,
+}: {
+  draft: RawMessage;
+  /** Unsent edits to the draft, shown instead of what Thunderbird saved. */
+  edited?: ComposerValue;
+  onOpen: () => void;
+  onDiscard: () => void;
+}) => {
+  const [saved, setSaved] = useState<ComposerValue | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (edited) return;
+    let cancelled = false;
+    setSaved(undefined);
+    void loadDraftValue(draft).then((v) => {
+      if (!cancelled) setSaved(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [draft, edited]);
+
+  const value = edited ?? saved;
+  const to = [...(value?.to ?? draft.recipients), ...(value?.cc ?? draft.ccList)]
+    .map((raw) => senderName(raw) || raw)
+    .join(", ");
+  // Look like the composer it opens into, which shows the sending identity.
+  const identity = useIdentities().find((i) => i.id === value?.identityId);
+  const name = identity?.name || identity?.email || senderName(draft.author);
+  const snippet =
+    value === undefined ? "Loading draft…" : value?.text.replace(/\s+/g, " ").trim() || "(no text)";
+
+  return (
+    <div
+      className={s.draftCard}
+      role="button"
+      tabIndex={0}
+      title="Edit draft"
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen();
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        e.stopPropagation();
+        onOpen();
+      }}
+    >
+      <div className={s.draftAvatar} style={{ backgroundColor: avatarColor(name) }}>
+        {senderInitial(name)}
+      </div>
+      <div className={s.draftMeta}>
+        <div className={s.draftLine}>
+          <span className={s.draftBadge}>Draft</span>
+          {to && <span className={s.draftTo}>to {to}</span>}
+          <span className={s.draftDate}>{formatDate(draft.date)}</span>
+        </div>
+        <div className={s.draftSnippet}>{snippet}</div>
+      </div>
+      <button
+        type="button"
+        className={s.iconBtn}
+        title="Discard draft"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDiscard();
+        }}
+      >
+        <Icon name="delete" className={s.iconBtnIcon} />
+      </button>
+    </div>
+  );
+};
+
 export const InlineReply = ({
   thread,
   replyTarget,
-  draft,
+  draft: savedDraft,
   mode,
 }: {
   thread: Thread;
@@ -146,15 +242,26 @@ export const InlineReply = ({
 }) => {
   const myEmails = useMailStore((st) => st.myEmails);
   const composeMessage = useMailStore((st) => st.composeMessage);
+  const trashThread = useMailStore((st) => st.trashThread);
   const notify = useMailStore((st) => st.notify);
-  const [state, setState] = useState<ReplyState | null>(
-    () => unsentReplies.get(thread.id) ?? null,
-  );
+  const draft = isEditableDraft(savedDraft) ? savedDraft : undefined;
+
+  /** What's kept for this thread, minus edits to a draft that has since gone. */
+  const stored = (): ReplyState | null => {
+    const st = unsentReplies.get(thread.id);
+    if (st?.kind === "draft" && st.draftId !== draft?.id) {
+      unsentReplies.delete(thread.id);
+      return null;
+    }
+    return st ?? null;
+  };
+
+  const [state, setState] = useState<ReplyState | null>(stored);
   const replyToRef = useRef<{ id: number; value: string | undefined } | null>(null);
 
   useEffect(() => {
-    setState(unsentReplies.get(thread.id) ?? null);
-  }, [thread.id]);
+    setState(stored());
+  }, [thread.id, draft?.id]);
 
   const update = (next: ReplyState | null) => {
     if (next) unsentReplies.set(thread.id, next);
@@ -184,11 +291,31 @@ export const InlineReply = ({
     });
   };
 
+  const openDraft = async () => {
+    if (!draft) return;
+    const kept = stored();
+    if (kept?.kind === "draft") {
+      setState(kept);
+      return;
+    }
+    const value = await loadDraftValue(draft);
+    if (!value) {
+      notify("Couldn't open the draft");
+      return;
+    }
+    update({ kind: "draft", draftId: draft.id, value });
+  };
+
   const submit = async (send: boolean, identityId: string | undefined) => {
     if (!state) return;
-    const liveId = await resolveLiveMessageId(replyTarget);
+    const target = state.kind === "draft" ? draft : replyTarget;
+    const liveId = target ? await resolveLiveMessageId(target) : null;
     if (liveId === null) {
-      notify("Couldn't find the original message in Thunderbird");
+      notify(
+        state.kind === "draft"
+          ? "Couldn't find the draft in Thunderbird"
+          : "Couldn't find the original message in Thunderbird",
+      );
       return;
     }
     composeMessage(
@@ -202,10 +329,22 @@ export const InlineReply = ({
       },
       send,
     );
+    if (state.kind === "draft" && send) sentDraftIds.add(state.draftId);
     update(null);
   };
 
+  /** Moves the saved draft to the trash, with the usual Undo. */
+  const discardDraft = () => {
+    if (!draft) return;
+    update(null);
+    trashThread([draft.id]);
+  };
+
   const discard = () => {
+    if (state?.kind === "draft") {
+      discardDraft();
+      return;
+    }
     const previous = state;
     update(null);
     if (previous && !isComposerEmpty(previous.value)) {
@@ -214,42 +353,47 @@ export const InlineReply = ({
   };
 
   const collapse = () => {
-    if (state && isComposerEmpty(state.value)) update(null);
+    // A draft stays put (it's saved in Thunderbird); an empty reply just goes.
+    if (state && state.kind !== "draft" && isComposerEmpty(state.value)) update(null);
     else setState(null);
   };
 
   if (!state) {
-    const unsent = unsentReplies.get(thread.id);
+    const unsent = stored();
+    const unsentReply = unsent?.kind === "draft" ? null : unsent;
     return (
-      <div className={s.bar} onClick={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          className={s.fauxInput}
-          onClick={() => (unsent ? setState(unsent) : void start("replyAll"))}
-        >
-          <Icon name="reply_all" className={s.fauxIcon} />
-          {unsent ? "Continue your reply…" : `Reply to ${senderName(replyTarget.author)}…`}
-        </button>
-        <button
-          type="button"
-          className={s.iconBtn}
-          title="Forward"
-          onClick={() => void start("forward")}
-        >
-          <Icon name="forward" className={s.iconBtnIcon} />
-        </button>
+      <>
         {draft && (
-          <button
-            type="button"
-            className={s.draftBtn}
-            onClick={() => void messenger.compose.beginNew(draft.id)}
-            title="Open the draft saved in Thunderbird"
-          >
-            <Icon name="edit" className={s.iconBtnIcon} />
-            Resume draft
-          </button>
+          <DraftCard
+            draft={draft}
+            edited={unsent?.kind === "draft" ? unsent.value : undefined}
+            onOpen={() => void openDraft()}
+            onDiscard={discardDraft}
+          />
         )}
-      </div>
+        {(!draft || unsentReply) && (
+          <div className={s.bar} onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className={s.fauxInput}
+              onClick={() => (unsentReply ? setState(unsentReply) : void start("replyAll"))}
+            >
+              <Icon name="reply_all" className={s.fauxIcon} />
+              {unsentReply
+                ? "Continue your reply…"
+                : `Reply to ${senderName(replyTarget.author)}…`}
+            </button>
+            <button
+              type="button"
+              className={s.iconBtn}
+              title="Forward"
+              onClick={() => void start("forward")}
+            >
+              <Icon name="forward" className={s.iconBtnIcon} />
+            </button>
+          </div>
+        )}
+      </>
     );
   }
 
@@ -261,7 +405,13 @@ export const InlineReply = ({
         mode={mode}
         avatar
         compactAddresses
-        leading={<KindMenu kind={state.kind} onChoose={(kind) => void start(kind)} />}
+        leading={
+          state.kind === "draft" ? (
+            <span className={s.draftBadge}>Draft</span>
+          ) : (
+            <KindMenu kind={state.kind} onChoose={(kind) => void start(kind)} />
+          )
+        }
         focus={state.kind === "forward" ? "to" : "text"}
         placeholder={state.kind === "forward" ? "Add a note" : "Write your reply"}
         onSubmit={(send, identityId) => void submit(send, identityId)}

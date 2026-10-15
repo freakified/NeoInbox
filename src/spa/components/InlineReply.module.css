@@ -58,25 +58,6 @@
   color: var(--color-md-secondary-text);
 }
 
-.draftBtn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  padding: 6px 14px;
-  border: 1px solid var(--color-md-divider);
-  border-radius: 4px;
-  background: #fff;
-  font: inherit;
-  font-size: 14px;
-  color: var(--color-md-on-surface);
-  cursor: pointer;
-}
-
-.draftBtn:hover {
-  background: #f5f5f5;
-}
-
 .card {
   padding: 12px 20px;
   border-top: 1px solid var(--color-md-divider);
@@ -144,4 +125,86 @@
 
 .kindItemActive .kindIcon {
   color: var(--color-md-primary);
+}
+
+.draftBadge {
+  flex-shrink: 0;
+  align-self: center;
+  padding-right: 4px;
+  color: #c5221f;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.draftCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 12px 12px 20px;
+  border-top: 1px solid var(--color-md-divider);
+  background: #fff;
+  cursor: pointer;
+}
+
+.draftCard:hover {
+  background: #fafafa;
+}
+
+.draftCard:focus-visible {
+  outline: 2px solid var(--color-md-primary);
+  outline-offset: -2px;
+}
+
+.draftAvatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.draftMeta {
+  flex: 1;
+  min-width: 0;
+}
+
+.draftLine {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.draftLine .draftBadge {
+  align-self: auto;
+  padding-right: 0;
+}
+
+.draftTo {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-md-secondary-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draftDate {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 12px;
+  color: #a3a3a3;
+}
+
+.draftSnippet {
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 14px;
+  color: var(--color-md-on-surface);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

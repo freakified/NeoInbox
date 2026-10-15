@@ -5,11 +5,15 @@
  * (minimize, off-screen) was tried and looked worse than just letting it show.
  *
  * Thunderbird builds the reply as it normally would — identity, quote,
- * signature, plain/HTML — and the user's text goes on top of that.
+ * signature, plain/HTML — and the user's text goes on top of that. A saved
+ * draft reopens as Thunderbird's own draft (so sending it clears it from
+ * Drafts), with the user's part of its body swapped for the edited text.
  */
 import {
   prependToHtmlBody,
   prependToPlainBody,
+  replaceDraftHtmlBody,
+  replaceDraftPlainBody,
   textToHtml,
   type ComposeDraft,
 } from "../shared/compose";
@@ -22,6 +26,7 @@ const begin = (draft: ComposeDraft): Promise<messenger.tabs.Tab> => {
     return messenger.compose.beginNew({ ...details, subject: draft.subject ?? "" });
   }
   if (draft.messageId === undefined) throw new Error(`${draft.kind} needs a message`);
+  if (draft.kind === "draft") return messenger.compose.beginNew(draft.messageId, details);
   if (draft.kind === "forward") {
     return messenger.compose.beginForward(draft.messageId, "forwardInline", details);
   }
@@ -32,6 +37,9 @@ const begin = (draft: ComposeDraft): Promise<messenger.tabs.Tab> => {
   );
 };
 
+const htmlFor = (text: string, html?: string): string =>
+  html ? `<div>${html}</div><br>` : textToHtml(text);
+
 const insertText = async (tabId: number, text: string, html?: string): Promise<void> => {
   if (!text.trim()) return;
   const current = await messenger.compose.getComposeDetails(tabId);
@@ -41,10 +49,21 @@ const insertText = async (tabId: number, text: string, html?: string): Promise<v
     });
   } else {
     await messenger.compose.setComposeDetails(tabId, {
-      body: prependToHtmlBody(
-        current.body ?? "",
-        html ? `<div>${html}</div><br>` : textToHtml(text),
-      ),
+      body: prependToHtmlBody(current.body ?? "", htmlFor(text, html)),
+    });
+  }
+};
+
+/** Replaces what the user had written in a reopened draft (even with nothing). */
+const replaceDraftText = async (tabId: number, text: string, html?: string): Promise<void> => {
+  const current = await messenger.compose.getComposeDetails(tabId);
+  if (current.isPlainText) {
+    await messenger.compose.setComposeDetails(tabId, {
+      plainTextBody: replaceDraftPlainBody(current.plainTextBody ?? "", text),
+    });
+  } else {
+    await messenger.compose.setComposeDetails(tabId, {
+      body: replaceDraftHtmlBody(current.body ?? "", text.trim() ? htmlFor(text, html) : ""),
     });
   }
 };
@@ -63,7 +82,8 @@ export const runCompose = async (
   if (tabId === undefined) return { outcome: "failed", error: "No compose window" };
 
   try {
-    await insertText(tabId, draft.text, draft.html);
+    if (draft.kind === "draft") await replaceDraftText(tabId, draft.text, draft.html);
+    else await insertText(tabId, draft.text, draft.html);
   } catch (e) {
     // The window is open with Thunderbird's own reply; let the user finish it.
     log.warn("compose", "couldn't insert text", e);

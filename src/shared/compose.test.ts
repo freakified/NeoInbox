@@ -3,7 +3,11 @@ import {
   pickIdentity,
   prependToHtmlBody,
   prependToPlainBody,
+  replaceDraftHtmlBody,
+  replaceDraftPlainBody,
   replyRecipients,
+  splitDraftHtml,
+  splitDraftPlain,
   splitAddressList,
   textToHtml,
 } from "./compose";
@@ -84,5 +88,48 @@ describe("pickIdentity", () => {
   it("falls back to the account's default, then the overall default", () => {
     expect(pickIdentity(identities, { accountId: "b", addresses: ["ann@x.com"] })?.id).toBe("b0");
     expect(pickIdentity(identities)?.id).toBe("a0");
+  });
+});
+
+describe("draft bodies", () => {
+  const html =
+    '<html><head></head><body style="x"><p>Hi Ann</p><br>' +
+    '<div class="moz-cite-prefix">On Mon, Ann wrote:<br></div>' +
+    '<blockquote type="cite">quoted</blockquote>' +
+    '<div class="moz-signature">-- me</div></body></html>';
+
+  it("finds what the user wrote above the quote", () => {
+    expect(splitDraftHtml(html).user).toBe("<p>Hi Ann</p><br>");
+  });
+
+  it("stops at the signature or a forward, or runs to </body>", () => {
+    expect(splitDraftHtml('<body>a<pre class="moz-signature" cols="72">-- </pre></body>').user).toBe("a");
+    expect(splitDraftHtml('<body>a<div class="moz-forward-container">fw</div></body>').user).toBe("a");
+    expect(splitDraftHtml("<body>just text</body>").user).toBe("just text");
+    // The user's own blockquote formatting isn't a quote.
+    expect(splitDraftHtml("<body><blockquote>mine</blockquote></body>").user).toBe(
+      "<blockquote>mine</blockquote>",
+    );
+  });
+
+  it("swaps the user's part and keeps the rest", () => {
+    expect(replaceDraftHtmlBody(html, "<div>Bye</div><br>")).toBe(
+      '<html><head></head><body style="x"><div>Bye</div><br>' +
+        '<div class="moz-cite-prefix">On Mon, Ann wrote:<br></div>' +
+        '<blockquote type="cite">quoted</blockquote>' +
+        '<div class="moz-signature">-- me</div></body></html>',
+    );
+  });
+
+  it("splits plain text at the attribution line", () => {
+    const text = "Hi Ann\n\nOn Mon, Ann wrote:\n> quoted\n";
+    expect(splitDraftPlain(text)).toEqual({
+      user: "Hi Ann",
+      tail: "On Mon, Ann wrote:\n> quoted\n",
+    });
+    expect(replaceDraftPlainBody(text, "Bye")).toBe("Bye\n\nOn Mon, Ann wrote:\n> quoted\n");
+    expect(replaceDraftPlainBody(text, "")).toBe("On Mon, Ann wrote:\n> quoted\n");
+    expect(splitDraftPlain("Hi\n-- \nme").user).toBe("Hi");
+    expect(splitDraftPlain("Only this\n")).toEqual({ user: "Only this", tail: "" });
   });
 });

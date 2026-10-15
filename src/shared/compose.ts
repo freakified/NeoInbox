@@ -10,17 +10,18 @@
  */
 import { parseSender } from "./senders";
 
-export type ComposeKind = "reply" | "replyAll" | "forward" | "new";
+/** "draft" reopens a draft saved in Thunderbird, with the user's edits on it. */
+export type ComposeKind = "reply" | "replyAll" | "forward" | "new" | "draft";
 
 export interface ComposeDraft {
   kind: ComposeKind;
-  /** The message being replied to or forwarded; absent for new mail. */
+  /** The message being replied to, forwarded, or (for "draft") edited; absent for new mail. */
   messageId?: number;
   /** Send-from identity; Thunderbird picks one when absent. */
   identityId?: string;
   to: string[];
   cc: string[];
-  /** Only used for new mail; replies and forwards keep Thunderbird's subject. */
+  /** Only used for new mail; replies, forwards and drafts keep their subject. */
   subject?: string;
   /** What the user typed, as plain text (for plain-text compose). */
   text: string;
@@ -134,6 +135,67 @@ export const prependToHtmlBody = (body: string, html: string): string => {
 
 export const prependToPlainBody = (body: string, text: string): string =>
   `${text.trimEnd()}\n\n${body.replace(/^\n+/, "")}`;
+
+/**
+ * Where Thunderbird's own part of an HTML message starts: the quote's
+ * "On … wrote:" line, the quote itself, a forwarded message, or the signature.
+ */
+const HTML_TAIL_RE =
+  /<(?:div|pre|blockquote)\b[^>]*\bclass="[^"]*\bmoz-(?:cite-prefix|forward-container|signature)\b[^>]*>|<blockquote\b[^>]*\btype="?cite\b[^>]*>/i;
+
+/**
+ * Splits a saved draft's HTML into what the user wrote and the rest: the
+ * markup up to and including <body>, the user's part, and everything from
+ * the quote/forward/signature on (or from </body> when there is none).
+ */
+export const splitDraftHtml = (
+  html: string,
+): { head: string; user: string; tail: string } => {
+  const open = html.match(/<body[^>]*>/i);
+  const start = open?.index === undefined ? 0 : open.index + open[0].length;
+  const rest = html.slice(start);
+  const end =
+    rest.match(HTML_TAIL_RE)?.index ?? rest.match(/<\/body>/i)?.index ?? rest.length;
+  return { head: html.slice(0, start), user: rest.slice(0, end), tail: rest.slice(end) };
+};
+
+/** A saved draft's HTML with the user's part replaced; `html` may be empty. */
+export const replaceDraftHtmlBody = (body: string, html: string): string => {
+  const { head, tail } = splitDraftHtml(body);
+  return head + html + tail;
+};
+
+/**
+ * Splits a saved plain-text draft the same way: the user's text, then the
+ * quote (with its "… wrote:" line), a forwarded message, or the signature.
+ */
+export const splitDraftPlain = (text: string): { user: string; tail: string } => {
+  const lines = text.split(/\r?\n/);
+  let end = lines.findIndex(
+    (line) =>
+      line.startsWith(">") ||
+      line === "-- " ||
+      /^-{3,} ?(?:Original|Forwarded) Message ?-{3,}$/i.test(line.trim()),
+  );
+  if (end === -1) return { user: text.trimEnd(), tail: "" };
+  if (lines[end]!.startsWith(">")) {
+    // Take the attribution ("On …, Ann wrote:") along with the quote.
+    let prev = end - 1;
+    while (prev >= 0 && !lines[prev]!.trim()) prev--;
+    if (prev >= 0 && lines[prev]!.trimEnd().endsWith(":")) end = prev;
+  }
+  return {
+    user: lines.slice(0, end).join("\n").trimEnd(),
+    tail: lines.slice(end).join("\n"),
+  };
+};
+
+export const replaceDraftPlainBody = (body: string, text: string): string => {
+  const { tail } = splitDraftPlain(body);
+  const user = text.trimEnd();
+  if (!tail) return user;
+  return user ? `${user}\n\n${tail}` : tail;
+};
 
 export interface ComposeIdentity {
   id: string;

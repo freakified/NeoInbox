@@ -49,6 +49,31 @@ describe("inline compose", () => {
     expect(toastMessages(app)).not.toContain("Sending…");
   });
 
+  it("sends an edited draft in place of what it said before, keeping the quote", async () => {
+    const app = await open();
+    app.store().composeMessage(
+      {
+        kind: "draft",
+        messageId: 42,
+        identityId: "id2",
+        to: ["Ann <ann@example.com>"],
+        cc: [],
+        text: "New text",
+        html: "<b>New</b> text",
+      },
+      true,
+    );
+    await waitFor(() => app.mail.calls.sent.length === 1);
+
+    expect(app.mail.calls.compose.at(-1)).toMatchObject({
+      kind: "new",
+      args: [42, { to: ["Ann <ann@example.com>"], cc: [], identityId: "id2" }],
+    });
+    expect(app.mail.calls.sent[0]!.body).toBe(
+      '<html><body><div><b>New</b> text</div><br><div class="moz-cite-prefix">On Mon, Ann wrote:</div><blockquote type="cite">quoted</blockquote></body></html>',
+    );
+  });
+
   it("leaves the window open, without sending, when finishing in Thunderbird", async () => {
     const app = await open();
     app.store().composeMessage(
