@@ -9,7 +9,8 @@
  *   pnpm shot --width 420 --height 860 --shot narrow
  *
  * Steps run in the order given. --click takes any Playwright selector
- * ("text=Promos", "[aria-label=Done]", "css=.foo"), --eval runs JS in the page
+ * ("text=Promos", "[aria-label=Done]", "css=.foo"), --hover moves the pointer
+ * onto one, --eval runs JS in the page
  * and awaits it (window.neo is the harness API, see src/dev/harness.ts),
  * --shot <name> saves shots/<name>.png. With no --shot a final one is taken.
  *
@@ -36,7 +37,7 @@ for (let i = 0; i < args.length; i++) {
   if (value === undefined) throw new Error(`${flag} needs a value`);
   if (flag === "--width") width = Number(value);
   else if (flag === "--height") height = Number(value);
-  else if (["--click", "--eval", "--wait", "--shot", "--type", "--press"].includes(flag))
+  else if (["--click", "--hover", "--eval", "--wait", "--shot", "--type", "--press"].includes(flag))
     steps.push([flag.slice(2), value]);
   else throw new Error(`unknown flag ${flag}`);
 }
@@ -82,6 +83,7 @@ try {
   await mkdir(OUT, { recursive: true });
   for (const [kind, value] of steps) {
     if (kind === "click") await page.click(value);
+    else if (kind === "hover") await page.hover(value);
     else if (kind === "type") await page.keyboard.type(value);
     else if (kind === "press") await page.keyboard.press(value);
     else if (kind === "wait") await page.waitForTimeout(Number(value));

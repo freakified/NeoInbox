@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMailStore } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { Icon } from "./Icon";
@@ -84,24 +84,31 @@ export const Fab = () => {
     return () => document.removeEventListener("keydown", handler);
   }, [open]);
 
+  // Like the original Inbox, the menu opens on hover (or keyboard focus) and
+  // the main button itself composes. A short close delay lets the pointer
+  // cross the gaps between mini-buttons without the menu collapsing.
+  const closeTimer = useRef<number | undefined>(undefined);
+  const cancelClose = () => window.clearTimeout(closeTimer.current);
+  const openMenu = () => {
+    cancelClose();
+    setOpen(true);
+  };
+  const closeSoon = () => {
+    cancelClose();
+    closeTimer.current = window.setTimeout(() => setOpen(false), 180);
+  };
+  useEffect(() => cancelClose, []);
+
   const runAction = (action: () => void) => {
+    cancelClose();
     setOpen(false);
+    (document.activeElement as HTMLElement | null)?.blur();
     action();
   };
 
-  // Top to bottom: reminder, frequent contacts, compose nearest the FAB —
-  // mirroring the original Inbox speed dial.
+  // Top to bottom: frequent contacts, then reminder nearest the FAB —
+  // mirroring the original Inbox speed dial. Compose is the FAB itself.
   const items = [
-    {
-      key: "reminder",
-      label: "Reminder",
-      button: (
-        <span className={s.miniCircle}>
-          <Icon name="pan_tool_alt" className={s.miniIcon} style={{ color: "#4285F4" }} />
-        </span>
-      ),
-      onClick: () => runAction(() => setComposerOpen(true)),
-    },
     ...contacts.map((contact) => ({
       key: `contact:${contact.email}`,
       label: contact.name,
@@ -116,14 +123,14 @@ export const Fab = () => {
       onClick: () => runAction(() => startMessage([contact.raw])),
     })),
     {
-      key: "compose",
-      label: "Compose",
+      key: "reminder",
+      label: "Reminder",
       button: (
-        <span className={s.miniCircle}>
-          <Icon name="edit" className={s.miniIcon} style={{ color: "#DB4437" }} />
+        <span className={s.miniCircle} style={{ backgroundColor: "#4285F4", color: "#fff" }}>
+          <Icon name="pan_tool_alt" className={s.miniIcon} />
         </span>
       ),
-      onClick: () => runAction(() => startMessage()),
+      onClick: () => runAction(() => setComposerOpen(true)),
     },
   ];
 
@@ -141,15 +148,15 @@ export const Fab = () => {
 
   return (
     <>
-      {open && (
-        <button
-          type="button"
-          className={s.scrim}
-          aria-label="Close create menu"
-          onClick={() => setOpen(false)}
-        />
-      )}
-      <div className={s.wrap}>
+      <div
+        className={s.wrap}
+        onMouseEnter={openMenu}
+        onMouseLeave={closeSoon}
+        onFocus={openMenu}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) closeSoon();
+        }}
+      >
         <div className={s.stack} role="menu" aria-hidden={!open}>
           {reducedMotion ? (
             open && items.map((item) => <div key={item.key}>{renderItem(item)}</div>)
@@ -175,13 +182,15 @@ export const Fab = () => {
         <motion.button
           type="button"
           className={`${s.fab} ${open ? s.fabOpen : ""}`}
-          aria-label={open ? "Close create menu" : "Create"}
+          aria-label="Compose"
+          aria-haspopup="menu"
           aria-expanded={open}
+          title="Compose"
           whileTap={reducedMotion ? undefined : { scale: 0.92 }}
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => runAction(() => startMessage())}
         >
+          <Icon name="add" className={`${s.fabIcon} ${s.fabIconPlus}`} />
           <Icon name="edit" className={`${s.fabIcon} ${s.fabIconPencil}`} />
-          <Icon name="close" className={`${s.fabIcon} ${s.fabIconClose}`} />
         </motion.button>
       </div>
       {composerOpen && <ReminderComposer onClose={() => setComposerOpen(false)} />}
