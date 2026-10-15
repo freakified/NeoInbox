@@ -2,6 +2,7 @@ import { clsx } from "clsx";
 import type { Thread } from "../../shared/types";
 import { useShowDeleteActions } from "../lib/deleteActionPrefs";
 import { useThreadActions } from "../lib/useThreadActions";
+import { BundleMenu } from "./BundleMenu";
 import { Icon } from "./Icon";
 import { SnoozeMenu } from "./SnoozeMenu";
 import s from "./ActionStrip.module.css";
@@ -39,6 +40,7 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
           <Icon name="move_to_inbox" className={clsx(s.iconBase, s.iconMuted)} />
         </ActionBtn>
       )}
+      <BundleMenu thread={thread} />
     </div>
   );
 };

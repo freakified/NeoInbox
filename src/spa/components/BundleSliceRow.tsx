@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import type { Category, Thread } from "../../shared/types";
 import { getCategoryMeta } from "../../shared/categories";
-import { useCustomBundles } from "../../store/mailStore";
+import { useCustomBundles, useMailStore } from "../../store/mailStore";
 import { senderName } from "../lib/avatar";
 import { formatDate, groupByBucket } from "../lib/dateBucket";
 import { useShowDeleteActions } from "../lib/deleteActionPrefs";
@@ -36,6 +36,7 @@ export const BundleSliceRow = ({
   const meta = getCategoryMeta(category, customBundles);
   const showDeleteActions = useShowDeleteActions();
   const { doneMessages, trashMessages } = useBulkActions();
+  const openBundleSettings = useMailStore((st) => st.openBundleSettings);
 
   const threadCountLabel = threads.length > 25 ? "(25+)" : `(${threads.length})`;
   const latestDate = threads.reduce((max, t) => Math.max(max, t.latestDate), 0);
@@ -81,20 +82,6 @@ export const BundleSliceRow = ({
   const handleTrashAll = (e: React.MouseEvent) => {
     e.stopPropagation();
     const ids = threads.flatMap((t) => t.messages.map((m) => m.id));
-    trashMessages(ids);
-  };
-
-  const handleBucketDoneAll = (bucketThreads: Thread[]) => (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const ids = bucketThreads.flatMap((t) =>
-      t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
-    );
-    doneMessages(ids);
-  };
-
-  const handleBucketTrashAll = (bucketThreads: Thread[]) => (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const ids = bucketThreads.flatMap((t) => t.messages.map((m) => m.id));
     trashMessages(ids);
   };
 
@@ -158,6 +145,16 @@ export const BundleSliceRow = ({
             {meta.name}
           </button>
           <div className={s.actions}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                openBundleSettings({ category });
+              }}
+              title="Bundle settings"
+              className={s.actionBtn}
+            >
+              <Icon name="settings" className={s.actionIcon} />
+            </button>
             {showDeleteActions && (
               <button
                 onClick={handleTrashAll}
@@ -194,24 +191,6 @@ export const BundleSliceRow = ({
               <div key={label}>
                 <div className={s.bucketHeader}>
                   <p className={s.bucketLabel}>{label}</p>
-                  <div className={s.actions}>
-                    {showDeleteActions && (
-                      <button
-                        onClick={handleBucketTrashAll(items)}
-                        title="Delete all"
-                        className={s.actionBtn}
-                      >
-                        <Icon name="delete" className={s.actionIcon} />
-                      </button>
-                    )}
-                    <button
-                      onClick={handleBucketDoneAll(items)}
-                      title="Done all"
-                      className={s.actionBtn}
-                    >
-                      <Icon name="done_all" className={s.actionIcon} />
-                    </button>
-                  </div>
                 </div>
                 {expandedIdx >= 0 ? (
                   <>

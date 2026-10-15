@@ -5,9 +5,12 @@
   transform: translateY(-50%);
   display: flex;
   align-items: center;
-  background: #fff;
-  box-shadow: var(--shadow-elevation-1);
-  border-radius: 4px;
+  gap: 4px;
+  /* No frame: the strip sits flush on the row, painted in the row's own
+     background (with a short fade) so it hides the date and the tail of the
+     subject behind it. */
+  padding-left: 24px;
+  background: linear-gradient(to right, transparent, var(--row-bg) 24px);
 }
 
 .btn {
@@ -20,15 +23,15 @@
 }
 
 .btn:hover {
-  background: #f5f5f5;
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .iconBase {
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .iconMuted {
-  color: #a3a3a3;
+  color: var(--color-md-icon);
 }
 
 .iconPrimary {

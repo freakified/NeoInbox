@@ -117,7 +117,12 @@ export const SnoozeMenu = ({
         }}
         className={triggerClassName ?? s.trigger}
       >
-        <Icon name="schedule" className={iconClassName ?? s.triggerIcon} />
+        <Icon
+          name="schedule"
+          className={iconClassName ?? s.triggerIcon}
+          // Inbox drew snooze as an outline clock beside otherwise filled icons.
+          style={{ fontVariationSettings: "'FILL' 0" }}
+        />
       </button>
       {open &&
         createPortal(

@@ -1,5 +1,7 @@
 .row {
   --content-offset: 9px;
+  /* Read by the hover action strip so it can paint over the row's text. */
+  --row-bg: #fff;
   position: relative;
   padding: 8px 12px;
   display: flex;
@@ -10,16 +12,19 @@
 }
 
 .row:hover {
+  --row-bg: #fafafa;
   background: #fafafa;
 }
 
 .selected,
 .selected:hover {
+  --row-bg: #e8f0fe;
   background: #e8f0fe;
 }
 
 .row:focus-visible {
   outline: none;
+  --row-bg: #f1f5fd;
   background: #f1f5fd;
   box-shadow: inset 3px 0 0 var(--color-md-primary);
 }

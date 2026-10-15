@@ -113,7 +113,6 @@ export const ThreadView = ({
       <div className={s.header}>
         <h2 className={s.title}>{translatedSubject || t.subject || "(no subject)"}</h2>
         <div className={s.headerActions}>
-          <BundleMenu thread={t} onTranslateToEnglish={translateLatest} />
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -162,6 +161,7 @@ export const ThreadView = ({
               <Icon name="check" className={s.iconBtnIcon} />
             </button>
           )}
+          <BundleMenu thread={t} onTranslateToEnglish={translateLatest} />
         </div>
       </div>
 

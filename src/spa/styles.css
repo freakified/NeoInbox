@@ -20,6 +20,7 @@ html {
   --color-md-background: #f5f5f5;
   --color-md-on-surface: #212121;
   --color-md-secondary-text: #757575;
+  --color-md-icon: rgba(0, 0, 0, 0.6);
   --color-md-divider: #e0e0e0;
   --color-md-field-underline: #bdbdbd;
   --color-md-hover: #eeeeee;

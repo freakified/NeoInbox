@@ -12,19 +12,17 @@
 }
 
 .trigger:hover {
-  background: #f5f5f5;
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .triggerIcon {
   font-size: 20px;
-  color: var(--color-md-secondary-text);
+  color: var(--color-md-icon);
 }
 
 .menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 100;
+  position: fixed;
+  z-index: 1300;
   width: 220px;
   padding: 6px 0;
   border: 1px solid var(--color-md-divider);
@@ -48,7 +46,7 @@
 }
 
 .menuItem:hover {
-  background: #f5f5f5;
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .menuItem:disabled {
@@ -98,7 +96,7 @@
 }
 
 .menuBackItem:hover {
-  background: #f5f5f5;
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .menuScroll {
@@ -152,7 +150,7 @@
 }
 
 .closeBtn:hover {
-  background: #f5f5f5;
+  background: rgba(0, 0, 0, 0.06);
   color: var(--color-md-on-surface);
 }
 
@@ -267,7 +265,7 @@
 }
 
 .secondaryBtn:hover {
-  background: #f5f5f5;
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .primaryBtn {

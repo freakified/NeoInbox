@@ -330,7 +330,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  color: var(--color-md-secondary-text);
+  color: var(--color-md-icon);
   margin-bottom: 8px;
 }
 
@@ -340,7 +340,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  color: var(--color-md-secondary-text);
+  color: var(--color-md-icon);
   background: none;
   border: none;
   border-radius: 4px;

@@ -12,12 +12,12 @@
 }
 
 .trigger:hover {
-  background: #f5f5f5;
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .triggerIcon {
-  font-size: 18px;
-  color: #a3a3a3;
+  font-size: 20px;
+  color: var(--color-md-icon);
 }
 
 .dropdown {
@@ -179,7 +179,7 @@
 }
 
 .cancelBtn:hover {
-  background: #f5f5f5;
+  background: rgba(0, 0, 0, 0.06);
   color: var(--color-md-on-surface);
 }
 

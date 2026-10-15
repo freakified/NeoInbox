@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CATEGORIES, getCategoryMeta } from "../../shared/categories";
 import { findRouteRule, matchingRouteRules, ruleTypeLabel } from "../../shared/routeRules";
 import { parseSender } from "../../shared/senders";
@@ -32,13 +33,17 @@ export const BundleMenu = ({
   onTranslateToEnglish,
 }: {
   thread: Thread;
-  onTranslateToEnglish: () => void;
+  /** Omitted where there's no open message to translate (the row hover bar). */
+  onTranslateToEnglish?: () => void;
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [view, setView] = useState<"root" | "move">("root");
   const [movePrompt, setMovePrompt] = useState<Category | null>(null);
   const [newTripOpen, setNewTripOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
 
   const customBundles = useCustomBundles();
   const routeRules = useRouteRules();
@@ -78,10 +83,30 @@ export const BundleMenu = ({
   useEffect(() => {
     if (!menuOpen) return;
     const close = (e: MouseEvent) => {
-      if (!wrapperRef.current?.contains(e.target as Node)) setMenuOpen(false);
+      const target = e.target as Node;
+      if (wrapperRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setMenuOpen(false);
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
+  }, [menuOpen]);
+
+  // The menu is portaled out of the row so later rows (each its own stacking
+  // context) can't paint over it; pin it under the trigger, right-aligned.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setMenuStyle({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
   }, [menuOpen]);
 
   const openMenu = (open: boolean) => {
@@ -163,6 +188,7 @@ export const BundleMenu = ({
   return (
     <div className={s.wrapper} ref={wrapperRef}>
       <button
+        ref={triggerRef}
         type="button"
         title="More actions"
         onClick={(e) => {
@@ -173,8 +199,14 @@ export const BundleMenu = ({
       >
         <Icon name="more_vert" className={s.triggerIcon} />
       </button>
-      {menuOpen && (
-        <div className={s.menu} role="menu" onClick={(e) => e.stopPropagation()}>
+      {menuOpen && createPortal(
+        <div
+          ref={menuRef}
+          className={s.menu}
+          style={menuStyle}
+          role="menu"
+          onClick={(e) => e.stopPropagation()}
+        >
           {view === "root" ? (
             <>
               <button
@@ -187,18 +219,20 @@ export const BundleMenu = ({
                 <span className={s.menuItemLabel}>Move to</span>
                 <Icon name="chevron_right" className={s.menuChevron} />
               </button>
-              <button
-                type="button"
-                className={s.menuItem}
-                role="menuitem"
-                onClick={() => {
-                  onTranslateToEnglish();
-                  setMenuOpen(false);
-                }}
-              >
-                <Icon name="translate" className={s.menuIcon} />
-                <span className={s.menuItemLabel}>Translate to English</span>
-              </button>
+              {onTranslateToEnglish && (
+                <button
+                  type="button"
+                  className={s.menuItem}
+                  role="menuitem"
+                  onClick={() => {
+                    onTranslateToEnglish();
+                    setMenuOpen(false);
+                  }}
+                >
+                  <Icon name="translate" className={s.menuIcon} />
+                  <span className={s.menuItemLabel}>Translate to English</span>
+                </button>
+              )}
               <button
                 type="button"
                 className={s.menuItem}
@@ -291,7 +325,8 @@ export const BundleMenu = ({
               </button>
             </>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
       {newTripOpen && (
         <NewTripDialog thread={thread} onClose={() => setNewTripOpen(false)} />
