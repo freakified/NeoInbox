@@ -91,6 +91,10 @@
 
 .pinIndicator {
   font-size: 20px;
+  /* 24px wide so it centres 24px in from the card edge, under the section's
+     sweep icon and the hover strip's last button. */
+  width: 24px;
+  text-align: center;
   /* Center on the text line rather than the taller date slot. */
   margin: -5px 0;
   color: var(--color-md-primary);

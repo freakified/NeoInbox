@@ -1,6 +1,8 @@
 .strip {
   position: absolute;
-  right: 8px;
+  /* Last button centred 24px from the card edge, under the section's sweep
+     icons and in line with a pinned row's pin. */
+  right: 6px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;

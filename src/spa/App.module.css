@@ -62,7 +62,9 @@
   z-index: 20;
   background: var(--color-md-primary);
   box-shadow: var(--shadow-elevation-2);
-  padding: 12px 16px;
+  /* 28px left puts the menu icon over the drawer's icon column and the title
+     over its labels, as Inbox lined them up. */
+  padding: 12px 16px 12px 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -249,7 +251,8 @@
 }
 
 .drawerLabel {
-  padding: 6px 16px 10px;
+  /* Starts where the icons above it start. */
+  padding: 6px 16px 10px 23px;
   color: var(--color-md-secondary-text);
   font-size: 13px;
   font-weight: 500;
@@ -343,9 +346,12 @@
 .sectionActions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  /* Icon centres 40px apart and 24px in from the card edge: Delete all over
+     the hover strip's trash, Done all over its done and a pinned row's pin. */
+  gap: 12px;
   color: var(--color-md-icon);
   margin-bottom: 8px;
+  padding-right: 10px;
 }
 
 .sectionActionBtn {
