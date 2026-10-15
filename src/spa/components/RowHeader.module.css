@@ -92,6 +92,9 @@
 }
 
 .actionSlot {
+  /* The strip is absolutely positioned, so the slot is empty; cancel the
+     row's flex gap or thread dates sit 12px left of bundle dates. */
+  margin-left: -12px;
   padding-top: 2px;
   opacity: 0;
   pointer-events: none;

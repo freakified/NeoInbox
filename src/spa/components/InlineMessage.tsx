@@ -5,7 +5,7 @@ import { parseSender } from "../../shared/senders";
 import type { RawMessage } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
-import { formatDate } from "../lib/dateBucket";
+import { formatDate, formatFullDate } from "../lib/dateBucket";
 import { extractPreviewText } from "../lib/srcdoc";
 import { MessageAttachments } from "./MessageAttachments";
 import { MessageBody } from "./MessageBody";
@@ -136,7 +136,7 @@ export const InlineMessage = ({
                 {isDraft ? `Draft · ${name} → ` : m.origin === "sent" ? `${name} → ` : name}
               </span>
             )}
-            <span className={s.date}>{formatDate(m.date)}</span>
+            <span className={s.date} title={formatFullDate(m.date)}>{formatDate(m.date)}</span>
           </div>
           {!isOpen && (
             <div className={s.preview}>

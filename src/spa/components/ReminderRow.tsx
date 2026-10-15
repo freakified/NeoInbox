@@ -119,7 +119,7 @@ export const ReminderRow = ({ reminder }: { reminder: ReminderRecord }) => {
       {baseDate}
       <Icon name="push_pin" className={s.pinIndicator} />
     </span>
-  ) : baseDate ?? formatDate(reminder.doneAt ?? reminder.resurfacedAt ?? reminder.createdAt);
+  ) : baseDate;
 
   return (
     <MotionRow data-row data-row-key={`reminder:${reminder.id}`} className={s.row}>

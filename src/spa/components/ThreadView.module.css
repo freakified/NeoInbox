@@ -12,7 +12,7 @@
 
 .title {
   font-size: 18px;
-  font-weight: 500;
+  font-weight: 400;
   color: var(--color-md-on-surface);
   overflow: hidden;
   text-overflow: ellipsis;

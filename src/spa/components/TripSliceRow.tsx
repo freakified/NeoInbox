@@ -51,7 +51,7 @@ export const TripSliceRow = ({
       if (!name) return null;
       return (
         <span key={t.id} className={clsx(t.unreadCount > 0 && b.unreadSender)}>
-          {idx > 0 && " · "}
+          {idx > 0 && ", "}
           {name}
         </span>
       );

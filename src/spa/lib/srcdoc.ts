@@ -260,7 +260,7 @@ const renderTextWithQuoteToggle = (raw: string): string => {
 };
 
 const BASE_CSS = `<style>
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  body{font-family:Roboto,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
        font-size:14px;margin:0!important;padding:8px 0!important;
        box-sizing:border-box;color:#111;word-break:break-word}
   img{max-width:100%;height:auto}a{color:#1a73e8}

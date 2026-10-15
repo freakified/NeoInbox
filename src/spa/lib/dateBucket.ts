@@ -89,3 +89,16 @@ export const formatDate = (epochMs: number): string => {
     ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
+
+/** The full date and time, e.g. "Thu, Oct 15, 2026, 8:58 PM", for tooltips. */
+export const formatFullDate = (epochMs: number): string =>
+  epochMs
+    ? new Date(epochMs).toLocaleString([], {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "";

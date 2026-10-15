@@ -4,7 +4,7 @@ import type { Category, Thread } from "../../shared/types";
 import { getCategoryMeta } from "../../shared/categories";
 import { useCustomBundles, useMailStore } from "../../store/mailStore";
 import { senderName } from "../lib/avatar";
-import { formatDate, groupByBucket } from "../lib/dateBucket";
+import { groupByBucket } from "../lib/dateBucket";
 import { useShowDeleteActions } from "../lib/deleteActionPrefs";
 import { useBulkActions } from "./BulkActionConfirm";
 import { Icon } from "./Icon";
@@ -39,7 +39,6 @@ export const BundleSliceRow = ({
   const openBundleSettings = useMailStore((st) => st.openBundleSettings);
 
   const threadCountLabel = threads.length > 25 ? "(25+)" : `(${threads.length})`;
-  const latestDate = threads.reduce((max, t) => Math.max(max, t.latestDate), 0);
   const previewContent = threads
     .slice(0, 3)
     .map((t, idx) => {
@@ -48,7 +47,7 @@ export const BundleSliceRow = ({
       if (!name) return null;
       return (
         <span key={t.id} className={clsx(t.unreadCount > 0 && s.unreadSender)}>
-          {idx > 0 && " · "}
+          {idx > 0 && ", "}
           {name}
         </span>
       );
@@ -129,7 +128,6 @@ export const BundleSliceRow = ({
               />
             ) : undefined
           }
-          date={latestDate ? formatDate(latestDate) : undefined}
           onClick={() => onToggle(bundleKey)}
           expanded={false}
         />

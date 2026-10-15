@@ -81,15 +81,15 @@ export const ThreadRow = ({
       Snoozed {formatTimeAgo(t.resurfacedAt)}
     </span>
   ) : null;
-  const plainDate = formatDate(Math.max(t.latestDate, t.resurfacedAt ?? 0));
-  // Like Inbox, a pinned row trades its date for the pin; a resting snooze still shows.
+  // Like Inbox, a closed row carries no timestamp (the section header dates
+  // it); the slot only holds a resting snooze's wake time and the pin/done marks.
   const date = t.pinned || isDone ? (
     <span className={s.pinnedDate}>
       {isDone && <Icon name="check" className={s.doneIndicator} />}
-      {snoozeInfo ?? (!t.pinned && plainDate)}
+      {snoozeInfo}
       {t.pinned && <Icon name="push_pin" className={s.pinIndicator} />}
     </span>
-  ) : snoozeInfo ?? plainDate;
+  ) : snoozeInfo;
 
   return (
     <MotionRow

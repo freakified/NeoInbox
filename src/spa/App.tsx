@@ -468,15 +468,19 @@ export const App = () => {
           <nav className={s.drawerNav}>
             <div className={s.drawerGroup}>
               <button type="button" className={navClass({ type: "inbox" })} onClick={() => navigate({ type: "inbox" })}>
-                <Icon name="inbox" className={s.navIcon} />
+                <Icon name="inbox" className={s.navIcon} style={{ color: "#4285F4" }} />
                 <span>Inbox</span>
               </button>
               <button type="button" className={navClass({ type: "snoozed" })} onClick={() => navigate({ type: "snoozed" })}>
-                <Icon name="schedule" className={s.navIcon} />
+                <Icon
+                  name="schedule"
+                  className={s.navIcon}
+                  style={{ color: "#DF742C", fontVariationSettings: "'FILL' 0" }}
+                />
                 <span>Snoozed</span>
               </button>
               <button type="button" className={navClass({ type: "done" })} onClick={() => navigate({ type: "done" })}>
-                <Icon name="done" className={s.navIcon} />
+                <Icon name="done" className={s.navIcon} style={{ color: "#0F9D58" }} />
                 <span>Done</span>
               </button>
             </div>
@@ -491,7 +495,7 @@ export const App = () => {
                 <span>Sent</span>
               </button>
               <button type="button" className={navClass({ type: "reminders" })} onClick={() => navigate({ type: "reminders" })}>
-                <Icon name="notifications" className={s.navIcon} />
+                <Icon name="pan_tool_alt" className={s.navIcon} />
                 <span>Reminders</span>
               </button>
               <button type="button" className={unsupportedClass} disabled title="Coming later">

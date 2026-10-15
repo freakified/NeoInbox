@@ -27,13 +27,13 @@ export const snoozePresets = (): SnoozePreset[] => {
   // that the label would silently mean tomorrow evening.
   const laterToday = setTime(new Date(now), 18);
   if (laterToday.getTime() - now.getTime() >= 2 * 60 * 60 * 1000) {
-    presets.push({ label: "Later today", icon: "schedule", wakeAt: laterToday.getTime() });
+    presets.push({ label: "Later today", icon: "brightness_medium", wakeAt: laterToday.getTime() });
   }
 
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   setTime(tomorrow, 8);
-  presets.push({ label: "Tomorrow", icon: "schedule", wakeAt: tomorrow.getTime() });
+  presets.push({ label: "Tomorrow", icon: "light_mode", wakeAt: tomorrow.getTime() });
 
   // Wednesday only reads as "later this week" from Sunday or Monday; from
   // Tuesday on it is either just "tomorrow" or already next week.
