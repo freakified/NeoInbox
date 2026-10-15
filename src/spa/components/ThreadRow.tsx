@@ -22,12 +22,10 @@ export const ThreadRow = ({
   thread: t,
   isExpanded,
   onToggle,
-  expandedRef,
 }: {
   thread: Thread;
   isExpanded: boolean;
   onToggle: () => void;
-  expandedRef?: React.RefObject<HTMLDivElement | null>;
 }) => {
   const customBundles = useCustomBundles();
   const actions = useThreadActions(t);
@@ -102,7 +100,7 @@ export const ThreadRow = ({
       data-row
       data-thread-row
       data-thread-id={isExpanded ? undefined : t.id}
-      ref={isExpanded ? expandedRef : undefined}
+      data-row-key={`thread:${t.id}`}
       className={s.row}
     >
       {!isExpanded && (

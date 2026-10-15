@@ -127,7 +127,7 @@ export const ReminderRow = ({ reminder }: { reminder: ReminderRecord }) => {
   ) : baseDate;
 
   return (
-    <MotionRow data-row className={s.row}>
+    <MotionRow data-row data-row-key={`reminder:${reminder.id}`} className={s.row}>
       <RowHeader
         leading={
           <div className={s.avatar}>

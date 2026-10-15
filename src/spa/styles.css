@@ -4,6 +4,13 @@
 @import "@fontsource/roboto/700.css";
 @import "@fontsource-variable/material-symbols-rounded/fill.css";
 
+html {
+  /* scrollKeeper does all scroll anchoring; the browser's own would fight it. */
+  overflow-anchor: none;
+  /* Native focus/find scrolling shouldn't park things under the fixed header. */
+  scroll-padding-top: 72px;
+}
+
 :root {
   --font-sans: 'Roboto', sans-serif;
 

@@ -21,7 +21,6 @@ export const BundleSliceRow = ({
   threads,
   isOpen,
   onToggle,
-  expandedRef,
   openThreadId,
   onOpenThreadChange,
 }: {
@@ -30,7 +29,6 @@ export const BundleSliceRow = ({
   threads: Thread[];
   isOpen: boolean;
   onToggle: (key: string) => void;
-  expandedRef: React.RefObject<HTMLDivElement | null>;
   openThreadId?: string | null;
   onOpenThreadChange?: (id: string | null) => void;
 }) => {
@@ -103,7 +101,7 @@ export const BundleSliceRow = ({
   return (
     <MotionRow
       data-row
-      ref={isOpen ? expandedRef : undefined}
+      data-row-key={bundleKey}
       className={clsx(s.slice, isOpen && s.sliceOpen)}
       onClick={(e) => {
         if (!isOpen || !activeOpenThreadId) return;
@@ -229,13 +227,12 @@ export const BundleSliceRow = ({
                         ))}
                       </RowGroup>
                     )}
-                    <MotionSurface className={s.expandedThread} data-expanded-thread>
+                    <MotionSurface key={items[expandedIdx]!.id} className={s.expandedThread} data-expanded-thread>
                       <ThreadRow
                         key={items[expandedIdx]!.id}
                         thread={items[expandedIdx]!}
                         isExpanded={true}
                         onToggle={() => toggleThread(items[expandedIdx]!.id)}
-                        expandedRef={expandedRef}
                       />
                     </MotionSurface>
                     {expandedIdx < items.length - 1 && (

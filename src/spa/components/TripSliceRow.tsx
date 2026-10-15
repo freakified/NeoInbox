@@ -23,7 +23,6 @@ export const TripSliceRow = ({
   threads,
   isOpen,
   onToggle,
-  expandedRef,
   openThreadId,
   onOpenThreadChange,
 }: {
@@ -32,7 +31,6 @@ export const TripSliceRow = ({
   threads: Thread[];
   isOpen: boolean;
   onToggle: (key: string) => void;
-  expandedRef: React.RefObject<HTMLDivElement | null>;
   openThreadId?: string | null;
   onOpenThreadChange?: (id: string | null) => void;
 }) => {
@@ -103,7 +101,7 @@ export const TripSliceRow = ({
   return (
     <MotionRow
       data-row
-      ref={isOpen ? expandedRef : undefined}
+      data-row-key={tripKey}
       className={clsx(b.slice, isOpen && b.sliceOpen)}
       onClick={(e) => {
         if (!isOpen || !activeOpenThreadId) return;
@@ -249,13 +247,12 @@ export const TripSliceRow = ({
                 ))}
               </RowGroup>
             )}
-            <MotionSurface className={b.expandedThread} data-expanded-thread>
+            <MotionSurface key={threads[expandedIdx]!.id} className={b.expandedThread} data-expanded-thread>
               <ThreadRow
                 key={threads[expandedIdx]!.id}
                 thread={threads[expandedIdx]!}
                 isExpanded={true}
                 onToggle={() => toggleThread(threads[expandedIdx]!.id)}
-                expandedRef={expandedRef}
               />
             </MotionSurface>
             {expandedIdx < threads.length - 1 && (

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LayoutGroup, useReducedMotion } from "framer-motion";
+import { LayoutGroup } from "framer-motion";
 import {
   useBundleSettings,
   useConnectionState,
@@ -13,7 +13,7 @@ import {
 } from "../store/mailStore";
 import { CATEGORIES, getCategoryMeta } from "../shared/categories";
 import { useShowDeleteActions } from "./lib/deleteActionPrefs";
-import { useScrollAnchor } from "./lib/useScrollAnchor";
+import { scrollKeeper } from "./lib/scrollKeeper";
 import { BundleSliceRow } from "./components/BundleSliceRow";
 import { BundleManagerModal } from "./components/BundleManagerModal";
 import { useBulkActions } from "./components/BulkActionConfirm";
@@ -170,7 +170,8 @@ export const App = () => {
 
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [openBundleThreadId, setOpenBundleThreadId] = useState<string | null>(null);
-  const expandedRef = useRef<HTMLDivElement | null>(null);
+  const headerRef = useRef<HTMLElement | null>(null);
+  const contentRef = useRef<HTMLElement | null>(null);
   const bundleSettings = useBundleSettings();
   const openBundleSettings = useMailStore((st) => st.openBundleSettings);
   const closeBundleSettings = useMailStore((st) => st.closeBundleSettings);
@@ -183,7 +184,6 @@ export const App = () => {
   );
   const [showShortcuts, setShowShortcuts] = useState(false);
   const goPrefixRef = useRef(false);
-  const reducedMotion = useReducedMotion();
   const selectedIds = useSelection((st) => st.ids);
   const clearSelection = useSelection((st) => st.clear);
   const retainSelection = useSelection((st) => st.retain);
@@ -197,6 +197,7 @@ export const App = () => {
     const onHashChange = () => {
       setActiveView(parseHashView());
       useSelection.getState().clear();
+      scrollKeeper.release();
       setExpandedKey(null);
       setOpenBundleThreadId(null);
       setVisibleItemLimit(STREAM_PAGE_SIZE);
@@ -206,22 +207,31 @@ export const App = () => {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  // The scroll keeper holds the open conversation (or whatever's at the top of
+  // the screen) in place as the stream changes around it.
   useEffect(() => {
-    if (expandedKey) {
-      expandedRef.current?.scrollIntoView({
-        behavior: reducedMotion ? "auto" : "smooth",
-        block: "nearest",
-      });
+    const content = contentRef.current;
+    if (!content) return;
+    return scrollKeeper.install(content, () => headerRef.current?.getBoundingClientRect().bottom ?? 0);
+  }, []);
+
+  // Every open/close goes through here, so the scroll keeper can note where
+  // the row is *before* the change: an opening card is held there and eased
+  // into view, a closing one stays on screen.
+  const changeOpen = (nextExpanded: string | null, nextBundleThread: string | null) => {
+    if (nextExpanded !== expandedKey) {
+      if (nextExpanded) scrollKeeper.reveal(nextBundleThread ? `thread:${nextBundleThread}` : nextExpanded);
+      else if (expandedKey) scrollKeeper.hold(expandedKey);
+    } else if (nextBundleThread !== openBundleThreadId) {
+      if (nextBundleThread) scrollKeeper.reveal(`thread:${nextBundleThread}`);
+      else if (openBundleThreadId) scrollKeeper.hold(`thread:${openBundleThreadId}`);
     }
-  }, [expandedKey, reducedMotion]);
-
-  // A reply you send re-sorts the thread (it's newest now); keep it under you.
-  useScrollAnchor(expandedRef, expandedKey);
-
-  const toggleKey = (key: string) => {
-    setOpenBundleThreadId(null);
-    setExpandedKey((prev) => (prev === key ? null : key));
+    setExpandedKey(nextExpanded);
+    setOpenBundleThreadId(nextBundleThread);
   };
+  const setBundleThread = (id: string | null) => changeOpen(expandedKey, id);
+
+  const toggleKey = (key: string) => changeOpen(expandedKey === key ? null : key, null);
 
   const syncing = !!sync && !sync.done;
   const syncFailed = !!sync?.done && !!sync.error;
@@ -241,6 +251,7 @@ export const App = () => {
   // Stable so the global key listener below isn't torn down and re-added on
   // every render of the stream.
   const navigate = useCallback((view: StreamView) => {
+    scrollKeeper.release();
     setExpandedKey(null);
     setOpenBundleThreadId(null);
     if (typeof window !== "undefined") {
@@ -280,8 +291,8 @@ export const App = () => {
         if (moveRowFocus(-1)) e.preventDefault();
       } else if (e.key === "Escape") {
         if (useSelection.getState().ids.size > 0) useSelection.getState().clear();
-        else if (openBundleThreadId) setOpenBundleThreadId(null);
-        else if (expandedKey) setExpandedKey(null);
+        else if (openBundleThreadId) changeOpen(expandedKey, null);
+        else if (expandedKey) changeOpen(null, null);
       } else if (e.key === "?") {
         e.preventDefault();
         setShowShortcuts(true);
@@ -339,11 +350,11 @@ export const App = () => {
         if (!expandedKey) return;
         if (!(e.target as HTMLElement).closest("[data-row]")) {
           if (isGroupKey(expandedKey) && openBundleThreadId) {
-            setOpenBundleThreadId(null);
+            changeOpen(expandedKey, null);
             return;
           }
 
-          setExpandedKey(null);
+          changeOpen(null, null);
         }
       }}
     >
@@ -360,6 +371,7 @@ export const App = () => {
       )}
 
       <header
+        ref={headerRef}
         className={s.header}
         style={{ backgroundColor: selecting ? SELECTION_HEADER_COLOR : header.color }}
       >
@@ -524,7 +536,7 @@ export const App = () => {
           </nav>
         </aside>
 
-        <main className={s.content}>
+        <main ref={contentRef} className={s.content}>
         {!hydrated && (
           <p className={s.emptyText}>Loading…</p>
         )}
@@ -546,7 +558,6 @@ export const App = () => {
                   thread={item.thread}
                   isExpanded={expandedKey === `thread:${item.thread.id}`}
                   onToggle={() => toggleKey(`thread:${item.thread.id}`)}
-                  expandedRef={expandedRef}
                 />
               ) : item.type === "reminder" ? (
                 <ReminderRow key={item.reminder.id} reminder={item.reminder} />
@@ -558,7 +569,6 @@ export const App = () => {
                   threads={item.threads}
                   isOpen={false}
                   onToggle={toggleKey}
-                  expandedRef={expandedRef}
                 />
               ) : (
                 <BundleSliceRow
@@ -568,7 +578,6 @@ export const App = () => {
                   threads={item.threads}
                   isOpen={false}
                   onToggle={toggleKey}
-                  expandedRef={expandedRef}
                 />
               )
             );
@@ -623,9 +632,8 @@ export const App = () => {
                         threads={openBundle.threads}
                         isOpen={true}
                         onToggle={toggleKey}
-                        expandedRef={expandedRef}
                         openThreadId={openBundleThreadId}
-                        onOpenThreadChange={setOpenBundleThreadId}
+                        onOpenThreadChange={setBundleThread}
                       />
                     ) : (
                       <BundleSliceRow
@@ -634,9 +642,8 @@ export const App = () => {
                         threads={openBundle.threads}
                         isOpen={true}
                         onToggle={toggleKey}
-                        expandedRef={expandedRef}
                         openThreadId={openBundleThreadId}
-                        onOpenThreadChange={setOpenBundleThreadId}
+                        onOpenThreadChange={setBundleThread}
                       />
                     )}
                     {expandedBundleIdx < group.items.length - 1 && (
@@ -652,12 +659,13 @@ export const App = () => {
                         {renderItems(group.items.slice(0, expandedThreadIdx))}
                       </MotionSurface>
                     )}
-                    <MotionSurface className={s.expandedThread}>
+                    {/* Keyed per thread: reusing the previous card's element would
+                        make framer fly it here from wherever that card was. */}
+                    <MotionSurface key={expandedKey} className={s.expandedThread}>
                       <ThreadRow
                         thread={(group.items[expandedThreadIdx] as Extract<StreamItem, { type: "thread" }>).thread}
                         isExpanded={true}
                         onToggle={() => toggleKey(expandedKey!)}
-                        expandedRef={expandedRef}
                       />
                     </MotionSurface>
                     {expandedThreadIdx < group.items.length - 1 && (

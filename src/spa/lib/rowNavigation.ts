@@ -8,6 +8,8 @@
  * correct through expand/collapse without extra bookkeeping.
  */
 
+import { rowKeyOf, scrollKeeper } from "./scrollKeeper";
+
 const ROW_SELECTOR = "[data-row-header]";
 
 export const rowHeaders = (): HTMLElement[] =>
@@ -18,10 +20,13 @@ export const focusedRow = (): HTMLElement | null => {
   return active instanceof HTMLElement ? active.closest<HTMLElement>(ROW_SELECTOR) : null;
 };
 
-const focusRow = (row: HTMLElement | undefined): boolean => {
+const focusRow = (row: HTMLElement | undefined, reveal = true): boolean => {
   if (!row) return false;
-  row.focus();
-  row.scrollIntoView({ block: "nearest" });
+  // The scroll keeper does the scrolling: native focus scrolling ignores the
+  // fixed header and would fight the keeper's anchor.
+  const key = rowKeyOf(row);
+  if (reveal && key) scrollKeeper.reveal(key);
+  row.focus({ preventScroll: true });
   return true;
 };
 
@@ -53,6 +58,7 @@ export const keepFocusAfterRowRemoval = (): void => {
   requestAnimationFrame(() => {
     const next = rowHeaders();
     if (!next.length) return;
-    focusRow(next[Math.min(index, next.length - 1)]);
+    // Already in place: the scroll keeper puts the next row where this one was.
+    focusRow(next[Math.min(index, next.length - 1)], false);
   });
 };
