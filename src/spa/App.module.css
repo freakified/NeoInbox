@@ -319,6 +319,16 @@
   margin-bottom: 24px;
 }
 
+/* An open thread or bundle keeps a gap from the rows beside it, but not from
+   its section's label or the next section, so those stay the usual distance. */
+.section > .sectionHeader + * {
+  margin-top: 0;
+}
+
+.section > :last-child {
+  margin-bottom: 0;
+}
+
 .sectionLabelWrap {
   margin: 0 auto;
 }

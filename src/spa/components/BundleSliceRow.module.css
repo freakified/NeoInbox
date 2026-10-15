@@ -125,6 +125,15 @@
   overflow: clip;
 }
 
+/* Same for a thread opened first or last under a bucket label. */
+.bucketHeader + .expandedThread {
+  margin-top: 0;
+}
+
+.expandedThread:last-child {
+  margin-bottom: 0;
+}
+
 .innerRows {
   width: var(--bundle-inner-width);
 }
