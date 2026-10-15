@@ -212,6 +212,9 @@ export function buildThreads(
       accountId: latest.accountId,
       hasMe: msgs.some((m) => myEmails.has(extractEmail(m.author))),
       resurfacedAt: resurfacedAt > 0 && resurfacedAt >= latestDate ? resurfacedAt : undefined,
+      snoozeExpired: msgs.some(
+        (m) => m.origin === "inbox" && m.snoozeExpired && m.resurfacedAt === resurfacedAt,
+      ),
     });
   }
 

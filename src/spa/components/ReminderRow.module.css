@@ -40,6 +40,8 @@
 }
 
 .pinIndicator {
-  font-size: 16px;
+  font-size: 20px;
+  /* Center on the text line rather than the taller date slot. */
+  margin: -5px 0;
   color: var(--color-md-primary);
 }

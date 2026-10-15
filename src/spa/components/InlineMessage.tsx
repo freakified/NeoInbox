@@ -92,8 +92,7 @@ export const InlineMessage = ({
           setPreview("");
           return;
         }
-        if (liveId !== m.id) {
-          useMailStore.getState().healStaleMessage(m.id, liveId);
+        if (liveId !== m.id && useMailStore.getState().healStaleMessage(m.id, liveId)) {
           return;
         }
         const part = await messenger.messages.getFull(liveId);

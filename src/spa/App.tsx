@@ -314,7 +314,10 @@ export const App = () => {
     `${s.navItem} ${isSameView(activeView, view) ? s.navItemActive : ""}`;
   const unsupportedClass = `${s.navItem} ${s.navItemDisabled}`;
   const showDoneAll = activeView.type === "inbox" || activeView.type === "bundle";
-  const header = headerForView(activeView, customBundles);
+  const header =
+    pinnedOnly && activeView.type === "inbox"
+      ? { title: "Pinned", color: "var(--color-md-primary)" }
+      : headerForView(activeView, customBundles);
   const visibleStream = useMemo(
     () => limitSections(stream.sections, visibleItemLimit),
     [stream.sections, visibleItemLimit],

@@ -90,7 +90,9 @@
 }
 
 .pinIndicator {
-  font-size: 16px;
+  font-size: 20px;
+  /* Center on the text line rather than the taller date slot. */
+  margin: -5px 0;
   color: var(--color-md-primary);
 }
 
@@ -99,12 +101,3 @@
   color: #5ca46f;
 }
 
-.bundleChip {
-  font-size: 12px;
-  font-weight: 500;
-  border: 1px solid currentColor;
-  border-radius: 4px;
-  padding: 0 5px;
-  margin-right: 8px;
-  white-space: nowrap;
-}

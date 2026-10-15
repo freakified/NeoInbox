@@ -6,6 +6,20 @@ export const isSameDay = (a: Date, b: Date): boolean => {
   );
 }
 
+const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"} ago`;
+
+/** "5 minutes ago", "1 day ago": how long since a past moment, coarsest unit wins. */
+export const formatTimeAgo = (epochMs: number, now = Date.now()): string => {
+  const minutes = Math.floor((now - epochMs) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return plural(minutes, "minute");
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return plural(hours, "hour");
+  const days = Math.floor(hours / 24);
+  if (days < 14) return plural(days, "day");
+  return plural(Math.floor(days / 7), "week");
+};
+
 export const dateBucket = (epochMs: number): string => {
   const d = new Date(epochMs);
   const now = new Date();

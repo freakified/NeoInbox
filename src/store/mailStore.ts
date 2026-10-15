@@ -125,9 +125,10 @@ interface MailStore {
   /**
    * A cached row's TB id turned out stale (see resolveLiveMessageId): re-key
    * the row to the verified live id, or drop it when the live id is already
-   * cached as its own row.
+   * cached as its own row. Returns false when the row is left as is (snoozed
+   * rows keep their id), in which case the caller should use the live id.
    */
-  healStaleMessage: (staleId: number, liveId: number) => void;
+  healStaleMessage: (staleId: number, liveId: number) => boolean;
   createTrip: (name: string) => TripRecord;
   renameTrip: (id: string, name: string) => void;
   deleteTrip: (id: string) => void;
@@ -408,7 +409,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
       const m = prev[id];
       if (!m) continue;
       pending[id] = { kind: "unsnooze", message: m, snooze: snoozesByMessageId[id] };
-      map[id] = { ...m, snoozed: false, resurfacedAt: now };
+      map[id] = { ...m, snoozed: false, resurfacedAt: now, snoozeExpired: false };
       delete snoozesByMessageId[id];
     }
     set({ messagesById: map, pendingOps: pending, snoozesByMessageId });
@@ -535,6 +536,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
     if (!prev) return;
     const next: ReminderRecord = { ...prev, snoozeWakeAt: wakeAt };
     delete next.resurfacedAt;
+    delete next.snoozeExpired;
     set({ remindersById: { ...get().remindersById, [id]: next } });
     persistReminder(next);
   },
@@ -544,6 +546,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
     if (!prev) return;
     const next: ReminderRecord = { ...prev, resurfacedAt: Date.now() };
     delete next.snoozeWakeAt;
+    delete next.snoozeExpired;
     set({ remindersById: { ...get().remindersById, [id]: next } });
     persistReminder(next);
   },
@@ -570,6 +573,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
     const prev = get().remindersById[id];
     if (!prev) return;
     const next: ReminderRecord = { ...prev, status: "active", resurfacedAt: Date.now() };
+    delete next.snoozeExpired;
     delete next.doneAt;
     set({ remindersById: { ...get().remindersById, [id]: next } });
     persistReminder(next);
@@ -603,7 +607,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
     if (!due.length) return;
     const next = { ...map };
     for (const r of due) {
-      const woken: ReminderRecord = { ...r, resurfacedAt: r.snoozeWakeAt };
+      const woken: ReminderRecord = { ...r, resurfacedAt: r.snoozeWakeAt, snoozeExpired: true };
       delete woken.snoozeWakeAt;
       next[r.id] = woken;
       persistReminder(woken);
@@ -615,7 +619,10 @@ export const useMailStore = create<MailStore>((set, get) => ({
     flushDelta(set, get);
     const map = { ...get().messagesById };
     const stale = map[staleId];
-    if (!stale) return;
+    if (!stale) return false;
+    // A snoozed row is keyed by its snooze record, not by where the message
+    // is parked; re-keying it would orphan it from Snoozed and from waking.
+    if (stale.snoozed) return false;
     delete map[staleId];
     void db.messages.delete(staleId).catch((e) => log.warn("store", "stale row delete failed", e));
     if (!map[liveId]) {
@@ -625,6 +632,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
     }
     log.info("store", "healed stale message id", { staleId, liveId });
     set({ messagesById: map });
+    return true;
   },
 
   createTrip: (name) => {

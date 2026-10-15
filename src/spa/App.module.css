@@ -154,7 +154,7 @@
   position: absolute;
   inset: 4px 1px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.18);
   transition: background-color 160ms ease;
 }
 
@@ -169,21 +169,25 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  /* Off: a translucent knob with a white pin; on: solid white with a blue pin. */
+  background: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 160ms ease;
+  transition: transform 160ms ease, background-color 160ms ease;
 }
 
 .pinToggleOn .pinToggleKnob {
   transform: translateX(20px);
+  background: #fff;
 }
 
-.pinToggleIcon {
+/* Doubled up to outrank the global .material-symbols-rounded size. */
+.pinToggleKnob .pinToggleIcon {
   font-size: 14px;
-  color: #9aa0a6;
+  transform: rotate(45deg);
+  color: #fff;
   transition: color 160ms ease;
 }
 

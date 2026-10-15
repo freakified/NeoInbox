@@ -477,6 +477,7 @@ export const applyMessageDetails = async (
 ): Promise<void> => {
   if (raw.origin === "inbox" && raw.resurfacedAt === undefined && cached?.resurfacedAt !== undefined) {
     raw.resurfacedAt = cached.resurfacedAt;
+    raw.snoozeExpired = cached.snoozeExpired;
   }
 
   if (canReuseMessageDetails(cached, raw)) {

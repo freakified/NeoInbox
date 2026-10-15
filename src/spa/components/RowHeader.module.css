@@ -70,6 +70,12 @@
   color: var(--color-md-on-surface);
 }
 
+/* Inbox's orange "Snoozed 1 day ago" under a snooze that has come due. */
+.subline {
+  color: #df742c;
+  font-weight: 500;
+}
+
 .trailing {
   display: flex;
   align-items: center;

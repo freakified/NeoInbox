@@ -53,6 +53,8 @@ export interface RawMessage {
   bccList: string[];
   date: number;
   resurfacedAt?: number;
+  /** The snooze ran its course (not unsnoozed by hand); rows then say "Snoozed … ago". */
+  snoozeExpired?: boolean;
   size: number;
   read: boolean;
   folderId: string;
@@ -99,6 +101,8 @@ export interface Thread {
   snoozeDueAt?: number;
   /** Set when the thread's stream position comes from a snooze wake rather than a new message. */
   resurfacedAt?: number;
+  /** The snooze ran its course (not unsnoozed by hand); rows then say "Snoozed … ago". */
+  snoozeExpired?: boolean;
 }
 
 /**
@@ -116,6 +120,8 @@ export interface ReminderRecord {
   snoozeWakeAt?: number;
   /** Set when the reminder's stream position comes from a snooze wake. */
   resurfacedAt?: number;
+  /** The snooze ran its course (not unsnoozed by hand); rows then say "Snoozed … ago". */
+  snoozeExpired?: boolean;
   doneAt?: number;
 }
 

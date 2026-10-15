@@ -6,6 +6,7 @@ export const RowHeader = ({
   leading,
   primary,
   secondary,
+  subline,
   trailing,
   date,
   bold = false,
@@ -18,6 +19,8 @@ export const RowHeader = ({
   leading: React.ReactNode;
   primary: React.ReactNode;
   secondary?: React.ReactNode;
+  /** A second line under the subject, such as a woken snooze. */
+  subline?: React.ReactNode;
   trailing?: React.ReactNode;
   date?: React.ReactNode;
   bold?: boolean;
@@ -61,6 +64,7 @@ export const RowHeader = ({
       <span className={clsx(s.primary, bold && s.bold)}>{primary}</span>
       <div className={s.body}>
         <span className={clsx(s.secondary, bold && s.bold)}>{secondary}</span>
+        {subline && <div className={s.subline}>{subline}</div>}
         {trailing && <div className={s.trailing}>{trailing}</div>}
       </div>
       {date && <span className={s.date}>{date}</span>}

@@ -132,7 +132,10 @@ export const wakeSnoozedMessage = async (
     const body = await loadMessageBody(restoredHeader.id);
     applyClassification(raw, await classifyMessage(restoredHeader, body));
     await applyLocalState(raw);
-    if (reason === "alarm") raw.resurfacedAt = record.wakeAt;
+    if (reason === "alarm") {
+      raw.resurfacedAt = record.wakeAt;
+      raw.snoozeExpired = true;
+    }
     else if (reason === "unsnooze") raw.resurfacedAt = Date.now();
     await applyMessageDetails(raw, undefined, body);
     if (originalId !== raw.id) {

@@ -1,9 +1,7 @@
 import { clsx } from "clsx";
 import type { Thread } from "../../shared/types";
-import { getCategoryMeta } from "../../shared/categories";
-import { useCustomBundles } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
-import { formatDate } from "../lib/dateBucket";
+import { formatDate, formatTimeAgo } from "../lib/dateBucket";
 import { useShowDeleteActions } from "../lib/deleteActionPrefs";
 import { overlayIsOpen } from "../lib/overlays";
 import { keepFocusAfterRowRemoval } from "../lib/rowNavigation";
@@ -27,7 +25,6 @@ export const ThreadRow = ({
   isExpanded: boolean;
   onToggle: () => void;
 }) => {
-  const customBundles = useCustomBundles();
   const actions = useThreadActions(t);
   const showDeleteActions = useShowDeleteActions();
   const selected = useIsSelected(t.id);
@@ -71,29 +68,28 @@ export const ThreadRow = ({
   const isDone =
     t.messages.some((m) => m.origin === "done") &&
     !t.messages.some((m) => m.origin === "inbox");
-  // A pinned thread escapes its bundle in the stream, so the chip keeps its origin visible.
-  const bundleMeta = t.pinned && t.category ? getCategoryMeta(t.category, customBundles) : null;
-  const baseDate = t.snoozeDueAt ? (
+  // A resting snooze shows when it wakes in the date slot; once it has woken,
+  // Inbox says so on a line under the subject instead.
+  const snoozeInfo = t.snoozeDueAt ? (
     <span className={s.snoozeDue}>
       <span>{formatDate(t.snoozeDueAt)}</span>
       <Icon name="schedule" className={s.snoozeIcon} />
     </span>
-  ) : t.resurfacedAt ? (
-    <span
-      className={s.snoozeDue}
-      title={`Snoozed until ${formatSnoozeToastTime(t.resurfacedAt)}`}
-    >
-      <span>{formatDate(t.resurfacedAt)}</span>
-      <Icon name="schedule" className={s.snoozeIcon} />
+  ) : null;
+  const woke = !t.snoozeDueAt && t.resurfacedAt && t.snoozeExpired ? (
+    <span title={`Snoozed until ${formatSnoozeToastTime(t.resurfacedAt)}`}>
+      Snoozed {formatTimeAgo(t.resurfacedAt)}
     </span>
-  ) : formatDate(t.latestDate);
+  ) : null;
+  const plainDate = formatDate(Math.max(t.latestDate, t.resurfacedAt ?? 0));
+  // Like Inbox, a pinned row trades its date for the pin; a resting snooze still shows.
   const date = t.pinned || isDone ? (
     <span className={s.pinnedDate}>
-      {t.pinned && <Icon name="push_pin" className={s.pinIndicator} />}
       {isDone && <Icon name="check" className={s.doneIndicator} />}
-      {baseDate}
+      {snoozeInfo ?? (!t.pinned && plainDate)}
+      {t.pinned && <Icon name="push_pin" className={s.pinIndicator} />}
     </span>
-  ) : baseDate;
+  ) : snoozeInfo ?? plainDate;
 
   return (
     <MotionRow
@@ -127,15 +123,11 @@ export const ThreadRow = ({
           primary={t.participantsLabel}
           secondary={
             <>
-              {bundleMeta && (
-                <span className={s.bundleChip} style={{ color: bundleMeta.color }}>
-                  {bundleMeta.name}
-                </span>
-              )}
               {hasDraft && <span className={s.draftLabel}>Draft </span>}
               {t.subject || "(no subject)"}
             </>
           }
+          subline={woke}
           trailing={
             attachmentRefs.length > 0 ? (
               <MessageAttachments

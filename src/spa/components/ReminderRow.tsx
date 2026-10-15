@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { ReminderRecord } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
 import { useShowDeleteActions } from "../lib/deleteActionPrefs";
-import { formatDate } from "../lib/dateBucket";
+import { formatDate, formatTimeAgo } from "../lib/dateBucket";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
 import strip from "./ActionStrip.module.css";
 import { Icon } from "./Icon";
@@ -108,23 +108,18 @@ export const ReminderRow = ({ reminder }: { reminder: ReminderRecord }) => {
       <span>{formatDate(reminder.snoozeWakeAt)}</span>
       <Icon name="schedule" className={s.snoozeIcon} />
     </span>
-  ) : reminder.resurfacedAt ? (
-    <span
-      className={s.snoozeDue}
-      title={`Snoozed until ${formatSnoozeToastTime(reminder.resurfacedAt)}`}
-    >
-      <span>{formatDate(reminder.resurfacedAt)}</span>
-      <Icon name="schedule" className={s.snoozeIcon} />
+  ) : null;
+  const woke = reminder.snoozeWakeAt === undefined && reminder.resurfacedAt && reminder.snoozeExpired ? (
+    <span title={`Snoozed until ${formatSnoozeToastTime(reminder.resurfacedAt)}`}>
+      Snoozed {formatTimeAgo(reminder.resurfacedAt)}
     </span>
-  ) : (
-    formatDate(reminder.doneAt ?? reminder.createdAt)
-  );
+  ) : null;
   const date = reminder.pinned ? (
     <span className={s.pinnedDate}>
-      <Icon name="push_pin" className={s.pinIndicator} />
       {baseDate}
+      <Icon name="push_pin" className={s.pinIndicator} />
     </span>
-  ) : baseDate;
+  ) : baseDate ?? formatDate(reminder.doneAt ?? reminder.resurfacedAt ?? reminder.createdAt);
 
   return (
     <MotionRow data-row data-row-key={`reminder:${reminder.id}`} className={s.row}>
@@ -136,6 +131,7 @@ export const ReminderRow = ({ reminder }: { reminder: ReminderRecord }) => {
         }
         primary="Reminder"
         secondary={reminder.text}
+        subline={woke}
         date={date}
         onClick={() => setEditing(true)}
         actionStrip={<ReminderActionStrip reminder={reminder} />}

@@ -62,9 +62,9 @@ export const MessageBody = ({
         setIsPlainText(true);
         return;
       }
-      if (liveId !== m.id) {
-        // Healing re-keys the row, so this effect re-runs with the live id.
-        useMailStore.getState().healStaleMessage(m.id, liveId);
+      // Healing re-keys the row, so this effect re-runs with the live id.
+      // Snoozed rows aren't healed; they read straight from the live id.
+      if (liveId !== m.id && useMailStore.getState().healStaleMessage(m.id, liveId)) {
         return;
       }
       try {
