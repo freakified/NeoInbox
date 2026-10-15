@@ -15,6 +15,7 @@
  *   neo.mail.hang("getFull")                // simulate a stalled IMAP fetch
  *   neo.store().messagesById                // the SPA store's state
  *   neo.mail.calls.compose                  // compose windows "opened"
+ *   neo.mail.calls.sent                     // inline drafts "sent" (final details)
  */
 import { installFakeMessenger, settle, type FakeMessageSpec } from "../test/fakeMessenger";
 import { forumMail, personalMail, promoMail } from "../test/fixtures";

@@ -196,7 +196,7 @@ export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
       {
         id: "dev",
         name: "Dev Mailbox",
-        identities: [{ email: ME }],
+        identities: [{ email: ME, name: "Me" }, { email: "me@work.example", name: "Me (work)" }],
         folders: [
           { id: INBOX, name: "Inbox", specialUse: ["inbox"], messages: inbox },
           { id: SENT, name: "Sent", specialUse: ["sent"], messages: [...hike.sent, ...lease.sent] },

@@ -1,3 +1,4 @@
+import { setComposeMode, useComposeMode, type ComposeMode } from "../lib/composePrefs";
 import { clsx } from "clsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -563,10 +564,17 @@ export const BundleManagerModal = ({
   return createPortal(modal, document.body);
 };
 
+const COMPOSE_MODE_CHOICES: { mode: ComposeMode; label: string }[] = [
+  { mode: "send", label: "Write inline and send from NeoInbox" },
+  { mode: "review", label: "Write inline, then finish and send in Thunderbird" },
+  { mode: "thunderbird", label: "Always use Thunderbird's compose window" },
+];
+
 const GeneralSettings = () => {
   const reclassify = useMailStore((st) => st.reclassify);
   const reclassifying = useMailStore((st) => st.reclassifying);
   const showDeleteActions = useShowDeleteActions();
+  const composeMode = useComposeMode();
   return (
     <div className={s.editor}>
       <div className={s.editorHeader}>
@@ -592,6 +600,27 @@ const GeneralSettings = () => {
           and bundles. Turn this off for the faithful Google Inbox experience —
           pin, snooze, and done only. Moving a single conversation to trash
           stays available inside the opened conversation either way.
+        </p>
+      </section>
+      <section className={s.section}>
+        <h4 className={s.sectionTitle}>Compose</h4>
+        {COMPOSE_MODE_CHOICES.map((choice) => (
+          <label key={choice.mode} className={s.policyChoice}>
+            <input
+              type="radio"
+              name="compose-mode"
+              checked={composeMode === choice.mode}
+              onChange={() => setComposeMode(choice.mode)}
+              className={s.policyInput}
+            />
+            <span>{choice.label}</span>
+          </label>
+        ))}
+        <p className={s.helpText}>
+          Thunderbird has no way for add-ons to send mail invisibly, so sending
+          from NeoInbox briefly opens a Thunderbird compose window, which closes
+          itself once the message is sent. Thunderbird still handles your
+          identity, signature, quoting, and the Sent folder.
         </p>
       </section>
       <section className={s.section}>

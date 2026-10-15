@@ -155,7 +155,7 @@ export interface FakeFolderSpec {
 export interface FakeAccountSpec {
   id: string;
   name?: string;
-  identities?: { email: string }[];
+  identities?: { email: string; name?: string }[];
   folders: FakeFolderSpec[];
 }
 
@@ -230,7 +230,31 @@ export class FakeMessenger {
     pointLookups: [] as (string | undefined)[],
     /** Compose windows the SPA asked Thunderbird to open, in order. */
     compose: [] as { kind: "new" | "reply" | "forward"; args: unknown[] }[],
+    /** Final compose details of every window sendMessage() was called on. */
+    sent: [] as messenger.compose.ComposeDetails[],
+    /** Windows focused through windows.update, in order. */
+    focusedWindows: [] as number[],
   };
+
+  /** Open compose windows by tab id; tab and window ids are the same here. */
+  private composeTabs = new Map<number, messenger.compose.ComposeDetails>();
+  private nextComposeTab = 100;
+  /** Makes the next compose.sendMessage() reject, as a refused SMTP send would. */
+  failNextSend: string | null = null;
+
+  private openCompose(kind: "new" | "reply" | "forward", args: unknown[]) {
+    this.calls.compose.push({ kind, args });
+    const details = (args.find((a) => a && typeof a === "object") ?? {}) as
+      messenger.compose.ComposeDetails;
+    const id = this.nextComposeTab++;
+    const quote = kind === "new" ? "" : "<blockquote>quoted</blockquote>";
+    this.composeTabs.set(id, {
+      ...details,
+      isPlainText: false,
+      body: `<html><body>${quote}</body></html>`,
+    });
+    return { id, windowId: id };
+  }
 
   constructor(private options: FakeMessengerOptions) {
     for (const account of options.accounts) {
@@ -601,7 +625,9 @@ export class FakeMessenger {
           self.options.accounts.map((acc) => ({
             id: acc.id,
             name: acc.name ?? acc.id,
-            identities: acc.identities ?? [{ email: `${acc.id}@example.com` }],
+            identities: (acc.identities ?? [{ email: `${acc.id}@example.com` }]).map(
+              (identity, i) => ({ id: `${acc.id}-id${i}`, accountId: acc.id, ...identity }),
+            ),
             folders: acc.folders.map((f) => ({
               id: f.id,
               name: f.name ?? f.id,
@@ -631,18 +657,38 @@ export class FakeMessenger {
         update: async () => ({ id: 1 }),
       },
       browserAction: { onClicked: new Event<[]>() },
+      windows: {
+        getLastFocused: async () => ({ id: 1, type: "normal" }),
+        update: async (windowId: number, info: { focused?: boolean }) => {
+          if (info.focused) self.calls.focusedWindows.push(windowId);
+          return { id: windowId };
+        },
+      },
       compose: {
-        beginNew: async (...args: unknown[]) => {
-          self.calls.compose.push({ kind: "new", args });
-          return { id: 1 };
+        beginNew: async (...args: unknown[]) => self.openCompose("new", args),
+        beginReply: async (...args: unknown[]) => self.openCompose("reply", args),
+        beginForward: async (...args: unknown[]) => self.openCompose("forward", args),
+        getComposeDetails: async (tabId: number) => {
+          const details = self.composeTabs.get(tabId);
+          if (!details) throw new Error(`No compose tab ${tabId}`);
+          return { ...details };
         },
-        beginReply: async (...args: unknown[]) => {
-          self.calls.compose.push({ kind: "reply", args });
-          return { id: 1 };
+        setComposeDetails: async (tabId: number, details: messenger.compose.ComposeDetails) => {
+          const current = self.composeTabs.get(tabId);
+          if (!current) throw new Error(`No compose tab ${tabId}`);
+          self.composeTabs.set(tabId, { ...current, ...details });
         },
-        beginForward: async (...args: unknown[]) => {
-          self.calls.compose.push({ kind: "forward", args });
-          return { id: 1 };
+        sendMessage: async (tabId: number) => {
+          const details = self.composeTabs.get(tabId);
+          if (!details) throw new Error(`No compose tab ${tabId}`);
+          if (self.failNextSend) {
+            const reason = self.failNextSend;
+            self.failNextSend = null;
+            throw new Error(reason);
+          }
+          self.calls.sent.push(details);
+          self.composeTabs.delete(tabId);
+          return { mode: "sendNow", messages: [] };
         },
         onAfterSend: new Event<[unknown, unknown]>(),
         onAfterSave: new Event<[unknown, unknown]>(),

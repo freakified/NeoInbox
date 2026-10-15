@@ -261,7 +261,7 @@ const renderTextWithQuoteToggle = (raw: string): string => {
 
 const BASE_CSS = `<style>
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-       font-size:14px;margin:0!important;padding:8px!important;
+       font-size:14px;margin:0!important;padding:8px 0!important;
        box-sizing:border-box;color:#111;word-break:break-word}
   img{max-width:100%;height:auto}a{color:#1a73e8}
   blockquote{border-left:3px solid #ddd;margin:0 0 0 8px;padding-left:8px;color:#555}
@@ -401,10 +401,47 @@ export const hasBlockedRemoteImages = (rawHtml: string): boolean => {
   );
 };
 
+/** Wrappers that are pure layout; a blank one at the end is just a blank line. */
+const BLANK_WRAPPER_TAGS = new Set(["DIV", "P", "SPAN", "FONT", "CENTER"]);
+/** Containers whose last child is still the end of the message. */
+const TRAILING_DESCEND_TAGS = new Set(["DIV", "P", "SPAN", "FONT", "CENTER", "BODY"]);
+
+const isBlankTrailingNode = (n: Node): boolean => {
+  if (n.nodeType === Node.COMMENT_NODE) return true;
+  if (isWhitespaceText(n)) return true;
+  if (!(n instanceof Element)) return false;
+  if (n.tagName === "BR") return true;
+  return (
+    BLANK_WRAPPER_TAGS.has(n.tagName) &&
+    !n.textContent?.trim() &&
+    !n.querySelector("img, table, hr, video, svg, input, picture")
+  );
+};
+
+/**
+ * Mail clients pad the end of a message with empty lines (`<div><br></div>`,
+ * a stray `<br>`), often nested inside the wrapper Gmail and Apple Mail put
+ * around everything. Webmail hides them; rendered as-is they leave a tall
+ * blank band under every message.
+ */
+const trimTrailingBlankLines = (doc: Document): void => {
+  let container: Element | null = doc.body;
+  while (container) {
+    let last: ChildNode | null = container.lastChild;
+    while (last && isBlankTrailingNode(last)) {
+      last.remove();
+      last = container.lastChild;
+    }
+    container =
+      last instanceof Element && TRAILING_DESCEND_TAGS.has(last.tagName) ? last : null;
+  }
+};
+
 export const buildSrcdoc = (rawHtml: string, showImages: boolean): string => {
   const doc = new DOMParser().parseFromString(rawHtml, "text/html");
   stripActiveContent(doc);
   if (!showImages) blockRemoteImages(doc);
+  trimTrailingBlankLines(doc);
   markQuotedHtml(doc);
   doc.head.insertAdjacentHTML("afterbegin", `${cspMeta(showImages)}${BASE_CSS}`);
   return `<!DOCTYPE html>${doc.documentElement.outerHTML}`;
@@ -412,7 +449,7 @@ export const buildSrcdoc = (rawHtml: string, showImages: boolean): string => {
 
 export const buildTextSrcdoc = (rawText: string): string =>
   `<!DOCTYPE html><html><head>${cspMeta(false)}${BASE_CSS}</head>` +
-  `<body>${renderTextWithQuoteToggle(rawText)}</body></html>`;
+  `<body>${renderTextWithQuoteToggle(rawText.replace(/\s+$/, ""))}</body></html>`;
 
 export const extractRawTextBody = (
   part: messenger.messages.MessagePart,

@@ -1,3 +1,4 @@
+import type { ComposeDraft } from "./compose";
 import type {
   CustomBundleRecord,
   Delta,
@@ -30,7 +31,12 @@ export type ClientMsg =
   /** Widen the inbox scan window by one step and rescan. */
   | { type: "load-more-inbox" }
   /** Re-run the classify pipeline; all cached inbox messages when no ids given. */
-  | { type: "reclassify"; messageIds?: number[] };
+  | { type: "reclassify"; messageIds?: number[] }
+  /**
+   * Fill a Thunderbird compose window from an inline draft, then send it
+   * (`send`) or leave it open for the user to finish.
+   */
+  | { type: "compose"; requestId: string; draft: ComposeDraft; send: boolean };
 
 export type FailedCommand = "done" | "snooze" | "unsnooze" | "trash" | "move-to-inbox";
 
@@ -68,5 +74,15 @@ export type ServerMsg =
       removedTripIds: string[];
       memberships: TripMembershipRecord[];
       removedMembershipKeys: string[];
+    }
+  /**
+   * How a `compose` command ended. "failed" leaves the compose window open
+   * (Thunderbird shows its own error), so the draft is never lost.
+   */
+  | {
+      type: "compose-result";
+      requestId: string;
+      outcome: "sent" | "opened" | "failed";
+      error?: string;
     }
   | { type: "error"; message: string };

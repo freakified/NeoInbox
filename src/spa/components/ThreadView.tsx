@@ -7,6 +7,8 @@ import { useBulkActions } from "./BulkActionConfirm";
 import { BundleMenu } from "./BundleMenu";
 import { Icon } from "./Icon";
 import { InlineMessage } from "./InlineMessage";
+import { InlineReply } from "./InlineReply";
+import { useComposeMode } from "../lib/composePrefs";
 import { ReplyFooter } from "./ReplyFooter";
 import { SnoozeMenu } from "./SnoozeMenu";
 import { TripChip } from "./TripChip";
@@ -42,6 +44,10 @@ export const ThreadView = ({
   const latestMessage = t.messages[t.messages.length - 1];
   const replyTarget = [...t.messages].reverse().find((m) => m.origin === "inbox");
   const latestDraft = [...t.messages].reverse().find((m) => m.origin === "draft");
+  // Inline replies can answer your own sent mail too (it goes to its recipients).
+  const inlineReplyTarget =
+    replyTarget ?? [...t.messages].reverse().find((m) => m.origin !== "draft");
+  const composeMode = useComposeMode();
 
   const [openIds, setOpenIds] = useState<Set<number>>(() => new Set());
   const [showMiddle, setShowMiddle] = useState(false);
@@ -214,7 +220,16 @@ export const ThreadView = ({
         )}
       </div>
 
-      <ReplyFooter replyTarget={replyTarget} draft={latestDraft} />
+      {composeMode !== "thunderbird" && inlineReplyTarget ? (
+        <InlineReply
+          thread={t}
+          replyTarget={inlineReplyTarget}
+          draft={latestDraft}
+          mode={composeMode}
+        />
+      ) : (
+        <ReplyFooter replyTarget={replyTarget} draft={latestDraft} />
+      )}
     </div>
   );
 };

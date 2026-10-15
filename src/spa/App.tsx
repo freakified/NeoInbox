@@ -13,6 +13,7 @@ import {
 } from "../store/mailStore";
 import { CATEGORIES, getCategoryMeta } from "../shared/categories";
 import { useShowDeleteActions } from "./lib/deleteActionPrefs";
+import { useScrollAnchor } from "./lib/useScrollAnchor";
 import { BundleSliceRow } from "./components/BundleSliceRow";
 import { BundleManagerModal } from "./components/BundleManagerModal";
 import { useBulkActions } from "./components/BulkActionConfirm";
@@ -213,6 +214,9 @@ export const App = () => {
       });
     }
   }, [expandedKey, reducedMotion]);
+
+  // A reply you send re-sorts the thread (it's newest now); keep it under you.
+  useScrollAnchor(expandedRef, expandedKey);
 
   const toggleKey = (key: string) => {
     setOpenBundleThreadId(null);

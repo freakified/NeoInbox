@@ -133,3 +133,23 @@ describe("hasBlockedRemoteImages", () => {
     expect(hasBlockedRemoteImages(html)).toBe(expected);
   });
 });
+
+describe("trailing blank lines", () => {
+  const bodyOf = (srcdoc: string): string =>
+    new DOMParser().parseFromString(srcdoc, "text/html").body.innerHTML;
+
+  it("drops the empty lines mail clients leave at the end, even when nested", () => {
+    const html =
+      '<div dir="ltr"><div>Hi</div><div><a href="https://x.test">x</a></div>' +
+      "<div><br></div><div><br></div>\n</div><br>\n";
+    expect(bodyOf(buildSrcdoc(html, false))).toBe(
+      '<div dir="ltr"><div>Hi</div><div><a href="https://x.test">x</a></div></div>',
+    );
+  });
+
+  it("keeps a trailing image, table, or rule", () => {
+    for (const tail of ['<div><img src="cid:a"></div>', "<table><tr><td></td></tr></table>", "<hr>"]) {
+      expect(bodyOf(buildSrcdoc(`<p>Hi</p>${tail}<br>`, false))).toContain(tail.slice(0, 4));
+    }
+  });
+});

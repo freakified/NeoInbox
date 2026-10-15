@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { db } from "./db";
 import { deriveStream, type Stream, type StreamView } from "./stream";
+import type { ComposeDraft } from "../shared/compose";
 import { MESSAGE_DETAILS_VERSION } from "../shared/details";
 import { log } from "../shared/log";
 import {
@@ -148,12 +149,21 @@ interface MailStore {
   closeBundleSettings: () => void;
   /** Re-run bundling rules in the background; whole inbox when no ids given. */
   reclassify: (messageIds?: number[]) => void;
+  /**
+   * Hand an inline draft to Thunderbird: send it, or open it in a compose
+   * window for the user to finish when `send` is false.
+   */
+  composeMessage: (draft: ComposeDraft, send: boolean) => void;
 }
 
 const UNDO_TIMEOUT_MS = 5000;
 
 let toastSeq = 0;
 const nextToastId = (): string => `t${++toastSeq}-${Date.now()}`;
+
+let composeSeq = 0;
+/** In-flight compose commands → the "Sending…" toast to replace when they end. */
+const pendingCompose = new Map<string, string | null>();
 
 const messagesLabel = (count: number): string =>
   count === 1 ? "Message" : `${count} messages`;
@@ -855,6 +865,18 @@ export const useMailStore = create<MailStore>((set, get) => ({
     set({ reclassifying: true });
     send({ type: "reclassify", messageIds });
   },
+
+  composeMessage: (draft, sendNow) => {
+    const requestId = `c${++composeSeq}-${Date.now()}`;
+    let toastId: string | null = null;
+    if (sendNow) {
+      const toast: ToastRecord = { id: nextToastId(), message: "Sending…" };
+      toastId = toast.id;
+      set({ toasts: [...get().toasts, toast].slice(-TOAST_LIMIT) });
+    }
+    pendingCompose.set(requestId, toastId);
+    send({ type: "compose", requestId, draft, send: sendNow });
+  },
 }));
 
 const TOAST_LIMIT = 3;
@@ -1004,6 +1026,20 @@ const applyServerMsg = (
           : `Checked ${msg.scanned} ${msg.scanned === 1 ? "message" : "messages"} — ${msg.moved} moved`;
       const toast: ToastRecord = { id: nextToastId(), message };
       set({ reclassifying: false, toasts: [...get().toasts, toast].slice(-TOAST_LIMIT) });
+      return;
+    }
+    case "compose-result": {
+      const toastId = pendingCompose.get(msg.requestId);
+      pendingCompose.delete(msg.requestId);
+      const toasts = get().toasts.filter((t) => t.id !== toastId);
+      const message =
+        msg.outcome === "sent"
+          ? "Message sent"
+          : msg.outcome === "failed"
+            ? `Couldn't send${msg.error ? ` — ${msg.error}` : ""}. It's still open in Thunderbird.`
+            : null;
+      if (message) toasts.push({ id: nextToastId(), message });
+      set({ toasts: toasts.slice(-TOAST_LIMIT) });
       return;
     }
     case "trips-delta": {

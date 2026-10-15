@@ -27,6 +27,7 @@ import {
   serialized,
 } from "./backfill";
 import { scanActive } from "./scanGuard";
+import { runCompose } from "./compose";
 import { pushMyEmails } from "./sync";
 import { applyLocalState } from "./localState";
 import { broadcast } from "./port";
@@ -349,6 +350,17 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
       );
       const result = await reclassifyMessages(cached);
       broadcast({ type: "reclassify-done", ...result });
+      return;
+    }
+    case "compose": {
+      let result: Awaited<ReturnType<typeof runCompose>>;
+      try {
+        result = await runCompose(msg.draft, msg.send);
+      } catch (e) {
+        log.warn("compose", "couldn't open compose window", e);
+        result = { outcome: "failed", error: e instanceof Error ? e.message : String(e) };
+      }
+      broadcast({ type: "compose-result", requestId: msg.requestId, ...result });
       return;
     }
   }

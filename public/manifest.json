@@ -18,6 +18,8 @@
   },
   "permissions": [
     "compose",
+    "compose.send",
+    "compose.save",
     "messagesRead",
     "messagesTags",
     "messagesUpdate",

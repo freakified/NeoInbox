@@ -4,6 +4,8 @@ import { useMailStore } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { Icon } from "./Icon";
 import { ReminderComposer } from "./ReminderComposer";
+import { ComposePanel } from "./ComposePanel";
+import { useComposeMode } from "../lib/composePrefs";
 import s from "./Fab.module.css";
 
 interface FabContact {
@@ -60,6 +62,16 @@ const itemVariants = {
 export const Fab = () => {
   const [open, setOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  /** The inline new-message panel; `to` set when opened from a contact. */
+  const [newMessage, setNewMessage] = useState<{ to?: string[]; key: number } | null>(null);
+  const composeMode = useComposeMode();
+  const startMessage = (to?: string[]) => {
+    if (composeMode === "thunderbird") {
+      void messenger.compose.beginNew(to ? { to } : undefined);
+    } else {
+      setNewMessage({ to, key: Date.now() });
+    }
+  };
   const reducedMotion = useReducedMotion();
   const contacts = useTopContacts(3);
 
@@ -101,10 +113,7 @@ export const Fab = () => {
           {senderInitial(contact.raw)}
         </span>
       ),
-      onClick: () =>
-        runAction(() => {
-          void messenger.compose.beginNew({ to: [contact.raw] });
-        }),
+      onClick: () => runAction(() => startMessage([contact.raw])),
     })),
     {
       key: "compose",
@@ -114,10 +123,7 @@ export const Fab = () => {
           <Icon name="edit" className={s.miniIcon} style={{ color: "#DB4437" }} />
         </span>
       ),
-      onClick: () =>
-        runAction(() => {
-          void messenger.compose.beginNew();
-        }),
+      onClick: () => runAction(() => startMessage()),
     },
   ];
 
@@ -179,6 +185,15 @@ export const Fab = () => {
         </motion.button>
       </div>
       {composerOpen && <ReminderComposer onClose={() => setComposerOpen(false)} />}
+      {newMessage && composeMode !== "thunderbird" && (
+        <ComposePanel
+          key={newMessage.key}
+          to={newMessage.to}
+          mode={composeMode}
+          onClose={() => setNewMessage(null)}
+          onReopen={() => setNewMessage({ key: Date.now() })}
+        />
+      )}
     </>
   );
 };

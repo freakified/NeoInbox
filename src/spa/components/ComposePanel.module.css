@@ -1,0 +1,64 @@
+.panel {
+  position: fixed;
+  right: 100px;
+  bottom: 0;
+  z-index: 95;
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px 8px 0 0;
+  background: #fff;
+  box-shadow: var(--shadow-elevation-4);
+}
+
+.titleBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 16px;
+  border-radius: 8px 8px 0 0;
+  background: #404040;
+  color: #fff;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.closeBtn {
+  display: flex;
+  padding: 6px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.closeBtn:hover {
+  background: rgb(255 255 255 / 0.12);
+}
+
+.closeIcon {
+  font-size: 18px;
+  color: #fff;
+}
+
+.body {
+  padding: 4px 16px 12px;
+  overflow-y: auto;
+}
+
+@media (max-width: 640px) {
+  .panel {
+    right: 16px;
+    left: 16px;
+    width: auto;
+  }
+}
