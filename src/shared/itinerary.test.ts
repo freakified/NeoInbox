@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildItinerary, formatWhen } from "./itinerary";
+import { buildItinerary, formatWhen, itineraryMessage } from "./itinerary";
 import type { ReservationRecord, ReservationSegment } from "./types";
 
 const NOW = new Date(2026, 9, 1).getTime();
@@ -52,5 +52,20 @@ describe("formatWhen", () => {
   });
   it("adds the year outside the current one", () => {
     expect(formatWhen(new Date(2018, 11, 22).getTime(), undefined, NOW)).toBe("Dec 22, 2018");
+  });
+});
+
+describe("itineraryMessage", () => {
+  it("writes the itinerary out with confirmation codes", () => {
+    const [item] = buildItinerary(
+      [record([{ kind: "flight", start: at(10, 22, 22, 10), origin: "SFO", destination: "EWR", summary: "AS 1182 SFO → EWR" }], { confirmationCodes: ["GFQVKA"] })],
+      NOW,
+    );
+    const message = itineraryMessage("Trip to New York", "Nov 22–25, 2026", [item!]);
+    expect(message.subject).toBe("Trip to New York (Nov 22–25, 2026)");
+    expect(message.text).toBe(
+      "Trip to New York\nNov 22–25, 2026\n\nSan Francisco to New York – AS 1182\nNov 22, 10:10 PM · Confirmation GFQVKA",
+    );
+    expect(message.html).toContain("<b>Trip to New York</b>");
   });
 });

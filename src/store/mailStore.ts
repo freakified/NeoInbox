@@ -5,6 +5,7 @@ import { deriveStream, type Stream, type StreamView } from "./stream";
 import type { ComposeDraft } from "../shared/compose";
 import { MESSAGE_DETAILS_VERSION } from "../shared/details";
 import { log } from "../shared/log";
+import { pinKeyOf } from "../shared/pinKey";
 import {
   PORT_NAME,
   type ClientMsg,
@@ -131,7 +132,6 @@ interface MailStore {
   healStaleMessage: (staleId: number, liveId: number) => boolean;
   createTrip: (name: string) => TripRecord;
   renameTrip: (id: string, name: string) => void;
-  deleteTrip: (id: string) => void;
   /**
    * Assign messages (by pinKey) to a trip; null removes them from all trips
    * and, as a tombstone, keeps auto-clustering (phase 2) from re-adding them.
@@ -155,6 +155,16 @@ interface MailStore {
    * window for the user to finish when `send` is false.
    */
   composeMessage: (draft: ComposeDraft, send: boolean) => void;
+  /** A new message someone asked the FAB's composer to open, prefilled. */
+  newMessageRequest: (NewMessagePrefill & { key: number }) | null;
+  startNewMessage: (prefill: NewMessagePrefill) => void;
+  clearNewMessageRequest: () => void;
+}
+
+export interface NewMessagePrefill {
+  subject: string;
+  text: string;
+  html: string;
 }
 
 const UNDO_TIMEOUT_MS = 5000;
@@ -192,8 +202,48 @@ const commitUndoToast = (
     for (const id of toast.undo.messageIds) {
       send({ type: toast.undo.kind, messageId: id });
     }
+    if (toast.undo.kind === "trash") retireTrashedFromTrips(get, set, toast.undo.messageIds);
   }
   set({ toasts: get().toasts.filter((t) => t.id !== toastId) });
+};
+
+/**
+ * Trashed mail leaves its trip for good once the undo window closes, and a
+ * trip left with no mail goes with it — Inbox trips, like its other bundles,
+ * stopped existing when they had nothing in them. The rows become tombstones
+ * so the auto-clusterer, which still has the trashed mail's reservations,
+ * doesn't put the trip back.
+ */
+const retireTrashedFromTrips = (
+  get: () => MailStore,
+  set: (partial: Partial<MailStore>) => void,
+  messageIds: number[],
+): void => {
+  const memberships = { ...get().tripMembershipByKey };
+  const tombstones: TripMembershipRecord[] = [];
+  const vacated = new Set<string>();
+  for (const id of messageIds) {
+    const message = get().pendingOps[id]?.message;
+    if (!message) continue;
+    const key = pinKeyOf(message);
+    const tripId = memberships[key]?.tripId;
+    if (!tripId) continue;
+    vacated.add(tripId);
+    const tombstone: TripMembershipRecord = { key, tripId: null, source: "manual", addedAt: Date.now() };
+    memberships[key] = tombstone;
+    tombstones.push(tombstone);
+  }
+  if (!tombstones.length) return;
+  const trips = { ...get().tripsById };
+  const emptied = [...vacated].filter(
+    (id) => !Object.values(memberships).some((r) => r.tripId === id),
+  );
+  for (const id of emptied) delete trips[id];
+  set({ tripMembershipByKey: memberships, tripsById: trips });
+  persistTripMemberships(tombstones);
+  if (emptied.length) {
+    void db.trips.bulkDelete(emptied).catch((e) => log.warn("store", "empty trip delete failed", e));
+  }
 };
 
 /** Reminders are SPA-owned; they persist straight to Dexie, no port round-trip. */
@@ -252,6 +302,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   tripsById: {},
   tripMembershipByKey: {},
   toasts: [],
+  newMessageRequest: null,
   bundleSettings: null,
   reclassifying: false,
 
@@ -656,42 +707,6 @@ export const useMailStore = create<MailStore>((set, get) => ({
     persistTrip(next);
   },
 
-  deleteTrip: (id) => {
-    const prev = get().tripsById[id];
-    if (!prev) return;
-    const trips = { ...get().tripsById };
-    delete trips[id];
-    const memberships = { ...get().tripMembershipByKey };
-    const removed: TripMembershipRecord[] = [];
-    for (const [key, record] of Object.entries(memberships)) {
-      if (record.tripId === id) {
-        removed.push(record);
-        delete memberships[key];
-      }
-    }
-    set({ tripsById: trips, tripMembershipByKey: memberships });
-    void db.trips.delete(id).catch((e) => log.warn("store", "trip delete failed", e));
-    void db.tripMemberships
-      .bulkDelete(removed.map((r) => r.key))
-      .catch((e) => log.warn("store", "trip membership delete failed", e));
-    get().notify("Trip deleted", [
-      {
-        label: "Undo",
-        run: () => {
-          set({
-            tripsById: { ...get().tripsById, [id]: prev },
-            tripMembershipByKey: {
-              ...get().tripMembershipByKey,
-              ...Object.fromEntries(removed.map((r) => [r.key, r])),
-            },
-          });
-          persistTrip(prev);
-          persistTripMemberships(removed);
-        },
-      },
-    ]);
-  },
-
   setTripMembership: (keys, tripId) => {
     if (keys.length === 0) return;
     const now = Date.now();
@@ -873,6 +888,9 @@ export const useMailStore = create<MailStore>((set, get) => ({
     set({ reclassifying: true });
     send({ type: "reclassify", messageIds });
   },
+
+  startNewMessage: (prefill) => set({ newMessageRequest: { ...prefill, key: Date.now() } }),
+  clearNewMessageRequest: () => set({ newMessageRequest: null }),
 
   composeMessage: (draft, sendNow) => {
     const requestId = `c${++composeSeq}-${Date.now()}`;

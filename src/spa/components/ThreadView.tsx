@@ -11,7 +11,6 @@ import { InlineReply, isEditableDraft } from "./InlineReply";
 import { useComposeMode } from "../lib/composePrefs";
 import { ReplyFooter } from "./ReplyFooter";
 import { SnoozeMenu } from "./SnoozeMenu";
-import { TripChip } from "./TripChip";
 import s from "./ThreadView.module.css";
 
 const MIDDLE_COLLAPSE_THREAD_THRESHOLD = 8;
@@ -165,7 +164,6 @@ export const ThreadView = ({
         </div>
       </div>
 
-      <TripChip thread={t} />
 
       <div className={s.messages}>
         {!shouldCollapseMiddleMessages ? (

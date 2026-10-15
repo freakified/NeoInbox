@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeTripReason, suggestTrips, tripIdOfThread, tripMembershipOfThread } from "./trips";
+import { suggestTrips, tripIdOfThread, tripMembershipOfThread } from "./trips";
 import type { RawMessage, Thread, TripMembershipRecord } from "./types";
 
 const NOW = Date.UTC(2026, 2, 1);
@@ -44,33 +44,6 @@ describe("tripMembershipOfThread", () => {
 
   it("returns null for a thread nothing points at", () => {
     expect(tripMembershipOfThread(thread("<a@x>"), {})).toBeNull();
-  });
-});
-
-describe("describeTripReason", () => {
-  it("names the confirmation code behind a code match", () => {
-    expect(describeTripReason({ kind: "code-match", detail: "ABC123" })).toBe(
-      "Shares confirmation ABC123 with this trip",
-    );
-  });
-
-  it("falls back to a bare phrasing when there is no detail", () => {
-    expect(describeTripReason({ kind: "code-match" })).toBe(
-      "Shares a confirmation code with this trip",
-    );
-  });
-
-  it("explains a row written before reasons were recorded", () => {
-    // Legacy memberships have no reason until the next recluster backfills
-    // one; the chip still has to say something truthful.
-    expect(describeTripReason(undefined)).toBe("Added automatically");
-  });
-
-  it("distinguishes a manual add from an inferred one", () => {
-    expect(describeTripReason({ kind: "manual" })).toBe("You added this to the trip");
-    expect(describeTripReason({ kind: "date-range" })).toBe(
-      "Its dates fall inside this trip",
-    );
   });
 });
 

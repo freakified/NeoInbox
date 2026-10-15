@@ -19,6 +19,8 @@ export interface ItineraryItem {
   start: number;
   /** The email it came from (pinKey), so the row can open it. */
   sourceKey: string;
+  /** Record locator / confirmation number, when the email had one. */
+  confirmation?: string;
 }
 
 export const ITINERARY_ICONS: Record<ReservationKind, string> = {
@@ -113,7 +115,10 @@ export const buildItinerary = (
   reservations: readonly ReservationRecord[],
   now = Date.now(),
 ): ItineraryItem[] => {
-  const best = new Map<string, { segment: ReservationSegment; key: string }>();
+  const best = new Map<
+    string,
+    { segment: ReservationSegment; key: string; confirmation?: string }
+  >();
   const oldestFirst = [...reservations].sort((a, b) => a.messageDate - b.messageDate);
   for (const r of oldestFirst) {
     if (r.status !== "extracted") continue;
@@ -122,18 +127,52 @@ export const buildItinerary = (
       const current = best.get(id);
       // Ties go to the newer email: schedule changes come after the original.
       if (!current || detail(segment) >= detail(current.segment)) {
-        best.set(id, { segment, key: r.key });
+        best.set(id, { segment, key: r.key, confirmation: r.confirmationCodes[0] });
       }
     }
   }
   return [...best.entries()]
-    .map(([id, { segment, key }]) => ({
+    .map(([id, { segment, key, confirmation }]) => ({
       id,
       kind: segment.kind,
       title: titleOf(segment),
       when: formatWhen(segment.start, segment.end, now),
       start: segment.start,
       sourceKey: key,
+      confirmation,
     }))
     .sort((a, b) => a.start - b.start);
+};
+
+const escapeHtml = (value: string): string =>
+  value.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+/**
+ * The trip as an email, for the banner's Forward: Inbox shared a trip as its
+ * summary — the itinerary, not the pile of confirmation emails behind it.
+ */
+export const itineraryMessage = (
+  tripName: string,
+  dates: string,
+  items: readonly ItineraryItem[],
+): { subject: string; text: string; html: string } => {
+  const lines = items.map((item) => ({
+    title: item.title,
+    detail: [item.when, item.confirmation && `Confirmation ${item.confirmation}`]
+      .filter(Boolean)
+      .join(" · "),
+  }));
+  const text = [
+    tripName,
+    dates,
+    "",
+    ...lines.flatMap((l) => [l.title, l.detail, ""]),
+  ]
+    .join("\n")
+    .trim();
+  const html = [
+    `<p><b>${escapeHtml(tripName)}</b>${dates ? `<br>${escapeHtml(dates)}` : ""}</p>`,
+    ...lines.map((l) => `<p>${escapeHtml(l.title)}<br>${escapeHtml(l.detail)}</p>`),
+  ].join("");
+  return { subject: dates ? `${tripName} (${dates})` : tripName, text, html };
 };

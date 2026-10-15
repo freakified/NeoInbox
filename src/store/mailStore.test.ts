@@ -127,6 +127,45 @@ describe("optimistic done", () => {
   });
 });
 
+describe("trips and trash", () => {
+  beforeEach(async () => {
+    await app.db.messages.bulkPut([
+      row(),
+      row({ id: 2, headerMessageId: "<m2@example.com>" }),
+    ]);
+    await store().init();
+    await settle();
+    const trip = store().createTrip("Trip to Lisbon");
+    store().setTripMembership(["<m1@example.com>", "<m2@example.com>"], trip.id);
+  });
+
+  it("deletes the trip once its last mail is trashed for good", async () => {
+    vi.useFakeTimers();
+    store().trashThread([1, 2]);
+    await vi.advanceTimersByTimeAsync(5_001);
+
+    expect(Object.keys(store().tripsById)).toEqual([]);
+    // Tombstones, so the auto-clusterer can't rebuild it from reservations.
+    expect(store().tripMembershipByKey["<m1@example.com>"]?.tripId).toBeNull();
+  });
+
+  it("keeps the trip while any of its mail is left", async () => {
+    vi.useFakeTimers();
+    store().trashThread([1]);
+    await vi.advanceTimersByTimeAsync(5_001);
+
+    expect(Object.values(store().tripsById).map((t) => t.name)).toEqual(["Trip to Lisbon"]);
+  });
+
+  it("leaves the trip alone when the trash is undone", () => {
+    store().trashThread([1, 2]);
+    store().undoToast(store().toasts.at(-1)!.id);
+
+    expect(Object.keys(store().tripsById)).toHaveLength(1);
+    expect(store().tripMembershipByKey["<m1@example.com>"]?.tripId).toBeTruthy();
+  });
+});
+
 /**
  * Deltas are buffered and flushed as one write. These cover the two things
  * that buys and the one thing it puts at risk: fewer re-renders, unchanged

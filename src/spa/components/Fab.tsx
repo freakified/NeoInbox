@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMailStore } from "../../store/mailStore";
+import { useMailStore, type NewMessagePrefill } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { Icon } from "./Icon";
 import { ReminderComposer } from "./ReminderComposer";
@@ -63,7 +63,11 @@ export const Fab = () => {
   const [open, setOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   /** The inline new-message panel; `to` set when opened from a contact. */
-  const [newMessage, setNewMessage] = useState<{ to?: string[]; key: number } | null>(null);
+  const [newMessage, setNewMessage] = useState<{
+    to?: string[];
+    prefill?: NewMessagePrefill;
+    key: number;
+  } | null>(null);
   const composeMode = useComposeMode();
   const startMessage = (to?: string[]) => {
     if (composeMode === "thunderbird") {
@@ -72,6 +76,19 @@ export const Fab = () => {
       setNewMessage({ to, key: Date.now() });
     }
   };
+  // Elsewhere in the app (a trip's Forward) can ask for a prefilled message.
+  const newMessageRequest = useMailStore((st) => st.newMessageRequest);
+  const clearNewMessageRequest = useMailStore((st) => st.clearNewMessageRequest);
+  useEffect(() => {
+    if (!newMessageRequest) return;
+    const { key, ...prefill } = newMessageRequest;
+    clearNewMessageRequest();
+    if (composeMode === "thunderbird") {
+      void messenger.compose.beginNew({ subject: prefill.subject, body: prefill.html });
+    } else {
+      setNewMessage({ prefill, key });
+    }
+  }, [newMessageRequest, clearNewMessageRequest, composeMode]);
   const reducedMotion = useReducedMotion();
   const contacts = useTopContacts(3);
 
@@ -198,6 +215,7 @@ export const Fab = () => {
         <ComposePanel
           key={newMessage.key}
           to={newMessage.to}
+          prefill={newMessage.prefill}
           mode={composeMode}
           onClose={() => setNewMessage(null)}
           onReopen={() => setNewMessage({ key: Date.now() })}

@@ -136,10 +136,13 @@ export const deriveStream = (
       view.type === "trips"
         ? tripMembershipByKey[pinKeyOf(m)]?.tripId != null
         : m.category === view.category;
+    // A trip is everything booked for it, snoozed mail included — otherwise a
+    // trip whose mail is all snoozed would count as empty and vanish.
+    const snoozedOk = view.type === "trips" || !m.snoozed;
     return (
       m.origin === "sent" ||
       m.origin === "draft" ||
-      ((m.origin === "inbox" || m.origin === "done") && !m.snoozed && belongs)
+      ((m.origin === "inbox" || m.origin === "done") && snoozedOk && belongs)
     );
   });
   let threads = buildThreads(visible, myEmails, anchorOrigins);
@@ -198,10 +201,10 @@ export const deriveStream = (
     if (date !== null) reminderItems.push({ type: "reminder", date, reminder: r });
   }
 
-  // The trips view lists every trip — even with no visible mail — so it can
-  // still be renamed or deleted. The inbox only shows trips with live mail.
+  // Like every Inbox bundle, a trip with no mail doesn't exist — not in the
+  // inbox, and not in the trips view either.
   const tripItems: StreamItem[] = Object.values(tripsById)
-    .filter((trip) => showTripsView || (byTrip.get(trip.id)?.length ?? 0) > 0)
+    .filter((trip) => (byTrip.get(trip.id)?.length ?? 0) > 0)
     .map((trip) => {
       const sorted = [...(byTrip.get(trip.id) ?? [])].sort(
         (a, b) => b.latestDate - a.latestDate,
@@ -293,8 +296,6 @@ export const deriveStream = (
     return view.type === "snoozed" ? aDate - bDate : bDate - aDate;
   });
 
-  // Empty trips never render outside the trips view, but loose threads do.
-  const emptyTripCount = tripItems.filter((item) => item.type === "trip" && !item.threads.length).length;
-  const threadCount = threads.length + reminderItems.length + emptyTripCount;
+  const threadCount = threads.length + reminderItems.length;
   return { sections, threadCount, view };
 }

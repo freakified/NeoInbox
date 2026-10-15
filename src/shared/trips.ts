@@ -1,7 +1,6 @@
 import { pinKeyOf } from "./pinKey";
 import type {
   Thread,
-  TripMembershipReason,
   TripMembershipRecord,
   TripRecord,
 } from "./types";
@@ -33,36 +32,6 @@ export const tripIdOfThread = (
   thread: Thread,
   membershipByKey: Record<string, TripMembershipRecord>,
 ): string | null => tripMembershipOfThread(thread, membershipByKey)?.tripId ?? null;
-
-/**
- * One line explaining why a message is in its trip. The clusterer records the
- * reason at join time; anything written before it did so reads as a plain
- * automatic add until the next recluster backfills it.
- */
-export const describeTripReason = (
-  reason: TripMembershipReason | undefined,
-): string => {
-  switch (reason?.kind) {
-    case "reservation":
-      return reason.detail
-        ? `Reservation found in this message — ${reason.detail}`
-        : "A reservation was found in this message";
-    case "code-match":
-      return reason.detail
-        ? `Shares confirmation ${reason.detail} with this trip`
-        : "Shares a confirmation code with this trip";
-    case "date-range":
-      return "Its dates fall inside this trip";
-    case "return-leg":
-      return reason.detail
-        ? `Booked as the flight home — ${reason.detail}`
-        : "Booked as the flight home";
-    case "manual":
-      return "You added this to the trip";
-    default:
-      return "Added automatically";
-  }
-}
 
 /**
  * Display date range for a trip: explicit travel dates when extraction

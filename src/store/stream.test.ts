@@ -220,10 +220,9 @@ describe("trips", () => {
     expect(tripItem && tripItem.type === "trip" && tripItem.threads).toHaveLength(1);
   });
 
-  it("shows a trip with no visible mail in the trips view but not the inbox", () => {
-    // A trip with zero members is deleted outright, so this is the live case:
-    // a real trip whose mail is currently snoozed. It must stay on the trips
-    // page — the mail is coming back — while staying out of today's inbox.
+  it("keeps a trip whose mail is all snoozed in the trips view, but not the inbox", () => {
+    // Trips with no mail don't exist anywhere, so snoozed mail has to count
+    // on the trips page — it's coming back — while staying out of the inbox.
     const a = msg({ snoozed: true });
     const args = [
       {},
@@ -237,6 +236,11 @@ describe("trips", () => {
 
     expect(kinds(inTripsView)).toEqual(["trip"]);
     expect(kinds(inInbox)).toEqual([]);
+  });
+
+  it("never shows a trip with no mail, even in the trips view", () => {
+    const s = stream([], { type: "trips" }, {}, false, {}, { [trip.id]: trip }, {});
+    expect(kinds(s)).toEqual([]);
   });
 
   it("renders a membership pointing at a deleted trip as loose mail", () => {

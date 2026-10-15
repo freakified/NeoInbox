@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { clsx } from "clsx";
 import type { Thread, TripRecord } from "../../shared/types";
-import { ITINERARY_ICONS, type ItineraryItem } from "../../shared/itinerary";
+import { ITINERARY_ICONS, itineraryMessage, type ItineraryItem } from "../../shared/itinerary";
 import { pinKeyOf } from "../../shared/pinKey";
 import { formatTripRange, tripDateRange } from "../../shared/trips";
 import { useMailStore } from "../../store/mailStore";
@@ -15,6 +16,7 @@ import { RowHeader } from "./RowHeader";
 import { ThreadRow } from "./ThreadRow";
 import { TripArt } from "./TripArt";
 import b from "./BundleSliceRow.module.css";
+import menu from "./BundleMenu.module.css";
 import s from "./TripSliceRow.module.css";
 
 /** Google Inbox's trip blue. */
@@ -38,7 +40,7 @@ export const TripSliceRow = ({
   onOpenThreadChange?: (id: string | null) => void;
 }) => {
   const renameTrip = useMailStore((st) => st.renameTrip);
-  const deleteTrip = useMailStore((st) => st.deleteTrip);
+  const startNewMessage = useMailStore((st) => st.startNewMessage);
   const showDeleteActions = useShowDeleteActions();
   const { doneMessages, trashMessages } = useBulkActions();
 
@@ -81,6 +83,14 @@ export const TripSliceRow = ({
     doneMessages(ids);
   };
 
+  const handleForward = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    startNewMessage(itineraryMessage(trip.name, rangeLabel, itinerary));
+  };
+
+  // Inbox's trip Delete trashed everything in it, and the trip went with its
+  // mail (see retireTrashedFromTrips) — there was no "delete the trip, keep
+  // the mail" here; removing mail one conversation at a time does that.
   const handleTrashAll = (e: React.MouseEvent) => {
     e.stopPropagation();
     const ids = threads.flatMap((t) => t.messages.map((m) => m.id));
@@ -161,37 +171,25 @@ export const TripSliceRow = ({
               {rangeLabel && <span className={s.rangeLabel}>{rangeLabel}</span>}
             </div>
             <div className={s.bannerActions}>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
+              {itinerary.length > 0 && (
+                <button onClick={handleForward} title="Forward itinerary" className={s.bannerBtn}>
+                  <Icon name="forward" className={b.actionIcon} />
+                </button>
+              )}
+              {showDeleteActions && (
+                <button onClick={handleTrashAll} title="Delete" className={s.bannerBtn}>
+                  <Icon name="delete" className={b.actionIcon} />
+                </button>
+              )}
+              <button onClick={handleDoneAll} title="Done" className={s.bannerBtn}>
+                <Icon name="check" className={b.actionIcon} />
+              </button>
+              <TripOverflowMenu
+                onRename={() => {
                   setDraftName(trip.name);
                   setEditing(true);
                 }}
-                title="Rename trip"
-                className={s.bannerBtn}
-              >
-                <Icon name="edit" className={b.actionIcon} />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteTrip(trip.id);
-                }}
-                title="Delete trip (mail stays in your inbox)"
-                className={s.bannerBtn}
-              >
-                <Icon name="delete" className={b.actionIcon} />
-              </button>
-              {showDeleteActions && threads.length > 0 && (
-                <button onClick={handleTrashAll} title="Delete all" className={s.bannerBtn}>
-                  <Icon name="delete_sweep" className={b.actionIcon} />
-                </button>
-              )}
-              {threads.length > 0 && (
-                <button onClick={handleDoneAll} title="Archive all" className={s.bannerBtn}>
-                  <Icon name="check" className={b.actionIcon} />
-                </button>
-              )}
+              />
             </div>
           </div>
         </div>
@@ -200,7 +198,7 @@ export const TripSliceRow = ({
       <ExpandableRegion
         isOpen={isOpen}
         className={b.expandBody}
-        innerClassName={b.expandInner}
+        innerClassName={s.expandInner}
       >
         {itinerary.length > 0 && (
           <Itinerary
@@ -217,12 +215,7 @@ export const TripSliceRow = ({
             <h3 className={b.bucketLabel}>Related items</h3>
           </div>
         )}
-        {threads.length === 0 ? (
-          <p className={s.emptyBody}>
-            No mail in this trip yet. Open a conversation&rsquo;s ⋮ menu and choose Move to
-            &rarr; this trip.
-          </p>
-        ) : expandedIdx >= 0 ? (
+        {expandedIdx >= 0 ? (
           <>
             {expandedIdx > 0 && (
               <RowGroup
@@ -314,3 +307,69 @@ const Itinerary = ({
     })}
   </div>
 );
+
+/** The banner's ⋮: where Inbox kept Rename. */
+const TripOverflowMenu = ({ onRename }: { onRename: () => void }) => {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<React.CSSProperties>({});
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const closeOnScroll = () => setOpen(false);
+    document.addEventListener("mousedown", close);
+    window.addEventListener("scroll", closeOnScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      window.removeEventListener("scroll", closeOnScroll, true);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        title="More"
+        className={s.bannerBtn}
+        onClick={(e) => {
+          e.stopPropagation();
+          const rect = e.currentTarget.getBoundingClientRect();
+          setPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+          setOpen(!open);
+        }}
+      >
+        <Icon name="more_vert" className={b.actionIcon} />
+      </button>
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className={menu.menu}
+            style={position}
+            role="menu"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className={menu.menuItem}
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onRename();
+              }}
+            >
+              <Icon name="edit" className={menu.menuIcon} />
+              <span className={menu.menuItemLabel}>Rename</span>
+            </button>
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+};

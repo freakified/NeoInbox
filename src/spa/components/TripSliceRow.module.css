@@ -39,11 +39,14 @@
   overflow: hidden;
 }
 
-/* Open: a banner across the whole slice, fading into the slice behind the
-   itinerary card. */
+/* Open: a banner across the whole slice. Its lower part runs behind the
+   itinerary card and melts through a pale teal into the slice's grey, as in
+   Inbox — no hard edge where the art stops. */
 .banner {
   position: relative;
-  height: 168px;
+  height: 210px;
+  /* The itinerary card rides up over the faded bottom. */
+  margin-bottom: -96px;
   overflow: hidden;
   color: #fff;
 }
@@ -58,9 +61,15 @@
 .banner::after {
   content: "";
   position: absolute;
-  inset: auto 0 0;
-  height: 40px;
-  background: linear-gradient(to bottom, transparent, #e5e5e5);
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(4, 38, 42, 0.35) 0%,
+    rgba(11, 79, 86, 0) 38%,
+    rgba(58, 130, 138, 0.55) 62%,
+    rgba(150, 196, 200, 0.85) 80%,
+    #e5e5e5 100%
+  );
 }
 
 .bannerContent {
@@ -130,7 +139,7 @@
   position: relative;
   z-index: 1;
   width: var(--bundle-inner-width);
-  margin: -52px auto 8px;
+  margin: 0 auto 8px;
   background: #fff;
   box-shadow: var(--shadow-elevation-2);
 }
@@ -202,10 +211,8 @@
   outline: none;
 }
 
-.emptyBody {
-  width: var(--bundle-inner-width);
-  margin: 0 auto;
-  padding: 8px 12px 4px;
-  color: var(--color-md-secondary-text);
-  font-size: 13.5px;
+/* Transparent (the open slice is already grey) so the banner's fade shows
+   through beside the itinerary card. */
+.expandInner {
+  padding-bottom: 20px;
 }

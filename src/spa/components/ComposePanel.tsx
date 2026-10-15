@@ -20,12 +20,15 @@ let unsentNewMessage: ComposerValue | null = null;
 /** The floating Inbox-style new-message card the FAB opens. */
 export const ComposePanel = ({
   to,
+  prefill,
   mode,
   onClose,
   onReopen,
 }: {
   /** Prefilled recipients (a FAB contact); otherwise any unsent message comes back. */
   to?: string[];
+  /** Subject and body to start from (e.g. a forwarded trip itinerary). */
+  prefill?: { subject: string; text: string; html: string };
   mode: Exclude<ComposeMode, "thunderbird">;
   onClose: () => void;
   /** Opens the panel again (with the unsent message); used by discard's Undo. */
@@ -34,7 +37,11 @@ export const ComposePanel = ({
   const composeMessage = useMailStore((st) => st.composeMessage);
   const notify = useMailStore((st) => st.notify);
   const [value, setValue] = useState<ComposerValue>(() =>
-    to ? { ...emptyComposerValue(), to } : (unsentNewMessage ?? emptyComposerValue()),
+    prefill
+      ? { ...emptyComposerValue(), ...prefill }
+      : to
+        ? { ...emptyComposerValue(), to }
+        : (unsentNewMessage ?? emptyComposerValue()),
   );
 
   const submit = (send: boolean, identityId: string | undefined) => {
