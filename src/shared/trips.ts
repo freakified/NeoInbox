@@ -84,20 +84,60 @@ export const tripDateRange = (
   return end >= start ? { start, end } : null;
 }
 
-const DAY_WITH_YEAR: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
-const DAY_ONLY: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
-
+/**
+ * Inbox's trip dates, always with the year: "Aug 13, 2017",
+ * "Aug 25–27, 2017", "Jul 26–Aug 3, 2017", "Dec 22, 2018–Jan 4, 2019".
+ */
 export const formatTripRange = (range: { start: number; end: number }): string => {
   const start = new Date(range.start);
   const end = new Date(range.end);
-  const thisYear = new Date().getFullYear();
-  const sameDay =
-    start.getFullYear() === end.getFullYear() &&
-    start.getMonth() === end.getMonth() &&
-    start.getDate() === end.getDate();
-  const endOpts = end.getFullYear() === thisYear ? DAY_ONLY : DAY_WITH_YEAR;
-  if (sameDay) return end.toLocaleDateString("en-US", endOpts);
-  const startOpts =
-    start.getFullYear() === end.getFullYear() ? DAY_ONLY : DAY_WITH_YEAR;
-  return `${start.toLocaleDateString("en-US", startOpts)} – ${end.toLocaleDateString("en-US", endOpts)}`;
+  const month = (d: Date) => d.toLocaleDateString("en-US", { month: "short" });
+  const sameYear = start.getFullYear() === end.getFullYear();
+  const sameMonth = sameYear && start.getMonth() === end.getMonth();
+  if (sameMonth && start.getDate() === end.getDate()) {
+    return `${month(end)} ${end.getDate()}, ${end.getFullYear()}`;
+  }
+  if (sameMonth) {
+    return `${month(start)} ${start.getDate()}–${end.getDate()}, ${end.getFullYear()}`;
+  }
+  const head = `${month(start)} ${start.getDate()}${sameYear ? "" : `, ${start.getFullYear()}`}`;
+  return `${head}–${month(end)} ${end.getDate()}, ${end.getFullYear()}`;
 }
+
+const DAY = 24 * 60 * 60 * 1000;
+/** A trip this close to an email's date is a plausible home for it. */
+const NEARBY = 30 * DAY;
+
+/** When a trip happens: its travel dates, or when it was made for manual trips. */
+export const tripWhen = (trip: TripRecord): { start: number; end: number } => ({
+  start: trip.startDate ?? trip.createdAt,
+  end: trip.endDate ?? trip.startDate ?? trip.createdAt,
+});
+
+/**
+ * The few trips worth offering in Move to: the one the thread is already in,
+ * then trips near the thread's own dates, then upcoming ones. Everything else
+ * is behind "More trips…" — with years of extracted history, listing every
+ * trip made the menu useless.
+ */
+export const suggestTrips = (
+  trips: readonly TripRecord[],
+  thread: Thread,
+  currentTripId: string | null,
+  now: number,
+  limit = 3,
+): TripRecord[] => {
+  const distance = (trip: TripRecord): number => {
+    const { start, end } = tripWhen(trip);
+    const at = thread.latestDate;
+    return at < start ? start - at : at > end ? at - end : 0;
+  };
+  const current = trips.find((t) => t.id === currentTripId);
+  const nearby = trips
+    .filter((t) => t !== current && distance(t) <= NEARBY)
+    .sort((a, b) => distance(a) - distance(b));
+  const upcoming = trips
+    .filter((t) => t !== current && !nearby.includes(t) && tripWhen(t).end >= now - DAY)
+    .sort((a, b) => tripWhen(a).start - tripWhen(b).start);
+  return [...(current ? [current] : []), ...nearby, ...upcoming].slice(0, limit);
+};

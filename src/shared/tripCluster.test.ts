@@ -226,3 +226,51 @@ describe("empty trips", () => {
     expect(result.tripIdsToDelete).toEqual([]);
   });
 });
+
+describe("trip names", () => {
+  // Local dates: weekend detection reads the day of week where the user is.
+  const WED = new Date(2026, 2, 4).getTime();
+  const FRI = new Date(2026, 2, 6).getTime();
+  const nameFor = (segments: ReservationSegment[]) =>
+    cluster([reservation({ segments })]).tripsToPut[0]?.name;
+
+  it("names a two-city trip after both stops, in travel order", () => {
+    expect(
+      nameFor([
+        flight({ start: WED, origin: "SFO", destination: "EWR", summary: undefined }),
+        flight({ start: WED + 4 * DAY, origin: "EWR", destination: "BOS", summary: undefined }),
+        flight({ start: WED + 9 * DAY, origin: "BOS", destination: "SFO", summary: undefined }),
+      ]),
+    ).toBe("Trip to New York & Boston");
+  });
+
+  it("skips connections", () => {
+    expect(
+      nameFor([
+        flight({ start: WED, end: WED + 3 * 3_600_000, origin: "SFO", destination: "ORD" }),
+        flight({ start: WED + 5 * 3_600_000, origin: "ORD", destination: "BOS" }),
+        flight({ start: WED + 7 * DAY, origin: "BOS", destination: "SFO" }),
+      ]),
+    ).toBe("Trip to Boston");
+  });
+
+  it("collapses three or more stops into “& others”", () => {
+    expect(
+      nameFor([
+        flight({ start: WED, origin: "SFO", destination: "EWR" }),
+        flight({ start: WED + 2 * DAY, origin: "EWR", destination: "BOS" }),
+        flight({ start: WED + 4 * DAY, origin: "BOS", destination: "ORD" }),
+        flight({ start: WED + 6 * DAY, origin: "ORD", destination: "SFO" }),
+      ]),
+    ).toBe("Trip to New York, Boston & others");
+  });
+
+  it("calls a Friday-to-Sunday trip a weekend", () => {
+    expect(
+      nameFor([
+        flight({ start: FRI, origin: "SFO", destination: "BOS" }),
+        flight({ start: FRI + 2 * DAY, origin: "BOS", destination: "SFO" }),
+      ]),
+    ).toBe("Weekend in Boston");
+  });
+});

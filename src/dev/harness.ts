@@ -14,6 +14,7 @@
  *   await neo.deliver({ subject: "Hi", author: "Bo <bo@x.example>" })
  *   neo.mail.hang("getFull")                // simulate a stalled IMAP fetch
  *   neo.store().messagesById                // the SPA store's state
+ *   neo.setStore({ tripsById: {...} })      // inject state directly
  *   neo.mail.calls.compose                  // compose windows "opened"
  *   neo.mail.calls.sent                     // inline drafts "sent" (final details)
  */
@@ -52,6 +53,8 @@ const start = async (): Promise<void> => {
     db,
     settle,
     store: () => useMailStore.getState(),
+    /** For seeding state the fake mailbox can't produce, e.g. years of trips. */
+    setStore: useMailStore.setState,
     deliver: (what: Kind | FakeMessageSpec = "personal", folderId = INBOX): Promise<number> =>
       mail.deliver(folderId, typeof what === "string" ? KINDS[what]({ date: new Date() }) : { date: new Date(), ...what }),
   };

@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import type { Thread, TripRecord } from "../../shared/types";
+import { ITINERARY_ICONS, type ItineraryItem } from "../../shared/itinerary";
+import { pinKeyOf } from "../../shared/pinKey";
 import { formatTripRange, tripDateRange } from "../../shared/trips";
 import { useMailStore } from "../../store/mailStore";
-import { senderName } from "../lib/avatar";
 import { useShowDeleteActions } from "../lib/deleteActionPrefs";
+import { useTripItinerary } from "../lib/useTripItinerary";
 import { useBulkActions } from "./BulkActionConfirm";
 import { Icon } from "./Icon";
 import { ExpandableRegion, MotionRow, MotionSurface } from "./Motion";
 import { RowGroup } from "./RowGroup";
 import { RowHeader } from "./RowHeader";
 import { ThreadRow } from "./ThreadRow";
+import { TripArt } from "./TripArt";
 import b from "./BundleSliceRow.module.css";
 import s from "./TripSliceRow.module.css";
 
@@ -41,22 +44,9 @@ export const TripSliceRow = ({
 
   const range = tripDateRange(trip, threads);
   const rangeLabel = range ? formatTripRange(range) : "";
-  const latestDate = threads.reduce((max, t) => Math.max(max, t.latestDate), 0);
 
-  const previewContent = threads
-    .slice(0, 3)
-    .map((t, idx) => {
-      const last = t.messages[t.messages.length - 1];
-      const name = last ? senderName(last.author) : "";
-      if (!name) return null;
-      return (
-        <span key={t.id} className={clsx(t.unreadCount > 0 && b.unreadSender)}>
-          {idx > 0 && ", "}
-          {name}
-        </span>
-      );
-    })
-    .filter(Boolean);
+  const unread = threads.some((t) => t.unreadCount > 0);
+  const itinerary = useTripItinerary(trip.id);
 
   const [localOpenThreadId, setLocalOpenThreadId] = useState<string | null>(null);
   const activeOpenThreadId = openThreadId !== undefined ? openThreadId : localOpenThreadId;
@@ -74,6 +64,9 @@ export const TripSliceRow = ({
 
   const toggleThread = (id: string) =>
     setOpenThreadId(activeOpenThreadId === id ? null : id);
+
+  const threadOfKey = (key: string): Thread | undefined =>
+    threads.find((t) => t.messages.some((m) => pinKeyOf(m) === key));
 
   const commitRename = () => {
     setEditing(false);
@@ -122,100 +115,84 @@ export const TripSliceRow = ({
               <Icon name="travel" className={b.iconSized} style={{ color: TRIP_COLOR }} />
             </div>
           }
-          primary={
-            <>
-              <span style={{ color: TRIP_COLOR }} className={b.bundleName}>
-                {trip.name}
-              </span>
-              {threads.length > 0 && (
-                <span className={b.threadCount}>({threads.length})</span>
-              )}
-            </>
-          }
+          primary={trip.name}
+          bold={unread}
           secondary={
-            previewContent.length > 0 ? (
-              <span className={b.previewList}>{previewContent}</span>
-            ) : (
-              <span className={s.emptyPreview}>No mail in this trip yet</span>
-            )
+            <span className={s.card}>
+              <TripArt tone="light" className={s.cardArt} />
+              <span className={s.cardText}>
+                <span className={s.cardName}>{trip.name}</span>
+                {rangeLabel && <span>{rangeLabel}</span>}
+              </span>
+            </span>
           }
-          date={rangeLabel || undefined}
           onClick={() => onToggle(tripKey)}
           expanded={false}
         />
       )}
 
       {isOpen && (
-        <div className={b.openHeader}>
-          <div className={s.titleGroup}>
-            {editing ? (
-              <input
-                type="text"
-                autoFocus
-                className={s.renameInput}
-                value={draftName}
-                onFocus={(e) => e.target.select()}
-                onChange={(e) => setDraftName(e.target.value)}
-                onBlur={commitRename}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") commitRename();
-                  if (e.key === "Escape") {
-                    setDraftName(trip.name);
-                    setEditing(false);
-                  }
+        <div className={s.banner}>
+          <TripArt tone="dark" className={s.bannerArt} />
+          <div className={s.bannerContent}>
+            <div className={s.titleGroup}>
+              {editing ? (
+                <input
+                  type="text"
+                  autoFocus
+                  className={s.renameInput}
+                  value={draftName}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitRename();
+                    if (e.key === "Escape") {
+                      setDraftName(trip.name);
+                      setEditing(false);
+                    }
+                  }}
+                />
+              ) : (
+                <button onClick={() => onToggle(tripKey)} className={s.bannerTitle}>
+                  {trip.name}
+                </button>
+              )}
+              {rangeLabel && <span className={s.rangeLabel}>{rangeLabel}</span>}
+            </div>
+            <div className={s.bannerActions}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDraftName(trip.name);
+                  setEditing(true);
                 }}
-              />
-            ) : (
-              <button
-                onClick={() => onToggle(tripKey)}
-                className={b.bundleTitle}
-                style={{ color: TRIP_COLOR }}
+                title="Rename trip"
+                className={s.bannerBtn}
               >
-                {trip.name}
+                <Icon name="edit" className={b.actionIcon} />
               </button>
-            )}
-            {rangeLabel && !editing && <span className={s.rangeLabel}>{rangeLabel}</span>}
-          </div>
-          <div className={b.actions}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setDraftName(trip.name);
-                setEditing(true);
-              }}
-              title="Rename trip"
-              className={b.actionBtn}
-            >
-              <Icon name="edit" className={b.actionIcon} />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                deleteTrip(trip.id);
-              }}
-              title="Delete trip (mail stays in your inbox)"
-              className={b.actionBtn}
-            >
-              <Icon name="delete" className={b.actionIcon} />
-            </button>
-            {showDeleteActions && threads.length > 0 && (
               <button
-                onClick={handleTrashAll}
-                title="Delete all"
-                className={b.actionBtn}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteTrip(trip.id);
+                }}
+                title="Delete trip (mail stays in your inbox)"
+                className={s.bannerBtn}
               >
-                <Icon name="delete_sweep" className={b.actionIcon} />
+                <Icon name="delete" className={b.actionIcon} />
               </button>
-            )}
-            {threads.length > 0 && (
-              <button
-                onClick={handleDoneAll}
-                title="Archive all"
-                className={b.actionBtn}
-              >
-                <Icon name="check" className={b.actionIcon} />
-              </button>
-            )}
+              {showDeleteActions && threads.length > 0 && (
+                <button onClick={handleTrashAll} title="Delete all" className={s.bannerBtn}>
+                  <Icon name="delete_sweep" className={b.actionIcon} />
+                </button>
+              )}
+              {threads.length > 0 && (
+                <button onClick={handleDoneAll} title="Archive all" className={s.bannerBtn}>
+                  <Icon name="check" className={b.actionIcon} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -225,6 +202,21 @@ export const TripSliceRow = ({
         className={b.expandBody}
         innerClassName={b.expandInner}
       >
+        {itinerary.length > 0 && (
+          <Itinerary
+            items={itinerary}
+            onOpen={(item) => {
+              const thread = threadOfKey(item.sourceKey);
+              if (thread) setOpenThreadId(thread.id);
+            }}
+            canOpen={(item) => threadOfKey(item.sourceKey) !== undefined}
+          />
+        )}
+        {threads.length > 0 && (
+          <div className={b.bucketHeader}>
+            <h3 className={b.bucketLabel}>Related items</h3>
+          </div>
+        )}
         {threads.length === 0 ? (
           <p className={s.emptyBody}>
             No mail in this trip yet. Open a conversation&rsquo;s ⋮ menu and choose Move to
@@ -287,3 +279,38 @@ export const TripSliceRow = ({
     </MotionRow>
   );
 };
+
+const Itinerary = ({
+  items,
+  onOpen,
+  canOpen,
+}: {
+  items: ItineraryItem[];
+  onOpen: (item: ItineraryItem) => void;
+  canOpen: (item: ItineraryItem) => boolean;
+}) => (
+  <div className={s.itinerary}>
+    {items.map((item) => {
+      const openable = canOpen(item);
+      return (
+        <button
+          key={item.id}
+          type="button"
+          className={s.itineraryRow}
+          disabled={!openable}
+          title={openable ? "Open the email this came from" : undefined}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen(item);
+          }}
+        >
+          <Icon name={ITINERARY_ICONS[item.kind]} className={s.itineraryIcon} />
+          <span className={s.itineraryText}>
+            <span className={s.itineraryTitle}>{item.title}</span>
+            <span className={s.itineraryWhen}>{item.when}</span>
+          </span>
+        </button>
+      );
+    })}
+  </div>
+);

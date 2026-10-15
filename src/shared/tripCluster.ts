@@ -80,6 +80,15 @@ interface Cluster {
   /** kind/destination pairs feeding the trip name. */
   flightDests: string[];
   textDests: string[];
+  /** Every flight leg, so naming can tell a stopover from a layover. */
+  legs: FlightLeg[];
+}
+
+interface FlightLeg {
+  origin?: string;
+  destination: string;
+  start: number;
+  end?: number;
 }
 
 /** The reservation itself, phrased for a one-line "why" chip. */
@@ -159,6 +168,7 @@ const addReservationToCluster = (
       }
       if (s.destination && isKnownAirport(s.destination)) {
         c.flightDests.push(s.destination);
+        c.legs.push({ origin: s.origin, destination: s.destination, start: s.start, end: s.end });
       }
     } else if (s.destination) {
       c.textDests.push(s.destination);
@@ -245,12 +255,66 @@ const mostCommon = (values: readonly string[]): string | null => {
   return best;
 };
 
-const nameOf = (c: Cluster, home: string | null): string => {
+/** Under this long on the ground before flying on, a stop is a connection. */
+const CONNECTION_WINDOW = 1 * DAY;
+
+/**
+ * Places the trip actually stayed, in the order it reached them: flight
+ * destinations, minus home and minus connections (another leg leaves from
+ * there within CONNECTION_WINDOW of arriving). Text extractors only give
+ * dates, so a same-day onward flight reads as a connection too.
+ */
+const stopsOf = (c: Cluster, home: string | null): string[] => {
+  const legs = [...c.legs].sort((a, b) => a.start - b.start);
+  const stops: string[] = [];
+  for (const leg of legs) {
+    if (leg.destination === home) continue;
+    const arrived = leg.end ?? leg.start;
+    const connection = legs.some(
+      (next) =>
+        next !== leg &&
+        next.origin === leg.destination &&
+        next.destination !== leg.origin &&
+        next.start >= leg.start &&
+        next.start - arrived < CONNECTION_WINDOW,
+    );
+    if (connection) continue;
+    const city = cityOfAirport(leg.destination);
+    if (!stops.includes(city)) stops.push(city);
+  }
+  return stops;
+};
+
+/** Leaves Friday or Saturday, back by Monday: Inbox called that a weekend. */
+const isWeekend = (c: Cluster): boolean => {
+  if (c.end - c.start > 3 * DAY) return false;
+  const leaves = new Date(c.start).getDay();
+  const returns = new Date(c.end).getDay();
+  return (leaves === 5 || leaves === 6) && (returns === 0 || returns === 1 || returns === leaves);
+};
+
+/** Inbox's phrasing: "Trip to A", "Trip to A & B", "Trip to A, B & others". */
+const nameForPlaces = (places: readonly string[], weekend: boolean): string => {
+  const [first, second] = places;
+  if (places.length === 1) return weekend ? `Weekend in ${first}` : `Trip to ${first}`;
+  if (places.length === 2) return `Trip to ${first} & ${second}`;
+  return `Trip to ${first}, ${second} & others`;
+};
+
+const nameOf = (c: Cluster, inferredHome: string | null): string => {
+  const weekend = isWeekend(c);
+  // Too little history to know home: the trip starts from there, then.
+  const firstLeg = [...c.legs].sort((a, b) => a.start - b.start)[0];
+  const home = inferredHome ?? firstLeg?.origin ?? null;
+  const stops = stopsOf(c, home);
+  if (stops.length) return nameForPlaces(stops, weekend);
+  // Every leg looked like a connection (or flew home): fall back to the most
+  // visited airport so the trip still gets a place name.
   const away = c.flightDests.filter((code) => code !== home);
   const flightPick = mostCommon(away.length ? away : [...c.airports].filter((a) => a !== home));
-  if (flightPick) return `Trip to ${cityOfAirport(flightPick)}`;
+  if (flightPick) return nameForPlaces([cityOfAirport(flightPick)], weekend);
   const textPick = mostCommon(c.textDests);
-  if (textPick) return `Trip to ${textPick}`;
+  if (textPick) return nameForPlaces([textPick], weekend);
   return "Trip";
 };
 
@@ -297,6 +361,7 @@ export const clusterTrips = (input: TripClusterInput): TripClusterResult => {
         airports: new Set(),
         flightDests: [],
         textDests: [],
+        legs: [],
       };
       clusters.push(target);
       reason = { kind: "reservation", detail: describeReservation(r) };

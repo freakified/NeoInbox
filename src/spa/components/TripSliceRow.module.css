@@ -1,22 +1,197 @@
-.titleGroup {
+/* Collapsed: Inbox's highlight card — the bag art, then the trip on blue. */
+.card {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
-  min-width: 0;
+  width: min(100%, 380px);
+  height: 88px;
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: var(--shadow-elevation-1);
+  margin: -4px 0 6px;
+  white-space: normal;
 }
 
-.rangeLabel {
-  font-size: 13px;
-  color: var(--color-md-secondary-text);
+.cardArt {
+  flex: 0 0 132px;
+  height: 100%;
+}
+
+.cardText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 16px 0 18px;
+  background: #2d57c8;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.cardName {
+  font-weight: 600;
+  font-size: 15px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Open: a banner across the whole slice, fading into the slice behind the
+   itinerary card. */
+.banner {
+  position: relative;
+  height: 168px;
+  overflow: hidden;
+  color: #fff;
+}
+
+.bannerArt {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.banner::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 40px;
+  background: linear-gradient(to bottom, transparent, #e5e5e5);
+}
+
+.bannerContent {
+  position: relative;
+  z-index: 1;
+  width: var(--bundle-inner-width);
+  margin: 0 auto;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 28px 12px 0 24px;
+}
+
+.titleGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.bannerTitle {
+  font-size: 28px;
+  font-weight: 400;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.renameInput {
-  font-size: 24px;
+.rangeLabel {
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.bannerActions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.bannerBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+}
+
+.bannerBtn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.itinerary {
+  position: relative;
+  z-index: 1;
+  width: var(--bundle-inner-width);
+  margin: -52px auto 8px;
+  background: #fff;
+  box-shadow: var(--shadow-elevation-2);
+}
+
+.itineraryRow {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+  padding: 14px 24px;
+  background: none;
+  border: none;
+  border-top: 1px solid #e0e0e0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.itineraryRow:first-child {
+  border-top: none;
+}
+
+.itineraryRow:hover:not(:disabled) {
+  background: #f5f5f5;
+}
+
+.itineraryRow:disabled {
+  cursor: default;
+  color: inherit;
+}
+
+.itineraryIcon {
+  font-size: 26px;
+  color: #2d57c8;
+  flex-shrink: 0;
+}
+
+.itineraryText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.itineraryTitle {
+  font-size: 15px;
   font-weight: 500;
   color: var(--color-md-on-surface);
+}
+
+.itineraryWhen {
+  font-size: 14px;
+  color: var(--color-md-secondary-text);
+}
+
+.renameInput {
+  font-size: 28px;
+  font-weight: 400;
+  color: #fff;
   border: none;
-  border-bottom: 2px solid var(--color-md-primary);
+  border-bottom: 2px solid #fff;
   background: transparent;
   padding: 0;
   min-width: 0;
@@ -25,10 +200,6 @@
 
 .renameInput:focus {
   outline: none;
-}
-
-.emptyPreview {
-  color: var(--color-md-secondary-text);
 }
 
 .emptyBody {

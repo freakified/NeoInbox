@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { CATEGORIES, getCategoryMeta } from "../../shared/categories";
 import { findRouteRule, matchingRouteRules, ruleTypeLabel } from "../../shared/routeRules";
 import { parseSender } from "../../shared/senders";
-import { tripIdOfThread, tripKeysOfThread } from "../../shared/trips";
+import { suggestTrips, tripIdOfThread, tripKeysOfThread } from "../../shared/trips";
 import type { BuiltinCategory, Category, RouteRuleRecord, RouteRuleType, Thread } from "../../shared/types";
 import {
   useCustomBundles,
@@ -15,6 +15,7 @@ import {
 import { Icon } from "./Icon";
 import { MoveRuleDialog } from "./MoveRuleDialog";
 import { NewTripDialog } from "./NewTripDialog";
+import { TripPickerDialog } from "./TripPickerDialog";
 import { TRIP_COLOR } from "./TripSliceRow";
 import s from "./BundleMenu.module.css";
 
@@ -40,6 +41,7 @@ export const BundleMenu = ({
   const [view, setView] = useState<"root" | "move">("root");
   const [movePrompt, setMovePrompt] = useState<Category | null>(null);
   const [newTripOpen, setNewTripOpen] = useState(false);
+  const [tripPickerOpen, setTripPickerOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -56,11 +58,14 @@ export const BundleMenu = ({
   const notify = useMailStore((st) => st.notify);
   const openBundleSettings = useMailStore((st) => st.openBundleSettings);
 
-  const trips = useMemo(
-    () => Object.values(tripsById).sort((a, b) => b.createdAt - a.createdAt),
-    [tripsById],
-  );
   const currentTripId = tripIdOfThread(thread, tripMemberships);
+  const allTrips = useMemo(() => Object.values(tripsById), [tripsById]);
+  // Only computed while the menu is open, so a stale "now" can't linger.
+  const suggestedTrips = useMemo(
+    () => (menuOpen ? suggestTrips(allTrips, thread, currentTripId, Date.now()) : []),
+    [menuOpen, allTrips, thread, currentTripId],
+  );
+  const moreTrips = allTrips.length > suggestedTrips.length;
 
   // setTripMembership owns the toast: only it knows whether the move emptied
   // (and so deleted) the trip the thread came from, and its Undo has to
@@ -277,7 +282,7 @@ export const BundleMenu = ({
                     onClick={() => moveTo(bundle.id)}
                   />
                 ))}
-                {trips.map((trip) => (
+                {suggestedTrips.map((trip) => (
                   <DestinationItem
                     key={trip.id}
                     name={trip.name}
@@ -288,6 +293,20 @@ export const BundleMenu = ({
                   />
                 ))}
               </div>
+              {moreTrips && (
+                <button
+                  type="button"
+                  className={s.menuItem}
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setTripPickerOpen(true);
+                  }}
+                >
+                  <Icon name="travel_explore" className={s.menuIcon} />
+                  <span className={s.menuItemLabel}>More trips…</span>
+                </button>
+              )}
               {currentTripId && (
                 <button
                   type="button"
@@ -327,6 +346,17 @@ export const BundleMenu = ({
           )}
         </div>,
         document.body,
+      )}
+      {tripPickerOpen && (
+        <TripPickerDialog
+          subject={thread.subject}
+          currentTripId={currentTripId}
+          onPick={(tripId) => {
+            setTripPickerOpen(false);
+            moveToTrip(tripId);
+          }}
+          onClose={() => setTripPickerOpen(false)}
+        />
       )}
       {newTripOpen && (
         <NewTripDialog thread={thread} onClose={() => setNewTripOpen(false)} />

@@ -1,6 +1,6 @@
 import { buildThreads } from "../shared/threading";
 import { pinKeyOf } from "../shared/pinKey";
-import { tripIdOfThread } from "../shared/trips";
+import { tripIdOfThread, tripWhen } from "../shared/trips";
 import type {
   Category,
   MessageOrigin,
@@ -208,7 +208,9 @@ export const deriveStream = (
       );
       return {
         type: "trip" as const,
-        date: sorted[0]?.latestDate ?? trip.createdAt,
+        // The trips view orders by when the trip happens; the inbox by its
+        // newest mail, like every other row.
+        date: showTripsView ? tripWhen(trip).start : (sorted[0]?.latestDate ?? trip.createdAt),
         trip,
         threads: sorted,
       };
@@ -238,6 +240,31 @@ export const deriveStream = (
   ].sort((a, b) => view.type === "snoozed" ? a.date - b.date : b.date - a.date);
 
   const now = Date.now();
+  if (showTripsView) {
+    // Upcoming (soonest first, including trips under way), then past trips
+    // by year, newest first.
+    const upcoming: StreamItem[] = [];
+    const byYear = new Map<number, StreamItem[]>();
+    for (const item of items) {
+      if (item.type !== "trip") continue;
+      if (tripWhen(item.trip).end >= now) {
+        upcoming.push(item);
+        continue;
+      }
+      const year = new Date(item.date).getFullYear();
+      byYear.set(year, [...(byYear.get(year) ?? []), item]);
+    }
+    const sections: StreamSection[] = [
+      ...(upcoming.length
+        ? [{ label: "Upcoming", items: upcoming.sort((a, b) => a.date - b.date) }]
+        : []),
+      ...[...byYear.entries()]
+        .sort(([a], [b]) => b - a)
+        .map(([year, yearItems]) => ({ label: String(year), items: yearItems })),
+    ];
+    return { sections, threadCount: tripItems.length, view };
+  }
+
   const byBucket = new Map<string, StreamItem[]>();
   for (const item of items) {
     // The reminders view mixes past items with future (snoozed) ones.
@@ -266,11 +293,8 @@ export const deriveStream = (
     return view.type === "snoozed" ? aDate - bDate : bDate - aDate;
   });
 
-  // The trips view renders only trip cards (incl. empty ones); everywhere
-  // else, empty trips never render but loose threads do.
+  // Empty trips never render outside the trips view, but loose threads do.
   const emptyTripCount = tripItems.filter((item) => item.type === "trip" && !item.threads.length).length;
-  const threadCount = showTripsView
-    ? tripItems.length
-    : threads.length + reminderItems.length + emptyTripCount;
+  const threadCount = threads.length + reminderItems.length + emptyTripCount;
   return { sections, threadCount, view };
 }
