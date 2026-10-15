@@ -11,6 +11,7 @@ import {
   type ClientMsg,
   type FailedCommand,
   type ServerMsg,
+  type TripScanStatus,
 } from "../shared/messaging";
 import type {
   Category,
@@ -99,6 +100,8 @@ interface MailStore {
   toasts: ToastRecord[];
   bundleSettings: BundleSettingsRequest | null;
   reclassifying: boolean;
+  /** The Settings → Trips scan: running progress, else the last result. */
+  tripScan: TripScanStatus | null;
 
   init: () => Promise<void>;
   pin: (messageId: number, pinned: boolean) => void;
@@ -150,6 +153,9 @@ interface MailStore {
   closeBundleSettings: () => void;
   /** Re-run bundling rules in the background; whole inbox when no ids given. */
   reclassify: (messageIds?: number[]) => void;
+  /** Find trips (in archived mail too when `archive`); `rebuild` starts over. */
+  scanTrips: (options: { archive: boolean; rebuild?: boolean }) => void;
+  stopTripScan: () => void;
   /**
    * Hand an inline draft to Thunderbird: send it, or open it in a compose
    * window for the user to finish when `send` is false.
@@ -305,6 +311,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   newMessageRequest: null,
   bundleSettings: null,
   reclassifying: false,
+  tripScan: null,
 
   init: async () => {
     if (get().hydrated) return;
@@ -889,6 +896,15 @@ export const useMailStore = create<MailStore>((set, get) => ({
     send({ type: "reclassify", messageIds });
   },
 
+  scanTrips: ({ archive, rebuild }) => {
+    if (get().tripScan?.running) return;
+    // Optimistic, so the button flips at once; the background confirms.
+    set({ tripScan: { ...get().tripScan, running: true, archive, rebuild, processed: 0, total: 0 } });
+    send({ type: "trip-scan", archive, rebuild });
+  },
+
+  stopTripScan: () => send({ type: "trip-scan-cancel" }),
+
   startNewMessage: (prefill) => set({ newMessageRequest: { ...prefill, key: Date.now() } }),
   clearNewMessageRequest: () => set({ newMessageRequest: null }),
 
@@ -1066,6 +1082,23 @@ const applyServerMsg = (
             : null;
       if (message) toasts.push({ id: nextToastId(), message });
       set({ toasts: toasts.slice(-TOAST_LIMIT) });
+      return;
+    }
+    case "trip-scan-progress": {
+      const { type: _type, ...status } = msg;
+      const wasRunning = get().tripScan?.running;
+      set({ tripScan: status });
+      // A restarted background answers hello with the last *stored* scan;
+      // only a run that just ended deserves a toast.
+      const justEnded = status.error !== undefined || Date.now() - (status.finishedAt ?? 0) < 60_000;
+      if (wasRunning && !status.running && justEnded) {
+        const message = status.error
+          ? "Couldn't finish looking for trips"
+          : status.cancelled
+            ? `Stopped looking for trips after ${status.processed.toLocaleString()} messages`
+            : `Trip scan done — ${(status.trips ?? 0).toLocaleString()} ${status.trips === 1 ? "trip" : "trips"}`;
+        set({ toasts: [...get().toasts, { id: nextToastId(), message }].slice(-TOAST_LIMIT) });
+      }
       return;
     }
     case "trips-delta": {

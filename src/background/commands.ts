@@ -28,6 +28,7 @@ import {
 } from "./backfill";
 import { scanActive } from "./scanGuard";
 import { runCompose } from "./compose";
+import { cancelTripScan, getTripScanStatus, runTripScan } from "./extract";
 import { pushMyEmails } from "./sync";
 import { applyLocalState } from "./localState";
 import { broadcast } from "./port";
@@ -119,6 +120,16 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
       await pushMyEmails();
       const last = getLastProgress();
       if (last) broadcast(last);
+      const tripScan = await getTripScanStatus();
+      if (tripScan) broadcast({ type: "trip-scan-progress", ...tripScan });
+      return;
+    }
+    case "trip-scan": {
+      void runTripScan({ archive: msg.archive, rebuild: msg.rebuild });
+      return;
+    }
+    case "trip-scan-cancel": {
+      cancelTripScan();
       return;
     }
     case "retry-backfill": {

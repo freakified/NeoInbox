@@ -1,70 +1,44 @@
 /**
- * Amtrak eTickets: "Reservation Number" + numbered trains + "City, ST"
- * station pairs. Rail-specific because train numbers ("Train 501") and
- * station text don't fit the airline engine's IATA-token model.
+ * Amtrak eTickets and receipts. Every train is printed as one run:
+ *   TRAIN 541: Sacramento, CA - Sacramento Valley Station to Omaha, NE
+ *   (One-Way) Depart 11:55 AM, Thursday, April 21, 2022
+ * Station names are free text with dashes and "to" inside them, so they go
+ * into the summary verbatim instead of being split into origin/destination.
+ * The eTicket-only template carries nothing but a PDF; its subject still
+ * names the travel date ("eTicket for Your 04/21/2022 Trip").
  */
 import type { ReservationSegment } from "../../shared/types";
 import type { Extraction, Extractor } from "./types";
-import { CANCEL_RE, dateNear, findConfirmationCodes, findDates } from "./text";
+import { CANCEL_RE, findConfirmationCodes, findDates } from "./text";
 
-const TRAIN_RE = /\btrain\s*#?\s*(\d{1,4})\b/gi;
-/** "Seattle, WA" — city+state as Amtrak prints stations. */
-const STATION_RE = /\b([A-Z][a-zA-Z.'-]+(?: [A-Z][a-zA-Z.'-]+){0,3}),\s?([A-Z]{2})\b/g;
+const TRAIN_RUN_RE =
+  /\bTRAIN\s*(\d{1,4})\s*:\s*(.{3,160}?)\s*Depart\s+\d{1,2}:\d{2}\s*[AP]M,?\s*((?:[A-Za-z]+,?\s+)?[A-Za-z]+\.?\s+\d{1,2},?\s+\d{4})/gi;
+const SUBJECT_TRIP_DATE_RE = /\bfor your (\d{1,2}\/\d{1,2}\/\d{4}) trip\b/i;
 const SUBJECT_RE = /\b(reservation|e-?ticket|confirmation|receipt|trip|travel)\b/i;
 
 export const amtrakExtractor: Extractor = {
   id: "amtrak",
   domains: ["amtrak.com"],
   extract: (input): Extraction | null => {
-    const codes = findConfirmationCodes(input.text);
+    const codes = findConfirmationCodes(input.text, input.subject);
     if (!SUBJECT_RE.test(input.subject) && !codes.length) return null;
 
-    const dates = findDates(input.text, input.messageDate);
-    if (!dates.length) return null;
-
-    const stations = [...input.text.matchAll(STATION_RE)].map((m) => ({
-      value: `${m[1]}, ${m[2]}`,
-      index: m.index,
-    }));
-    const trains = [...input.text.matchAll(TRAIN_RE)].map((m) => ({
-      value: `Train ${m[1]}`,
-      index: m.index,
-    }));
-    if (!trains.length && stations.length < 2) return null;
-
     const segments: ReservationSegment[] = [];
-    for (let i = 0; i + 1 < stations.length; i += 2) {
-      const origin = stations[i];
-      const destination = stations[i + 1];
-      if (!origin || !destination || origin.value === destination.value) {
-        i -= 1;
-        continue;
-      }
-      const near = dateNear(dates, origin.index);
-      if (!near) continue;
-      const train = trains.find((t) => Math.abs(t.index - origin.index) < 600);
-      segments.push({
-        kind: "train",
-        start: near.date,
-        origin: origin.value,
-        destination: destination.value,
-        summary: [train?.value, `${origin.value} → ${destination.value}`]
-          .filter(Boolean)
-          .join(" "),
-      });
+    const seen = new Set<string>();
+    for (const match of input.text.matchAll(TRAIN_RUN_RE)) {
+      const date = findDates(match[3] ?? "", input.messageDate)[0]?.date;
+      if (date === undefined) continue;
+      const key = `${match[1]}@${date}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const route = (match[2] ?? "").replace(/\s*\((?:one-way|round-trip)\)\s*$/i, "");
+      segments.push({ kind: "train", start: date, summary: `Train ${match[1]} ${route}` });
     }
     if (!segments.length) {
-      // Anchor to actual evidence (a train number, else the lone station),
-      // not "some date in the document" — see flights.ts for why an
-      // unanchored pick chains unrelated emails into one giant trip.
-      const anchor = trains[0]?.index ?? stations[0]?.index;
-      const near = anchor === undefined ? undefined : dateNear(dates, anchor);
-      if (!near) return null;
-      segments.push({
-        kind: "train",
-        start: near.date,
-        summary: trains[0]?.value,
-      });
+      const subjectDate = input.subject.match(SUBJECT_TRIP_DATE_RE)?.[1];
+      const date = subjectDate ? findDates(subjectDate, input.messageDate)[0]?.date : undefined;
+      if (date === undefined) return null;
+      segments.push({ kind: "train", start: date, summary: "Amtrak" });
     }
 
     return {

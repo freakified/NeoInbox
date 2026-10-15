@@ -13,6 +13,7 @@ import { onCommand, startPortServer } from "./port";
 import { installTripExtract, scheduleTripExtraction } from "./extract";
 import { installTripScan } from "./tripScan";
 import { installClassifyDump } from "./classifyDebug";
+import { installSampleDump } from "./sampleDump";
 import { db } from "../store/db";
 import { invalidateFolderCache } from "../shared/folders";
 import { log } from "../shared/log";
@@ -123,6 +124,7 @@ startPortServer();
 installTripScan();
 installTripExtract();
 installClassifyDump();
+installSampleDump();
 void cleanupLegacyTags().catch((e) => log.warn("legacy-tags", "cleanup failed", e));
 // Carries a classifier rules change to mail that is already cached. Runs in
 // chunks behind whatever scan onInstalled/onStartup kicked off, and no-ops

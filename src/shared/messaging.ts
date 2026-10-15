@@ -36,7 +36,31 @@ export type ClientMsg =
    * Fill a Thunderbird compose window from an inline draft, then send it
    * (`send`) or leave it open for the user to finish.
    */
-  | { type: "compose"; requestId: string; draft: ComposeDraft; send: boolean };
+  | { type: "compose"; requestId: string; draft: ComposeDraft; send: boolean }
+  /**
+   * Settings → Trips. `archive` reads archived mail as well as the inbox;
+   * `rebuild` deletes the auto-built trips and re-reads everything first.
+   */
+  | { type: "trip-scan"; archive: boolean; rebuild?: boolean }
+  | { type: "trip-scan-cancel" };
+
+/** Progress of the archive trip scan; the last finished one is persisted. */
+export interface TripScanStatus {
+  running: boolean;
+  /** This run included archived mail. */
+  archive: boolean;
+  rebuild?: boolean;
+  /** Messages read so far / to read this run (already-read ones excluded). */
+  processed: number;
+  total: number;
+  /** Trips after the run. */
+  trips?: number;
+  finishedAt?: number;
+  cancelled?: boolean;
+  error?: string;
+  /** When an archive scan last finished (any run), so Rebuild can redo it. */
+  archiveScannedAt?: number;
+}
 
 export type FailedCommand = "done" | "snooze" | "unsnooze" | "trash" | "move-to-inbox";
 
@@ -85,4 +109,5 @@ export type ServerMsg =
       outcome: "sent" | "opened" | "failed";
       error?: string;
     }
+  | ({ type: "trip-scan-progress" } & TripScanStatus)
   | { type: "error"; message: string };

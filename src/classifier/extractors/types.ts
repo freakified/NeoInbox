@@ -1,4 +1,5 @@
 import type { ReservationSegment } from "../../shared/types";
+import type { Line } from "./layout";
 
 export interface ExtractorInput {
   senderEmail: string;
@@ -8,6 +9,11 @@ export interface ExtractorInput {
   messageDate: number;
   /** Plain-text rendering of every text part (HTML stripped, entities decoded). */
   text: string;
+  /**
+   * The body as layout lines (table rows kept whole): the HTML part's when
+   * it has one worth reading, else the text part split on newlines.
+   */
+  lines: Line[];
   /** Raw HTML parts joined, for extractors that need markup (JSON-LD). */
   html: string;
 }

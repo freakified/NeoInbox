@@ -48,7 +48,7 @@ export const smartexExtractor: Extractor = {
             .join(" "),
         },
       ],
-      confirmationCodes: findConfirmationCodes(input.text),
+      confirmationCodes: findConfirmationCodes(input.text, input.subject),
       cancelled: CANCEL_RE.test(input.subject) || CANCEL_RE.test(input.text.slice(0, 200)),
     };
   },

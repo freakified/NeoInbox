@@ -48,9 +48,26 @@ const str = (v: unknown): string | undefined =>
 const obj = (v: unknown): Node | undefined =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as Node) : undefined;
 
+/** "2023-07-25T20:00:00-07:00" — the wall-clock part, offset ignored. */
+const WALL_CLOCK_RE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/;
+
+/**
+ * Reservation times mean the venue's wall clock: dinner at 8pm on the 25th
+ * is "the 25th" wherever the reader is. Honoring the offset instead shifts
+ * evening bookings to the next UTC day, and booking.com's "16:00+00:00"
+ * check-ins (really local) onto the wrong day west of Greenwich. Text-tier
+ * dates are local midnights, so this keeps both tiers on the same footing.
+ */
 const time = (v: unknown): number | undefined => {
   const s = str(v);
   if (!s) return undefined;
+  const m = s.match(WALL_CLOCK_RE);
+  if (m) {
+    const [, y, mo, d, h, mi, sec] = m;
+    return new Date(
+      Number(y), Number(mo) - 1, Number(d), Number(h ?? 0), Number(mi ?? 0), Number(sec ?? 0),
+    ).getTime();
+  }
   const ms = Date.parse(s);
   return Number.isNaN(ms) ? undefined : ms;
 };
@@ -164,7 +181,7 @@ export const jsonLdExtractor: Extractor = {
           const segment = segmentOf(kind, node);
           if (segment) segments.push(segment);
           const code = str(node["reservationNumber"]) ?? str(node["reservationId"]);
-          if (code) codes.add(code.toUpperCase());
+          if (code) codes.add(code.replace(/^#/, "").toUpperCase());
           if (CANCELLED_RE.test(str(node["reservationStatus"]) ?? "")) cancelled = true;
         }
       }

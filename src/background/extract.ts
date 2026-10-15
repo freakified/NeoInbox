@@ -17,14 +17,19 @@
  * Debug harness (background console):
  *   await neoTripExtract()                 // full sweep incl. archive, report
  *   await neoTripExtract({ force: true })  // drop records, re-extract all
+ *   await neoTripExtract({ reset: true })  // also delete auto trips first:
+ *                                          // rebuild from scratch, keeping
+ *                                          // manual trips/memberships
+ *   await neoTripExtract({ reset: "all" }) // …and delete manual ones too
  * Full details stay at globalThis.neoTripExtractLast — per-domain hit rates
  * and text snippets of the misses, for tuning the per-sender parsers.
  */
 import { EXTRACTOR_VERSION, hasSenderExtractor, runExtractors } from "../classifier/extractors";
 import { extractFeatures } from "../classifier/features";
 import { matchesTravel } from "../classifier/rules/travel";
-import { findAirports, findFlights } from "../classifier/extractors/flights";
-import { findConfirmationCodes, findDates, htmlToText } from "../classifier/extractors/text";
+import { findLegs, findFlights } from "../classifier/extractors/flights";
+import { findConfirmationCodes, findDates } from "../classifier/extractors/text";
+import { buildExtractorInput } from "../classifier/samples";
 import { withTimeout } from "./backfill";
 import { broadcast } from "./port";
 import { resolveLiveMessageId } from "../shared/liveMessage";
@@ -32,6 +37,7 @@ import { log } from "../shared/log";
 import { pinKeyOf } from "../shared/pinKey";
 import { parseSender } from "../shared/senders";
 import { clusterTrips } from "../shared/tripCluster";
+import type { TripScanStatus } from "../shared/messaging";
 import type {
   RawMessage,
   ReservationRecord,
@@ -66,9 +72,9 @@ export const isTripCandidate = (m: RawMessage, includeDone = false): boolean => 
   return CANDIDATE_SUBJECT_RE.test(m.subject);
 };
 
-type Part = messenger.messages.MessagePart;
+export type Part = messenger.messages.MessagePart;
 
-const collectBodies = (part: Part, text: string[], html: string[]): void => {
+export const collectBodies = (part: Part, text: string[], html: string[]): void => {
   const ct = (part.contentType ?? "").toLowerCase();
   if (part.body) {
     if (ct.startsWith("text/html")) html.push(part.body);
@@ -111,6 +117,10 @@ interface SweepOptions {
    */
   includeDone?: boolean;
   report?: TripExtractReport;
+  /** Called after each message with (handled so far, total to handle). */
+  onProgress?: (processed: number, total: number) => void;
+  /** Polled between messages; true stops the sweep (records so far are kept). */
+  shouldStop?: () => boolean;
 }
 
 let sweeping = false;
@@ -131,13 +141,19 @@ const sweepReservations = async (options: SweepOptions = {}): Promise<number> =>
     if (!prev || m.date > prev.date) byKey.set(key, m);
   }
 
+  const todo = [...byKey].filter(([key]) => {
+    const prior = existing.get(key);
+    return !prior || prior.extractorVersion < EXTRACTOR_VERSION;
+  });
+  const total = Math.min(todo.length, max);
+  options.onProgress?.(0, total);
+
   let scanned = 0;
   let wrote = 0;
-  for (const [key, m] of byKey) {
-    if (scanned >= max) break;
-    const prior = existing.get(key);
-    if (prior && prior.extractorVersion >= EXTRACTOR_VERSION) continue;
+  for (const [key, m] of todo) {
+    if (scanned >= max || options.shouldStop?.()) break;
     scanned++;
+    if (scanned > 1) options.onProgress?.(scanned - 1, total);
 
     const domain = parseSender(m.author).domain || "(unknown)";
     if (report) {
@@ -172,19 +188,11 @@ const sweepReservations = async (options: SweepOptions = {}): Promise<number> =>
       const textParts: string[] = [];
       const htmlParts: string[] = [];
       collectBodies(full as Part, textParts, htmlParts);
-      const html = htmlParts.join("\n");
-      const text = [...textParts, htmlToText(html)].join("\n");
+      const input = buildExtractorInput({ ...m, textParts, htmlParts });
+      const { text } = input;
       if (report) report.fetched++;
 
-      const sender = parseSender(m.author);
-      const hit = runExtractors({
-        senderEmail: sender.email,
-        senderDomain: sender.domain,
-        subject: m.subject,
-        messageDate: m.date,
-        text,
-        html,
-      });
+      const hit = runExtractors(input);
       if (hit) {
         record.extractor = hit.extractor;
         record.status = hit.cancelled ? "cancelled" : "extracted";
@@ -193,7 +201,7 @@ const sweepReservations = async (options: SweepOptions = {}): Promise<number> =>
       } else {
         // No reservation here, but any codes still matter: a check-in
         // reminder or receipt quoting a known locator joins that trip.
-        record.confirmationCodes = findConfirmationCodes(text);
+        record.confirmationCodes = findConfirmationCodes(text, input.subject);
       }
       if (report) {
         if (record.status === "none") {
@@ -224,6 +232,7 @@ const sweepReservations = async (options: SweepOptions = {}): Promise<number> =>
     // body fetches out instead of spiking CPU right at startup.
     if (!report) await sleep(SWEEP_PACE_MS);
   }
+  options.onProgress?.(scanned, total);
   if (wrote) log.info("trip-extract", `sweep scanned ${scanned}, wrote ${wrote} reservation records`);
   return wrote;
 };
@@ -316,10 +325,46 @@ const recluster = async (report?: TripExtractReport): Promise<void> => {
   });
 };
 
-export const runTripExtraction = async (options: SweepOptions = {}): Promise<void> => {
+/**
+ * Clean slate for the clusterer. "auto" deletes every auto membership and
+ * every trip no manual membership points at (manual rows, "remove from trip"
+ * tombstones and the trips they name survive); "all" deletes everything.
+ */
+const resetTrips = async (mode: "auto" | "all"): Promise<void> => {
+  const memberships = await db.tripMemberships.toArray();
+  const doomedMemberships = memberships.filter((m) => mode === "all" || m.source === "auto");
+  const keptTripIds = new Set(
+    memberships.filter((m) => !doomedMemberships.includes(m) && m.tripId).map((m) => m.tripId!),
+  );
+  const doomedTrips = (await db.trips.toArray()).filter((t) => !keptTripIds.has(t.id));
+  await db.transaction("rw", db.trips, db.tripMemberships, async () => {
+    await db.tripMemberships.bulkDelete(doomedMemberships.map((m) => m.key));
+    await db.trips.bulkDelete(doomedTrips.map((t) => t.id));
+  });
+  broadcast({
+    type: "trips-delta",
+    trips: [],
+    removedTripIds: doomedTrips.map((t) => t.id),
+    memberships: [],
+    removedMembershipKeys: doomedMemberships.map((m) => m.key),
+  });
+  log.info("trip-extract", "trips reset", {
+    mode,
+    trips: doomedTrips.length,
+    memberships: doomedMemberships.length,
+  });
+};
+
+export const runTripExtraction = async (
+  options: SweepOptions & { reset?: "auto" | "all" } = {},
+): Promise<void> => {
   if (sweeping) return;
   sweeping = true;
   try {
+    if (options.reset) {
+      await resetTrips(options.reset);
+      options = { ...options, force: true };
+    }
     const wrote = await sweepReservations(options);
     // Reclustering is cheap but not free; skip when the sweep found nothing
     // new (unless a report wants the current cluster picture regardless).
@@ -341,9 +386,94 @@ export const scheduleTripExtraction = (): void => {
   }, 3_000);
 };
 
+// ─── user-started scans (Settings → Trips) ─────────────────────────────────
+
+/** The last finished archive scan; Settings shows it and Rebuild honors it. */
+const ARCHIVE_SCAN_KEY = "tripArchiveScan";
+const PROGRESS_EVERY_MS = 750;
+
+let scanStatus: TripScanStatus | null = null;
+let stopRequested = false;
+
+const publish = async (status: TripScanStatus): Promise<void> => {
+  const archiveScannedAt = (await getLastArchiveScan())?.finishedAt;
+  scanStatus = { ...status, archiveScannedAt };
+  broadcast({ type: "trip-scan-progress", ...scanStatus });
+};
+
+/** The last finished archive scan, if the user ever ran one. */
+export const getLastArchiveScan = async (): Promise<TripScanStatus | null> => {
+  const stored = await messenger.storage.local.get(ARCHIVE_SCAN_KEY);
+  return (stored[ARCHIVE_SCAN_KEY] as TripScanStatus | undefined) ?? null;
+};
+
+/** The running or latest scan this session, else the last archive scan. */
+export const getTripScanStatus = async (): Promise<TripScanStatus | null> => {
+  if (scanStatus) return scanStatus;
+  const last = await getLastArchiveScan();
+  return last && { ...last, archiveScannedAt: last.finishedAt };
+};
+
+export const cancelTripScan = (): void => {
+  stopRequested = true;
+};
+
+/**
+ * Find trips in archived mail too (`archive`) — opt-in from Settings, since
+ * it reads the body of every travel-looking message NeoInbox has cached,
+ * which can be thousands. Already-read messages are skipped, so a stopped
+ * or interrupted scan picks up where it left off. `rebuild` first deletes
+ * the auto-built trips and re-reads everything (manual edits survive).
+ */
+export const runTripScan = async ({ archive, rebuild = false }: { archive: boolean; rebuild?: boolean }): Promise<void> => {
+  if (scanStatus?.running) return;
+  stopRequested = false;
+  await publish({ running: true, archive, rebuild, processed: 0, total: 0 });
+  // An automatic inbox sweep may hold the lock; it's short, so wait it out.
+  while (sweeping) await sleep(500);
+  sweeping = true;
+  let last = 0;
+  let processed = 0;
+  let total = 0;
+  try {
+    if (rebuild) await resetTrips("auto");
+    await sweepReservations({
+      force: rebuild,
+      max: Infinity,
+      includeDone: archive,
+      shouldStop: () => stopRequested,
+      onProgress: (done, all) => {
+        processed = done;
+        total = all;
+        if (Date.now() - last < PROGRESS_EVERY_MS && done < all) return;
+        last = Date.now();
+        void publish({ running: true, archive, rebuild, processed, total });
+      },
+    });
+    await recluster();
+    const finished: TripScanStatus = {
+      running: false,
+      archive,
+      rebuild,
+      processed,
+      total,
+      trips: await db.trips.count(),
+      finishedAt: Date.now(),
+      cancelled: stopRequested || undefined,
+    };
+    if (archive) await messenger.storage.local.set({ [ARCHIVE_SCAN_KEY]: finished });
+    await publish(finished);
+  } catch (e) {
+    log.warn("trip-extract", "trip scan failed", e);
+    await publish({ running: false, archive, rebuild, processed, total, error: String(e) });
+  } finally {
+    sweeping = false;
+  }
+};
+
 export const installTripExtract = (): void => {
   (globalThis as Record<string, unknown>).neoTripExtract = async (
-    options: { force?: boolean; max?: number } = {},
+    options: { force?: boolean; max?: number; reset?: boolean | "auto" | "all" } = {},
   ): Promise<TripExtractReport> => {
     const report: TripExtractReport = {
       candidates: 0,
@@ -356,8 +486,10 @@ export const installTripExtract = (): void => {
       misses: [],
       trips: [],
     };
+    const reset = options.reset === true ? "auto" : options.reset || undefined;
     await runTripExtraction({
       ...options,
+      reset,
       max: options.max ?? Infinity,
       includeDone: true,
       report,
@@ -386,29 +518,29 @@ export const installTripExtract = (): void => {
     const textParts: string[] = [];
     const htmlParts: string[] = [];
     collectBodies(full as Part, textParts, htmlParts);
-    const html = htmlParts.join("\n");
-    const text = [...textParts, htmlToText(html)].join("\n");
-    const sender = parseSender(header.author ?? "");
     const messageDate = header.date ? new Date(header.date).getTime() : Date.now();
-    const input = {
-      senderEmail: sender.email,
-      senderDomain: sender.domain,
+    const input = buildExtractorInput({
+      author: header.author ?? "",
       subject: header.subject ?? "",
-      messageDate,
-      text,
-      html,
-    };
+      date: messageDate,
+      textParts,
+      htmlParts,
+    });
+    const { text, html, senderDomain } = input;
     const out = {
       subject: input.subject,
-      domain: sender.domain,
+      domain: senderDomain,
       date: new Date(messageDate).toISOString(),
       jsonLdBlocks: (html.match(/application\/ld\+json/gi) ?? []).length,
       dates: findDates(text, messageDate).map((f) => ({
         date: new Date(f.date).toISOString().slice(0, 10),
         around: text.slice(Math.max(0, f.index - 40), f.index + 40).replace(/\n/g, "⏎"),
       })),
-      codes: findConfirmationCodes(text),
-      airports: findAirports(text).map((a) => a.value),
+      codes: findConfirmationCodes(text, input.subject),
+      legs: findLegs(input.lines, messageDate, [], input.subject).map(
+        (l) => `${new Date(l.date).toISOString().slice(0, 10)} ${l.origin}→${l.destination} (${l.form}, +${l.distance})`,
+      ),
+      lines: input.lines.slice(0, 200).map((l) => `t${l.table} ${l.text}`),
       flightTokens: findFlights(text, []).map((f) => f.value),
       result: runExtractors(input),
       text: text.slice(0, 4000),
