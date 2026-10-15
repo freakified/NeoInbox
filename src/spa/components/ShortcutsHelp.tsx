@@ -8,7 +8,7 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
       ["j / ↓", "Next conversation"],
       ["k / ↑", "Previous conversation"],
       ["Enter", "Open or close"],
-      ["Esc", "Close the open conversation"],
+      ["Esc", "Close the open conversation, or clear the selection"],
     ],
   },
   {
@@ -17,6 +17,7 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
       ["e", "Done"],
       ["s", "Snooze until tomorrow"],
       ["p", "Pin or unpin"],
+      ["x", "Select or deselect (shift-click selects a range)"],
       ["#", "Trash (when delete actions are on)"],
     ],
   },

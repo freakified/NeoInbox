@@ -16,6 +16,11 @@ describe("overlayIsOpen", () => {
     expect(overlayIsOpen()).toBe(true);
   });
 
+  it("ignores an overlay that stays mounted but hidden while closed", () => {
+    document.body.innerHTML = '<div role="menu" aria-hidden="true"></div>';
+    expect(overlayIsOpen()).toBe(false);
+  });
+
   it("goes back to false once the overlay unmounts", () => {
     document.body.innerHTML = '<div role="dialog">overlay</div>';
     document.querySelector('[role="dialog"]')!.remove();

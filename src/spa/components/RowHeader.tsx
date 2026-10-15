@@ -12,6 +12,7 @@ export const RowHeader = ({
   onClick,
   onKeyDown,
   expanded,
+  selected = false,
   actionStrip,
 }: {
   leading: React.ReactNode;
@@ -20,9 +21,11 @@ export const RowHeader = ({
   trailing?: React.ReactNode;
   date?: React.ReactNode;
   bold?: boolean;
-  onClick?: () => void;
+  /** Called with the mouse event on a click, with nothing from Enter/Space. */
+  onClick?: (e?: React.MouseEvent<HTMLDivElement>) => void;
   onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   expanded?: boolean;
+  selected?: boolean;
   actionStrip?: React.ReactNode;
 }) => {
   const [hovered, setHovered] = useState(false);
@@ -32,12 +35,17 @@ export const RowHeader = ({
   // order the user sees.
   return (
     <div
-      className={s.row}
+      className={clsx(s.row, selected && s.selected)}
       data-row-header={onClick ? "" : undefined}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
       aria-expanded={expanded}
-      onClick={onClick}
+      onClick={onClick ? (e) => onClick(e) : undefined}
+      // Shift-click extends a selection; without this it also drags a text
+      // selection across every row in between.
+      onMouseDown={(e) => {
+        if (e.shiftKey) e.preventDefault();
+      }}
       onKeyDown={(e) => {
         if (onClick && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();

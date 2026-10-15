@@ -1,3 +1,4 @@
+import { clsx } from "clsx";
 import type { Thread } from "../../shared/types";
 import { getCategoryMeta } from "../../shared/categories";
 import { useCustomBundles } from "../../store/mailStore";
@@ -6,6 +7,7 @@ import { formatDate } from "../lib/dateBucket";
 import { useShowDeleteActions } from "../lib/deleteActionPrefs";
 import { overlayIsOpen } from "../lib/overlays";
 import { keepFocusAfterRowRemoval } from "../lib/rowNavigation";
+import { useIsSelected, useSelection, useSelectionActive } from "../lib/selection";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
 import { useThreadActions } from "../lib/useThreadActions";
 import { ActionStrip } from "./ActionStrip";
@@ -30,6 +32,15 @@ export const ThreadRow = ({
   const customBundles = useCustomBundles();
   const actions = useThreadActions(t);
   const showDeleteActions = useShowDeleteActions();
+  const selected = useIsSelected(t.id);
+  const selecting = useSelectionActive();
+  const toggleSelected = useSelection((st) => st.toggle);
+  const selectRange = useSelection((st) => st.selectRange);
+
+  const select = (e?: React.MouseEvent) => {
+    if (e?.shiftKey) selectRange(t.id);
+    else toggleSelected(t.id);
+  };
 
   // Row-scoped shortcuts. Enter/Space (open) are handled by RowHeader itself;
   // list-wide keys like j/k live in App.
@@ -49,6 +60,7 @@ export const ThreadRow = ({
     else if (e.key === "s") run(actions.hasInboxMessages, actions.snoozeDefault);
     else if (e.key === "#") run(showDeleteActions, actions.trash);
     else if (e.key === "p") run(true, actions.togglePin, false);
+    else if (e.key === "x") run(true, () => toggleSelected(t.id), false);
   };
 
   const firstSender = t.messages[0];
@@ -89,15 +101,30 @@ export const ThreadRow = ({
     <MotionRow
       data-row
       data-thread-row
+      data-thread-id={isExpanded ? undefined : t.id}
       ref={isExpanded ? expandedRef : undefined}
       className={s.row}
     >
       {!isExpanded && (
         <RowHeader
           leading={
-            <div className={s.avatar} style={{ backgroundColor: avatarBg }}>
-              {initial}
-            </div>
+            // Google Inbox's affordance: the avatar turns into a checkbox on
+            // hover, and every avatar shows one once anything is selected.
+            <button
+              type="button"
+              tabIndex={-1}
+              className={clsx(s.avatar, selecting && s.avatarSelecting, selected && s.avatarSelected)}
+              style={{ "--avatar-bg": avatarBg } as React.CSSProperties}
+              aria-label={selected ? "Deselect conversation" : "Select conversation"}
+              aria-pressed={selected}
+              onClick={(e) => {
+                e.stopPropagation();
+                select(e);
+              }}
+            >
+              <span className={s.avatarInitial}>{initial}</span>
+              <Icon name="check" className={s.avatarCheck} />
+            </button>
           }
           primary={t.participantsLabel}
           secondary={
@@ -122,10 +149,14 @@ export const ThreadRow = ({
           }
           date={date}
           bold={t.unreadCount > 0}
-          onClick={onToggle}
+          // While selecting, a click anywhere on the row adds it to the
+          // selection rather than opening it, and the per-row actions give way
+          // to the selection bar's.
+          onClick={selecting ? select : onToggle}
           onKeyDown={onKeyDown}
           expanded={false}
-          actionStrip={<ActionStrip thread={t} />}
+          selected={selected}
+          actionStrip={selecting ? undefined : <ActionStrip thread={t} />}
         />
       )}
       {isExpanded && (

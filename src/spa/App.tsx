@@ -19,6 +19,7 @@ import { useBulkActions } from "./components/BulkActionConfirm";
 import { Fab } from "./components/Fab";
 import { Icon } from "./components/Icon";
 import { ReminderRow } from "./components/ReminderRow";
+import { SelectionBar } from "./components/SelectionBar";
 import { MotionSurface } from "./components/Motion";
 import { SectionLabel } from "./components/SectionLabel";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
@@ -26,11 +27,15 @@ import { ThreadRow } from "./components/ThreadRow";
 import { Toaster } from "./components/Toaster";
 import { overlayIsOpen } from "./lib/overlays";
 import { moveRowFocus } from "./lib/rowNavigation";
+import { useSelection, visibleThreadIds } from "./lib/selection";
 import { TRIP_COLOR, TripSliceRow } from "./components/TripSliceRow";
 import { isSameView, parseHashView, viewHash } from "./lib/routing";
 import s from "./App.module.css";
 
 const STREAM_PAGE_SIZE = 80;
+
+/** App bar color while conversations are selected, whatever the view's own. */
+const SELECTION_HEADER_COLOR = "#5f6368";
 
 
 const emptyTextForView = (view: StreamView, pinnedOnly: boolean): string => {
@@ -178,6 +183,10 @@ export const App = () => {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const goPrefixRef = useRef(false);
   const reducedMotion = useReducedMotion();
+  const selectedIds = useSelection((st) => st.ids);
+  const clearSelection = useSelection((st) => st.clear);
+  const retainSelection = useSelection((st) => st.retain);
+  const selectAll = useSelection((st) => st.selectAll);
 
   useEffect(() => {
     void init();
@@ -186,6 +195,7 @@ export const App = () => {
   useEffect(() => {
     const onHashChange = () => {
       setActiveView(parseHashView());
+      useSelection.getState().clear();
       setExpandedKey(null);
       setOpenBundleThreadId(null);
       setVisibleItemLimit(STREAM_PAGE_SIZE);
@@ -265,7 +275,8 @@ export const App = () => {
       } else if (e.key === "k" || e.key === "ArrowUp") {
         if (moveRowFocus(-1)) e.preventDefault();
       } else if (e.key === "Escape") {
-        if (openBundleThreadId) setOpenBundleThreadId(null);
+        if (useSelection.getState().ids.size > 0) useSelection.getState().clear();
+        else if (openBundleThreadId) setOpenBundleThreadId(null);
         else if (expandedKey) setExpandedKey(null);
       } else if (e.key === "?") {
         e.preventDefault();
@@ -294,6 +305,21 @@ export const App = () => {
     [stream.sections, visibleItemLimit],
   );
   const hasMoreItems = visibleStream.visibleCount < visibleStream.totalCount;
+  // Every thread in the view, bundled or not, so selections inside an open
+  // bundle resolve too. Selected ids that leave the stream (done, snoozed,
+  // moved by another client) drop out of the selection with them.
+  const streamThreads = useMemo(
+    () => stream.sections.flatMap((section) => section.items.flatMap(threadsOfItem)),
+    [stream.sections],
+  );
+  useEffect(() => {
+    retainSelection(new Set(streamThreads.map((t) => t.id)));
+  }, [retainSelection, streamThreads]);
+  const selectedThreads = useMemo(
+    () => streamThreads.filter((t) => selectedIds.has(t.id)),
+    [selectedIds, streamThreads],
+  );
+  const selecting = selectedThreads.length > 0;
   // Older mail only exists to fetch in the views actually backed by the inbox
   // scan; Done, Sent and Drafts are not reached by widening that window.
   const canLoadOlderMail =
@@ -329,71 +355,84 @@ export const App = () => {
         />
       )}
 
-      <header className={s.header} style={{ backgroundColor: header.color }}>
-        <div className={s.headerLeft}>
-          <button
-            type="button"
-            className={s.menuBtn}
-            title={drawerOpen ? "Hide navigation" : "Show navigation"}
-            aria-label={drawerOpen ? "Hide navigation" : "Show navigation"}
-            aria-expanded={drawerOpen}
-            onClick={() => setDrawerOpen((open) => !open)}
-          >
-            <Icon name="menu" className={s.menuIcon} />
-          </button>
-          <h1 className={s.title}>{header.title}</h1>
-        </div>
-        <div className={s.headerRight}>
-          {syncing && sync && (
-            <span className={s.syncText}>
-              Scanning... {sync.scanned} messages, {sync.classified} classified
-            </span>
-          )}
-          {syncFailed && (
-            <button
-              type="button"
-              className={s.syncErrorPill}
-              onClick={retryBackfill}
-              title={sync?.error ?? "Sync failed"}
-            >
-              Sync failed — retry
-            </button>
-          )}
-          {reconnecting && <span className={s.reconnectText}>Reconnecting…</span>}
-          {activeView.type === "inbox" && (
-            <button
-              type="button"
-              role="switch"
-              aria-checked={pinnedOnly}
-              aria-label={pinnedOnly ? "Show all mail" : "Show pinned only"}
-              title={pinnedOnly ? "Show all mail" : "Show pinned only"}
-              className={`${s.pinToggle} ${pinnedOnly ? s.pinToggleOn : ""}`}
-              onClick={() => setPinnedOnly((v) => !v)}
-            >
-              <span className={s.pinToggleTrack} />
-              <span className={s.pinToggleKnob}>
-                <Icon name="push_pin" className={s.pinToggleIcon} />
-              </span>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setShowShortcuts(true)}
-            title="Keyboard shortcuts (?)"
-            aria-label="Keyboard shortcuts"
-            className={s.settingsBtn}
-          >
-            <Icon name="keyboard" className={s.settingsIcon} />
-          </button>
-          <button
-            onClick={() => openBundleSettings({})}
-            title="Settings"
-            aria-label="Settings"
-            className={s.settingsBtn}
-          >
-            <Icon name="settings" className={s.settingsIcon} />
-          </button>
-        </div>
+      <header
+        className={s.header}
+        style={{ backgroundColor: selecting ? SELECTION_HEADER_COLOR : header.color }}
+      >
+        {selecting ? (
+          <SelectionBar
+            threads={selectedThreads}
+            onClear={clearSelection}
+            onSelectAll={() => selectAll(visibleThreadIds())}
+          />
+        ) : (
+          <>
+            <div className={s.headerLeft}>
+              <button
+                type="button"
+                className={s.menuBtn}
+                title={drawerOpen ? "Hide navigation" : "Show navigation"}
+                aria-label={drawerOpen ? "Hide navigation" : "Show navigation"}
+                aria-expanded={drawerOpen}
+                onClick={() => setDrawerOpen((open) => !open)}
+              >
+                <Icon name="menu" className={s.menuIcon} />
+              </button>
+              <h1 className={s.title}>{header.title}</h1>
+            </div>
+            <div className={s.headerRight}>
+              {syncing && sync && (
+                <span className={s.syncText}>
+                  Scanning... {sync.scanned} messages, {sync.classified} classified
+                </span>
+              )}
+              {syncFailed && (
+                <button
+                  type="button"
+                  className={s.syncErrorPill}
+                  onClick={retryBackfill}
+                  title={sync?.error ?? "Sync failed"}
+                >
+                  Sync failed — retry
+                </button>
+              )}
+              {reconnecting && <span className={s.reconnectText}>Reconnecting…</span>}
+              {activeView.type === "inbox" && (
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={pinnedOnly}
+                  aria-label={pinnedOnly ? "Show all mail" : "Show pinned only"}
+                  title={pinnedOnly ? "Show all mail" : "Show pinned only"}
+                  className={`${s.pinToggle} ${pinnedOnly ? s.pinToggleOn : ""}`}
+                  onClick={() => setPinnedOnly((v) => !v)}
+                >
+                  <span className={s.pinToggleTrack} />
+                  <span className={s.pinToggleKnob}>
+                    <Icon name="push_pin" className={s.pinToggleIcon} />
+                  </span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowShortcuts(true)}
+                title="Keyboard shortcuts (?)"
+                aria-label="Keyboard shortcuts"
+                className={s.settingsBtn}
+              >
+                <Icon name="keyboard" className={s.settingsIcon} />
+              </button>
+              <button
+                onClick={() => openBundleSettings({})}
+                title="Settings"
+                aria-label="Settings"
+                className={s.settingsBtn}
+              >
+                <Icon name="settings" className={s.settingsIcon} />
+              </button>
+            </div>
+          </>
+        )}
       </header>
 
       <div className={s.appShell}>

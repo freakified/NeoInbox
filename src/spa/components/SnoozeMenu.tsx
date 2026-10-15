@@ -40,8 +40,13 @@ const parseLocalDateTime = (dateValue: string, timeValue: string): number => {
 
 export const SnoozeMenu = ({
   onChoose,
+  triggerClassName,
+  iconClassName,
 }: {
   onChoose: (wakeAt: number) => void;
+  /** Restyles the trigger for a different surface, such as the selection bar. */
+  triggerClassName?: string;
+  iconClassName?: string;
 }) => {
   const [open, setOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -110,9 +115,9 @@ export const SnoozeMenu = ({
           e.stopPropagation();
           setOpen((o) => !o);
         }}
-        className={s.trigger}
+        className={triggerClassName ?? s.trigger}
       >
-        <Icon name="schedule" className={s.triggerIcon} />
+        <Icon name="schedule" className={iconClassName ?? s.triggerIcon} />
       </button>
       {open &&
         createPortal(

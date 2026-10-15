@@ -13,6 +13,11 @@
   background: #fafafa;
 }
 
+.selected,
+.selected:hover {
+  background: #e8f0fe;
+}
+
 .row:focus-visible {
   outline: none;
   background: #f1f5fd;

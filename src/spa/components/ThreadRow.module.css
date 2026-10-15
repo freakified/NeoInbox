@@ -5,13 +5,61 @@
 .avatar {
   width: 36px;
   height: 36px;
+  padding: 0;
+  border: none;
   border-radius: 9999px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--avatar-bg);
   color: #fff;
+  font: inherit;
   font-weight: 500;
   font-size: 14px;
+  cursor: pointer;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+/* Scoped under .avatar to outrank the Icon component's own display rule. */
+.avatar .avatarCheck {
+  display: none;
+  font-size: 22px;
+}
+
+/* Only reachable by mouse (tabIndex -1); `x` is the keyboard path. */
+.avatar:focus {
+  outline: none;
+}
+
+/* Hovered, or selection mode: an empty checkbox where the initial was. */
+.avatar:hover,
+.avatarSelecting {
+  background: #fff;
+  box-shadow: inset 0 0 0 2px #9e9e9e;
+  color: #9e9e9e;
+}
+
+.avatar:hover .avatarInitial,
+.avatarSelecting .avatarInitial,
+.avatarSelected .avatarInitial {
+  display: none;
+}
+
+.avatar:hover .avatarCheck,
+.avatarSelecting .avatarCheck,
+.avatarSelected .avatarCheck {
+  display: block;
+}
+
+.avatarSelecting:not(:hover):not(.avatarSelected) .avatarCheck {
+  visibility: hidden;
+}
+
+.avatarSelected,
+.avatarSelected:hover {
+  background: var(--color-md-primary);
+  box-shadow: none;
+  color: #fff;
 }
 
 .snoozeDue {
