@@ -65,6 +65,9 @@
 .snoozeDue {
   display: inline-flex;
   align-items: center;
+  /* A text line's height, so the taller clock overhangs evenly and the badge
+     centres on the avatar like the rest of the row. */
+  height: 14px;
   gap: 8px;
   color: #df742c;
   font-size: 13px;

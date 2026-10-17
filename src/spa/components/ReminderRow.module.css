@@ -2,24 +2,25 @@
   width: 100%;
 }
 
+/* Like a bundle's: the coloured icon on its own, no circle behind it. */
 .avatar {
   width: 36px;
   height: 36px;
-  border-radius: 9999px;
-  background: var(--color-md-primary);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .avatarIcon {
-  color: #fff;
-  font-size: 20px;
+  color: var(--color-md-primary);
+  font-size: 22px;
 }
 
 .snoozeDue {
   display: inline-flex;
   align-items: center;
+  /* See ThreadRow: keeps the clock from pushing the badge below centre. */
+  height: 14px;
   gap: 8px;
   color: #df742c;
   font-size: 13px;

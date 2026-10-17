@@ -9,84 +9,119 @@
   background: rgb(0 0 0 / 0.28);
 }
 
-.dialog {
-  width: min(520px, 100%);
-  border-radius: 6px;
+.card {
+  width: min(800px, 100%);
+  border-radius: 2px;
   background: #fff;
   box-shadow: var(--shadow-elevation-3);
-  padding: 20px 20px 14px;
 }
 
-.inputRow {
+/* Inbox's one-line reminder bar: hand, text, snooze, pin, Save. */
+.bar {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
+  box-sizing: border-box;
+  height: 80px;
+  padding: 0 24px 0 32px;
 }
 
-.handBadge {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--color-md-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.suggestions {
+  margin: 0;
+  padding: 0 0 8px;
+  list-style: none;
+  border-top: 1px solid var(--color-md-divider);
+}
+
+/* Lined up under the typed text: bar padding + hand icon + its margin. */
+.suggestion {
+  padding: 14px 24px 14px calc(32px + 24px + 16px + 8px);
+  font-size: 15px;
+  color: var(--color-md-on-surface);
+  cursor: pointer;
+}
+
+.suggestion b {
+  font-weight: 600;
+}
+
+.suggestionActive {
+  background: #f5f5f5;
 }
 
 .handIcon {
-  color: #fff;
-  font-size: 20px;
+  flex-shrink: 0;
+  margin-right: 16px;
+  color: var(--color-md-primary);
+  font-size: 24px;
 }
 
 .input {
   flex: 1;
   min-width: 0;
   border: none;
-  border-bottom: 1px solid var(--color-md-field-underline);
   background: transparent;
   color: var(--color-md-on-surface);
   font: inherit;
-  font-size: 16px;
+  font-size: 15px;
   padding: 8px 0;
   outline: none;
 }
 
-.input:focus {
-  border-color: var(--color-md-primary);
-  box-shadow: 0 1px 0 var(--color-md-primary);
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.cancelBtn,
-.saveBtn {
-  border: none;
-  border-radius: 4px;
-  padding: 8px 12px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.cancelBtn {
-  background: transparent;
+.input::placeholder {
   color: var(--color-md-secondary-text);
 }
 
-.cancelBtn:hover {
-  background: #f5f5f5;
-  color: var(--color-md-on-surface);
+.snoozeLabel {
+  flex-shrink: 0;
+  color: #df742c;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.iconBtn {
+  display: flex;
+  padding: 6px;
+  border: none;
+  border-radius: 9999px;
+  background: none;
+  cursor: pointer;
+}
+
+.iconBtn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.actionIcon {
+  font-size: 20px;
+  color: var(--color-md-icon);
+}
+
+.snoozeIconSet {
+  color: #df742c;
+}
+
+.pinIconSet {
+  color: var(--color-md-primary);
 }
 
 .saveBtn {
+  flex-shrink: 0;
+  margin-left: 16px;
+  min-width: 72px;
+  height: 36px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 2px;
   background: var(--color-md-primary);
+  box-shadow: var(--shadow-elevation-2);
   color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
 }
 
 .saveBtn:hover {
@@ -95,6 +130,7 @@
 
 .saveBtn:disabled {
   background: var(--color-md-divider);
+  box-shadow: none;
   color: var(--color-md-secondary-text);
   cursor: default;
 }

@@ -25,7 +25,7 @@ export const remindersSlice = (
   MailStore,
   "createReminder" | "updateReminderText" | "setReminderPinned" | "snoozeReminder" | "unsnoozeReminder" | "doneReminder" | "restoreReminder" | "deleteReminder" | "wakeDueReminders"
 > => ({
-  createReminder: (text) => {
+  createReminder: (text, options) => {
     const trimmed = text.trim();
     if (!trimmed) return;
     const record: ReminderRecord = {
@@ -33,7 +33,8 @@ export const remindersSlice = (
       text: trimmed,
       createdAt: Date.now(),
       status: "active",
-      pinned: false,
+      pinned: options?.pinned ?? false,
+      ...(options?.snoozeWakeAt ? { snoozeWakeAt: options.snoozeWakeAt } : {}),
     };
     set({ remindersById: { ...get().remindersById, [record.id]: record } });
     persistReminder(record);

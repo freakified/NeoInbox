@@ -119,7 +119,8 @@ export interface MailStore {
   applyCategoryLocally: (messageIds: number[], category: Category | null) => void;
   setCustomBundle: (bundle: CustomBundleRecord) => void;
   deleteCustomBundle: (id: string) => void;
-  createReminder: (text: string) => void;
+  /** A new reminder, optionally pinned or snoozed from the start. */
+  createReminder: (text: string, options?: { pinned?: boolean; snoozeWakeAt?: number }) => void;
   updateReminderText: (id: string, text: string) => void;
   setReminderPinned: (id: string, pinned: boolean) => void;
   snoozeReminder: (id: string, wakeAt: number) => void;
