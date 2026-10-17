@@ -82,6 +82,15 @@ export const runCompose = async (
   if (tabId === undefined) return { outcome: "failed", error: "No compose window" };
 
   try {
+    for (const file of draft.attachments ?? []) {
+      await messenger.compose.addAttachment(tabId, { file });
+    }
+  } catch (e) {
+    log.warn("compose", "couldn't attach a file", e);
+    return { outcome: "failed", error: "Couldn't attach your files" };
+  }
+
+  try {
     if (draft.kind === "draft") await replaceDraftText(tabId, draft.text, draft.html);
     else await insertText(tabId, draft.text, draft.html);
   } catch (e) {

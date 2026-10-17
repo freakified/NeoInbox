@@ -30,6 +30,8 @@ export interface ComposeDraft {
    * compose). Absent means build it from `text`.
    */
   html?: string;
+  /** Files the user attached; they cross the port by structured clone. */
+  attachments?: File[];
 }
 
 /**

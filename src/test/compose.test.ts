@@ -3,6 +3,7 @@
  * (fake) Thunderbird compose window → result toast back in the SPA.
  */
 import { describe, expect, it } from "vitest";
+import type { ComposeDraft } from "../shared/compose";
 import { settle, waitFor } from "./fakeMessenger";
 import { boot, type Booted } from "./boot";
 import { INBOX, personalMail, shapes } from "./fixtures";
@@ -106,5 +107,77 @@ describe("inline compose", () => {
     );
     // Back to the previous window for the send, then up to the compose window.
     expect(app.mail.calls.focusedWindows).toEqual([1, 100]);
+  });
+
+  it("attaches the user's files to the compose window before sending", async () => {
+    const app = await open();
+    const file = new File(["hello"], "notes.txt", { type: "text/plain" });
+    app.store().composeMessage(
+      { kind: "new", to: ["bob@example.com"], cc: [], subject: "Notes", text: "attached", attachments: [file] },
+      true,
+    );
+    await waitFor(() => app.mail.calls.sent.length === 1);
+
+    expect(app.mail.calls.sent[0]!.attachments).toEqual([{ file }]);
+  });
+
+  describe("pending replies", () => {
+    const reply = (messageId: number): ComposeDraft => ({
+      kind: "reply",
+      messageId,
+      to: ["Alex <alex@example.com>"],
+      cc: [],
+      text: "On my way",
+    });
+    const pending = {
+      threadId: "t1",
+      knownIds: [],
+      author: "Me <me@example.com>",
+      to: ["Alex <alex@example.com>"],
+      cc: [],
+      text: "On my way",
+    };
+
+    it("shows the reply while it sends, and keeps it once sent until its Sent copy lands", async () => {
+      const app = await open();
+      const id = await app.mail.deliver(INBOX, personalMail());
+      await settle();
+
+      app.store().composeMessage(reply(id), true, pending);
+      expect(app.store().pendingReplies).toMatchObject([{ text: "On my way", status: "sending" }]);
+      await waitFor(() => toastMessages(app).includes("Message sent"));
+      await settle();
+
+      const [sent] = app.store().pendingReplies;
+      expect(sent?.status).toBe("sent");
+      // Thunderbird filed the Sent copy, which is what replaces the preview.
+      expect(
+        Object.values(app.store().messagesById).some(
+          (m) => m.origin === "sent" && m.recipients.includes("Alex <alex@example.com>"),
+        ),
+      ).toBe(true);
+      app.store().settlePendingReply(sent!.requestId);
+      expect(app.store().pendingReplies).toEqual([]);
+    });
+
+    it("drops the preview when the send fails, since it's still open in Thunderbird", async () => {
+      const app = await open();
+      const id = await app.mail.deliver(INBOX, personalMail());
+      await settle();
+      app.mail.failNextSend = "SMTP refused";
+
+      app.store().composeMessage(reply(id), true, pending);
+      await waitFor(() => toastMessages(app).some((m) => m.startsWith("Couldn't send")));
+      expect(app.store().pendingReplies).toEqual([]);
+    });
+
+    it("shows nothing for a reply opened in Thunderbird to finish", async () => {
+      const app = await open();
+      const id = await app.mail.deliver(INBOX, personalMail());
+      await settle();
+
+      app.store().composeMessage(reply(id), false, pending);
+      expect(app.store().pendingReplies).toEqual([]);
+    });
   });
 });

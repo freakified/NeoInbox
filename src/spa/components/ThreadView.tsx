@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import type { Thread } from "../../shared/types";
-import { useMailStore } from "../../store/mailStore";
+import { useMailStore, type PendingReply } from "../../store/mailStore";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
 import { useBulkActions } from "./BulkActionConfirm";
 import { BundleMenu } from "./BundleMenu";
@@ -9,6 +9,7 @@ import { Icon } from "./Icon";
 import { InlineMessage } from "./InlineMessage";
 import { InlineReply, isEditableDraft } from "./InlineReply";
 import { useComposeMode } from "../lib/composePrefs";
+import { PendingMessage } from "./PendingMessage";
 import { ReplyFooter } from "./ReplyFooter";
 import { SnoozeMenu } from "./SnoozeMenu";
 import s from "./ThreadView.module.css";
@@ -26,6 +27,8 @@ export const ThreadView = ({
   const unsnoozeThread = useMailStore((st) => st.unsnoozeThread);
   const notify = useMailStore((st) => st.notify);
   const hydrateThreadDetails = useMailStore((st) => st.hydrateThreadDetails);
+  const allPendingReplies = useMailStore((st) => st.pendingReplies);
+  const settlePendingReply = useMailStore((st) => st.settlePendingReply);
   const inboxMessageIds = useMemo(
     () => t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
     [t],
@@ -57,6 +60,31 @@ export const ThreadView = ({
     [t, inlineCompose, latestDraft],
   );
   const latestMessage = messages[messages.length - 1];
+
+  // A reply being sent shows here until its Sent copy threads in: the first
+  // sent message the thread didn't have when the reply went out.
+  const { pendingReplies, arrived } = useMemo(() => {
+    const pendingReplies: PendingReply[] = [];
+    const arrived: { reply: PendingReply; messageId: number }[] = [];
+    for (const r of allPendingReplies) {
+      if (r.threadId !== t.id) continue;
+      const known = new Set(r.knownIds);
+      const landed = t.messages.find((m) => m.origin === "sent" && !known.has(m.id));
+      if (landed) arrived.push({ reply: r, messageId: landed.id });
+      else pendingReplies.push(r);
+    }
+    return { pendingReplies, arrived };
+  }, [allPendingReplies, t]);
+  // The Sent copy shows the reply's text until its own body loads, so the
+  // handoff doesn't flash "Loading…".
+  const handoffs = useRef(new Map<number, PendingReply>());
+  for (const { reply, messageId } of arrived) handoffs.current.set(messageId, reply);
+  useEffect(() => {
+    for (const { reply } of arrived) settlePendingReply(reply.requestId);
+  }, [arrived, settlePendingReply]);
+  // A pending reply is the newest message, so the one before it folds up as
+  // it would once the reply lands.
+  const latestOpen = pendingReplies.length === 0;
 
   const [openIds, setOpenIds] = useState<Set<number>>(() => new Set());
   const [showMiddle, setShowMiddle] = useState(false);
@@ -171,8 +199,9 @@ export const ThreadView = ({
             <InlineMessage
               key={m.id}
               message={m}
-              isOpen={m.id === latestMessage.id || openIds.has(m.id)}
-              canToggle={m.id !== latestMessage.id}
+              isOpen={(m.id === latestMessage.id && latestOpen) || openIds.has(m.id)}
+              canToggle={m.id !== latestMessage.id || !latestOpen}
+              placeholder={handoffs.current.get(m.id)}
               onToggle={() => toggleMsg(m.id)}
               translationRequest={translationRequests[m.id] ?? 0}
               onTranslatedSubject={m.id === latestMessage.id ? setTranslatedSubject : undefined}
@@ -218,14 +247,18 @@ export const ThreadView = ({
             <InlineMessage
               key={latestMessage.id}
               message={latestMessage}
-              isOpen
-              canToggle={false}
-              onToggle={() => undefined}
+              isOpen={latestOpen || openIds.has(latestMessage.id)}
+              canToggle={!latestOpen}
+              onToggle={() => toggleMsg(latestMessage.id)}
+              placeholder={handoffs.current.get(latestMessage.id)}
               translationRequest={translationRequests[latestMessage.id] ?? 0}
               onTranslatedSubject={setTranslatedSubject}
             />
           </>
         )}
+        {pendingReplies.map((r) => (
+          <PendingMessage key={r.requestId} reply={r} />
+        ))}
       </div>
 
       {inlineCompose && inlineReplyTarget ? (

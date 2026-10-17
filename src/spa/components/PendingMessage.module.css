@@ -1,0 +1,39 @@
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 12px;
+  color: #a3a3a3;
+}
+
+.spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.check {
+  font-size: 14px;
+}
+
+/* Faded until Thunderbird confirms, like Inbox's outgoing reply. */
+.body {
+  opacity: 0.6;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

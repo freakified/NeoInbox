@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { clsx } from "clsx";
 import { useMailStore } from "../../store/mailStore";
 import type { ComposeMode } from "../lib/composePrefs";
 import {
@@ -44,6 +45,9 @@ export const ComposePanel = ({
         : (unsentNewMessage ?? emptyComposerValue()),
   );
 
+  /** Folded down to its title bar, out of the way but still open. */
+  const [minimized, setMinimized] = useState(false);
+
   const submit = (send: boolean, identityId: string | undefined) => {
     composeMessage(
       {
@@ -66,31 +70,65 @@ export const ComposePanel = ({
   };
 
   return (
-    <div className={s.panel} role="dialog" aria-label="New message">
-      <div className={s.titleBar}>
-        <span className={s.title}>{value.subject.trim() || "New message"}</span>
+    <div className={clsx(s.panel, minimized && s.minimized)} role="dialog" aria-label="New message">
+      <div
+        className={s.titleBar}
+        onClick={() => minimized && setMinimized(false)}
+        title={minimized ? "Restore" : undefined}
+      >
+        <Icon name="drafts" className={s.titleIcon} />
+        {/* Like Inbox, the open card's bar is just the envelope until there's a subject. */}
+        <span className={s.title}>
+          {value.subject.trim() || (minimized ? "New message" : "")}
+        </span>
+        <button
+          type="button"
+          className={s.closeBtn}
+          onClick={(e) => {
+            e.stopPropagation();
+            setMinimized((m) => !m);
+          }}
+          title={minimized ? "Restore" : "Minimize"}
+        >
+          <Icon name={minimized ? "expand_less" : "minimize"} className={s.closeIcon} />
+        </button>
         {mode === "send" && (
           <button
             type="button"
             className={s.closeBtn}
-            onClick={() => submit(false, value.identityId)}
+            onClick={(e) => {
+              e.stopPropagation();
+              submit(false, value.identityId);
+            }}
             title="Pop out to Thunderbird (attachments, more formatting)"
             aria-label="Pop out to Thunderbird"
           >
             <Icon name="open_in_new" className={s.closeIcon} />
           </button>
         )}
-        <button type="button" className={s.closeBtn} onClick={close} title="Close (keeps your message)">
+        <button
+          type="button"
+          className={s.closeBtn}
+          onClick={(e) => {
+            e.stopPropagation();
+            close();
+          }}
+          title="Close (keeps your message)"
+        >
           <Icon name="close" className={s.closeIcon} />
         </button>
       </div>
-      <div className={s.body}>
+      {/* Kept mounted while minimized, so the editor keeps its cursor and undo. */}
+      <div className={s.body} hidden={minimized}>
         <ComposerForm
           value={value}
           onChange={setValue}
           mode={mode}
           showSubject
+          foldAddresses
+          fill
           hidePopOut
+          placeholder="Say something"
           focus={value.to.length ? "text" : "to"}
           onSubmit={submit}
           onDiscard={() => {

@@ -58,6 +58,24 @@ export interface ToastAction {
   run: () => void;
 }
 
+/**
+ * A reply just handed to Thunderbird to send, shown at the bottom of its
+ * conversation until the real Sent copy threads in (see ThreadView).
+ */
+export interface PendingReply {
+  requestId: string;
+  threadId: string;
+  /** Messages already in the thread, so the Sent copy is the one that's new. */
+  knownIds: number[];
+  author: string;
+  to: string[];
+  cc: string[];
+  text: string;
+  html?: string;
+  date: number;
+  status: "sending" | "sent";
+}
+
 export interface ToastRecord {
   id: string;
   message: string;
@@ -98,6 +116,7 @@ interface MailStore {
   tripsById: Record<string, TripRecord>;
   tripMembershipByKey: Record<string, TripMembershipRecord>;
   toasts: ToastRecord[];
+  pendingReplies: PendingReply[];
   bundleSettings: BundleSettingsRequest | null;
   reclassifying: boolean;
   /** The Settings → Trips scan: running progress, else the last result. */
@@ -160,7 +179,13 @@ interface MailStore {
    * Hand an inline draft to Thunderbird: send it, or open it in a compose
    * window for the user to finish when `send` is false.
    */
-  composeMessage: (draft: ComposeDraft, send: boolean) => void;
+  composeMessage: (
+    draft: ComposeDraft,
+    send: boolean,
+    pending?: Omit<PendingReply, "requestId" | "date" | "status">,
+  ) => void;
+  /** The reply's Sent copy has shown up in its thread (or never will). */
+  settlePendingReply: (requestId: string) => void;
   /** A new message someone asked the FAB's composer to open, prefilled. */
   newMessageRequest: (NewMessagePrefill & { key: number }) | null;
   startNewMessage: (prefill: NewMessagePrefill) => void;
@@ -181,6 +206,13 @@ const nextToastId = (): string => `t${++toastSeq}-${Date.now()}`;
 let composeSeq = 0;
 /** In-flight compose commands → the "Sending…" toast to replace when they end. */
 const pendingCompose = new Map<string, string | null>();
+
+/**
+ * How long a sent reply waits for its Sent copy before it's dropped anyway —
+ * an account that keeps no Sent folder (or one we don't sync) never brings it.
+ */
+const PENDING_REPLY_TIMEOUT_MS = 60_000;
+const pendingReplyTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 const messagesLabel = (count: number): string =>
   count === 1 ? "Message" : `${count} messages`;
@@ -308,6 +340,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   tripsById: {},
   tripMembershipByKey: {},
   toasts: [],
+  pendingReplies: [],
   newMessageRequest: null,
   bundleSettings: null,
   reclassifying: false,
@@ -908,16 +941,28 @@ export const useMailStore = create<MailStore>((set, get) => ({
   startNewMessage: (prefill) => set({ newMessageRequest: { ...prefill, key: Date.now() } }),
   clearNewMessageRequest: () => set({ newMessageRequest: null }),
 
-  composeMessage: (draft, sendNow) => {
+  composeMessage: (draft, sendNow, pending) => {
     const requestId = `c${++composeSeq}-${Date.now()}`;
     let toastId: string | null = null;
     if (sendNow) {
       const toast: ToastRecord = { id: nextToastId(), message: "Sending…" };
       toastId = toast.id;
       set({ toasts: [...get().toasts, toast].slice(-TOAST_LIMIT) });
+      if (pending) {
+        const reply: PendingReply = { ...pending, requestId, date: Date.now(), status: "sending" };
+        set({ pendingReplies: [...get().pendingReplies, reply] });
+      }
     }
     pendingCompose.set(requestId, toastId);
     send({ type: "compose", requestId, draft, send: sendNow });
+  },
+
+  settlePendingReply: (requestId) => {
+    const timer = pendingReplyTimers.get(requestId);
+    if (timer !== undefined) clearTimeout(timer);
+    pendingReplyTimers.delete(requestId);
+    const rest = get().pendingReplies.filter((r) => r.requestId !== requestId);
+    if (rest.length !== get().pendingReplies.length) set({ pendingReplies: rest });
   },
 }));
 
@@ -1081,7 +1126,21 @@ const applyServerMsg = (
             ? `Couldn't send${msg.error ? ` — ${msg.error}` : ""}. It's still open in Thunderbird.`
             : null;
       if (message) toasts.push({ id: nextToastId(), message });
-      set({ toasts: toasts.slice(-TOAST_LIMIT) });
+      // A failed send is still open in Thunderbird, so its preview goes; a
+      // sent one stays until its Sent copy replaces it.
+      const pendingReplies =
+        msg.outcome === "sent"
+          ? get().pendingReplies.map((r) =>
+              r.requestId === msg.requestId ? { ...r, status: "sent" as const } : r,
+            )
+          : get().pendingReplies.filter((r) => r.requestId !== msg.requestId);
+      if (msg.outcome === "sent" && pendingReplies.some((r) => r.requestId === msg.requestId)) {
+        pendingReplyTimers.set(
+          msg.requestId,
+          setTimeout(() => get().settlePendingReply(msg.requestId), PENDING_REPLY_TIMEOUT_MS),
+        );
+      }
+      set({ toasts: toasts.slice(-TOAST_LIMIT), pendingReplies });
       return;
     }
     case "trip-scan-progress": {

@@ -25,6 +25,8 @@ export interface ComposerValue {
   text: string;
   /** The editor's markup, unsanitized; see composerBody. */
   html: string;
+  /** Files to attach, handed to Thunderbird's compose window as they are. */
+  attachments?: File[];
 }
 
 export const emptyComposerValue = (): ComposerValue => ({
@@ -36,10 +38,67 @@ export const emptyComposerValue = (): ComposerValue => ({
 });
 
 /** The message body as a ComposeDraft carries it. */
-export const composerBody = (v: ComposerValue): { text: string; html: string } => ({
+export const composerBody = (
+  v: ComposerValue,
+): { text: string; html: string; attachments?: File[] } => ({
   text: v.text,
   html: sanitizeComposerHtml(v.html),
+  ...(v.attachments?.length ? { attachments: v.attachments } : {}),
 });
+
+/** Images the browser can draw, so they get a thumbnail instead of a chip. */
+const isPreviewableImage = (file: File): boolean =>
+  /^image\/(png|jpe?g|gif|webp|avif|bmp|svg\+xml)$/.test(file.type);
+
+/** A local object URL for the file, revoked when the chip goes away. */
+const useObjectUrl = (file: File, enabled: boolean): string | null => {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    const next = URL.createObjectURL(file);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [file, enabled]);
+  return url;
+};
+
+const AttachmentChip = ({ file, onRemove }: { file: File; onRemove: () => void }) => {
+  const image = isPreviewableImage(file);
+  const url = useObjectUrl(file, image);
+  const remove = (
+    <button
+      type="button"
+      className={image ? s.thumbRemove : s.chipRemove}
+      aria-label={`Remove ${file.name}`}
+      onClick={onRemove}
+    >
+      <Icon name="close" className={s.chipRemoveIcon} />
+    </button>
+  );
+  if (image) {
+    return (
+      <li className={s.thumb} title={`${file.name} (${formatFileSize(file.size)})`}>
+        {url && <img className={s.thumbImage} src={url} alt={file.name} />}
+        {remove}
+      </li>
+    );
+  }
+  return (
+    <li className={s.attachment} title={file.name}>
+      <Icon name="attach_file" className={s.attachmentIcon} />
+      <span className={s.attachmentName}>{file.name}</span>
+      <span className={s.attachmentSize}>{formatFileSize(file.size)}</span>
+      {remove}
+    </li>
+  );
+};
+
+const formatFileSize = (bytes: number): string =>
+  bytes < 1024
+    ? `${bytes} B`
+    : bytes < 1024 * 1024
+      ? `${Math.round(bytes / 1024)} KB`
+      : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
 export const isComposerEmpty = (v: ComposerValue): boolean =>
   !v.text.trim() && !v.subject.trim();
@@ -161,6 +220,8 @@ export const ComposerForm = ({
   leading,
   avatar,
   compactAddresses,
+  foldAddresses,
+  fill,
   hidePopOut,
   identityContext,
   placeholder = "Write your message",
@@ -178,6 +239,13 @@ export const ComposerForm = ({
   /** Show the sending identity's avatar, like a message in the thread. */
   avatar?: boolean;
   compactAddresses?: boolean;
+  /**
+   * Inbox's new-message fields: just To, with From and Cc behind a chevron
+   * at its end (Cc stays out once it has someone in it).
+   */
+  foldAddresses?: boolean;
+  /** Fill the host's height, the message growing and the toolbar at the bottom. */
+  fill?: boolean;
   /** The host puts the pop-out elsewhere (e.g. in its own title bar). */
   hidePopOut?: boolean;
   /** What the default From is chosen from (see pickIdentity). */
@@ -191,6 +259,13 @@ export const ComposerForm = ({
   onCollapse?: () => void;
 }) => {
   const [showCc, setShowCc] = useState(value.cc.length > 0);
+  const [moreFields, setMoreFields] = useState(value.cc.length > 0);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const attachments = value.attachments ?? [];
+  const addFiles = (files: FileList | null) => {
+    if (files?.length) onChange({ ...value, attachments: [...attachments, ...files] });
+  };
   const [fieldsOpen, setFieldsOpen] = useState(!compactAddresses);
   /** Cc was opened by hand (not prefilled), so it should take the cursor. */
   const [ccRequested, setCcRequested] = useState(false);
@@ -225,24 +300,27 @@ export const ComposerForm = ({
     onSubmit(mode === "send", identityId);
   };
 
+  const fromField = identities.length > 1 && (
+    <label className={s.field}>
+      <span className={s.fieldLabel}>From</span>
+      <select
+        className={s.fromSelect}
+        value={identityId ?? ""}
+        onChange={(e) => onChange({ ...value, identityId: e.target.value })}
+      >
+        {identities.map((identity) => (
+          <option key={identity.id} value={identity.id}>
+            {identityLabel(identity)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+  const ccRow = foldAddresses ? moreFields || value.cc.length > 0 : showCc;
+
   const fields = (
     <div className={s.fields}>
-      {identities.length > 1 && (
-        <label className={s.field}>
-          <span className={s.fieldLabel}>From</span>
-          <select
-            className={s.fromSelect}
-            value={identityId ?? ""}
-            onChange={(e) => onChange({ ...value, identityId: e.target.value })}
-          >
-            {identities.map((identity) => (
-              <option key={identity.id} value={identity.id}>
-                {identityLabel(identity)}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      {!foldAddresses && fromField}
       <div className={s.recipients}>
         <RecipientField
           label="To"
@@ -250,26 +328,40 @@ export const ComposerForm = ({
           onChange={(to) => onChange({ ...value, to })}
           autoFocus={focus === "to" || (compactAddresses && fieldsOpen)}
         />
-        {showCc ? (
+        {ccRow && (
           <RecipientField
             label="Cc"
             value={value.cc}
             onChange={(cc) => onChange({ ...value, cc })}
             autoFocus={ccRequested}
           />
-        ) : (
+        )}
+        {foldAddresses ? (
           <button
             type="button"
-            className={s.ccToggle}
-            onClick={() => {
-              setShowCc(true);
-              setCcRequested(true);
-            }}
+            className={s.foldToggle}
+            aria-expanded={moreFields}
+            title={moreFields ? "Fewer fields" : "Cc and From"}
+            onClick={() => setMoreFields((open) => !open)}
           >
-            Cc
+            <Icon name={moreFields ? "expand_less" : "expand_more"} className={s.iconBtnIcon} />
           </button>
+        ) : (
+          !showCc && (
+            <button
+              type="button"
+              className={s.ccToggle}
+              onClick={() => {
+                setShowCc(true);
+                setCcRequested(true);
+              }}
+            >
+              Cc
+            </button>
+          )
         )}
       </div>
+      {foldAddresses && moreFields && fromField}
     </div>
   );
 
@@ -289,8 +381,29 @@ export const ComposerForm = ({
 
   return (
     <div
-      className={clsx(s.form, avatar && s.formWithAvatar)}
+      className={clsx(
+        s.form,
+        avatar && s.formWithAvatar,
+        fill && s.formFill,
+        dragging && s.formDragging,
+      )}
       onClick={(e) => e.stopPropagation()}
+      // Files dropped anywhere on the composer attach, like Inbox.
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        setDragging(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return;
+        e.preventDefault();
+        setDragging(false);
+        addFiles(e.dataTransfer.files);
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
           e.preventDefault();
@@ -346,12 +459,26 @@ export const ComposerForm = ({
           editorRef={textRef}
           html={value.html}
           placeholder={placeholder}
+          className={fill ? s.editorFill : undefined}
           onChange={(body) => onChange({ ...value, ...body })}
           onLinkShortcut={() => {
             linkRange.current = captureSelection(textRef.current);
             setLinking(true);
           }}
         />
+        {attachments.length > 0 && (
+          <ul className={s.attachments} aria-label="Attachments">
+            {attachments.map((file, i) => (
+              <AttachmentChip
+                key={`${file.name}-${i}`}
+                file={file}
+                onRemove={() =>
+                  onChange({ ...value, attachments: attachments.filter((_, j) => j !== i) })
+                }
+              />
+            ))}
+          </ul>
+        )}
         <div className={s.actions}>
           {mode === "send" ? (
             <button
@@ -374,6 +501,25 @@ export const ComposerForm = ({
               Finish in Thunderbird
             </button>
           )}
+          <button
+            type="button"
+            className={s.iconBtn}
+            onClick={() => fileRef.current?.click()}
+            title="Attach files"
+          >
+            <Icon name="attach_file" className={s.iconBtnIcon} />
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              addFiles(e.target.files);
+              // Picking the same file again should still fire.
+              e.target.value = "";
+            }}
+          />
           <FormatBar
             editorRef={textRef}
             linking={linking}

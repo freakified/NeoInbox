@@ -5,6 +5,7 @@ import type { RawMessage } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
 import { useIframeAutoHeight } from "../lib/useIframeAutoHeight";
 import {
+  buildComposedSrcdoc,
   buildTextSrcdoc,
   buildSrcdoc,
   extractHtmlBody,
@@ -24,8 +25,11 @@ export const MessageBody = ({
   message: m,
   translationRequest = 0,
   onTranslatedSubject,
+  placeholder,
 }: {
   message: RawMessage;
+  /** Shown instead of "Loading…" until the body arrives, e.g. the reply just sent. */
+  placeholder?: { text: string; html?: string };
   translationRequest?: number;
   onTranslatedSubject?: (subject: string) => void;
 }) => {
@@ -139,7 +143,12 @@ export const MessageBody = ({
     },
     [showImages, translatedBodyType, translatedText],
   );
-  const activeSrcdoc = showTranslation && translatedSrcdoc ? translatedSrcdoc : srcdoc;
+  const placeholderSrcdoc = useMemo(
+    () => (placeholder ? buildComposedSrcdoc(placeholder.text, placeholder.html) : ""),
+    [placeholder],
+  );
+  const activeSrcdoc =
+    rawHtml === null ? placeholderSrcdoc : showTranslation && translatedSrcdoc ? translatedSrcdoc : srcdoc;
   const { height, onLoad } = useIframeAutoHeight(iframeRef, activeSrcdoc);
 
   const requestTranslation = () => {
@@ -176,7 +185,7 @@ export const MessageBody = ({
 
   return (
     <div className={s.body}>
-      {rawHtml === null ? (
+      {rawHtml === null && !placeholderSrcdoc ? (
         <div className={s.loading}>Loading…</div>
       ) : (
         <>

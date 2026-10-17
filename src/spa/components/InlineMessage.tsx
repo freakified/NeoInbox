@@ -23,12 +23,12 @@ const displayAddressName = (raw: string): { name: string; email: string } | null
   };
 };
 
-const displayAddressList = (
+export const displayAddressList = (
   addresses: readonly string[] | undefined,
 ): { name: string; email: string }[] =>
   (addresses ?? []).map(displayAddressName).filter((addr) => addr !== null);
 
-const AddressList = ({
+export const AddressList = ({
   label,
   recipients,
 }: {
@@ -61,8 +61,11 @@ export const InlineMessage = ({
   canToggle = true,
   translationRequest = 0,
   onTranslatedSubject,
+  placeholder,
 }: {
   message: RawMessage;
+  /** Body to show while the real one loads (see MessageBody). */
+  placeholder?: { text: string; html?: string };
   isOpen: boolean;
   onToggle: () => void;
   canToggle?: boolean;
@@ -157,6 +160,7 @@ export const InlineMessage = ({
                 message={m}
                 translationRequest={translationRequest}
                 onTranslatedSubject={onTranslatedSubject}
+                placeholder={placeholder}
               />
             </div>
           </ExpandableRegion>

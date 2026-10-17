@@ -238,7 +238,15 @@ export class FakeMessenger {
 
   /** Open compose windows by tab id; tab and window ids are the same here. */
   private composeTabs = new Map<number, messenger.compose.ComposeDetails>();
+  /** The message each compose window replies to or forwards, for its Sent copy. */
+  private composeSources = new Map<number, number>();
   private nextComposeTab = 100;
+  private onAfterSend = new Event<[unknown, unknown]>();
+  /**
+   * How long after sendMessage() resolves the Sent copy is filed and
+   * onAfterSend fires; in Thunderbird it trails the send by a beat.
+   */
+  sentCopyDelayMs = 0;
   /** Makes the next compose.sendMessage() reject, as a refused SMTP send would. */
   failNextSend: string | null = null;
 
@@ -247,6 +255,7 @@ export class FakeMessenger {
     const details = (args.find((a) => a && typeof a === "object") ?? {}) as
       messenger.compose.ComposeDetails;
     const id = this.nextComposeTab++;
+    if (kind !== "new" && typeof args[0] === "number") this.composeSources.set(id, args[0]);
     const quote = kind === "new" ? "" : "<blockquote>quoted</blockquote>";
     // beginNew(messageId) reopens a saved draft: what was written, then the quote.
     const body =
@@ -305,6 +314,48 @@ export class FakeMessenger {
    */
   remove(id: number): void {
     this.messages.delete(id);
+  }
+
+  /**
+   * Files a sent message in its account's Sent folder, threaded under what it
+   * replied to, and fires onAfterSend with it — Thunderbird's half of a send.
+   */
+  private fileSentCopy(
+    tabId: number,
+    details: messenger.compose.ComposeDetails,
+    sourceId: number | undefined,
+  ): void {
+    const source = sourceId === undefined ? undefined : this.messages.get(sourceId);
+    const accountId = source ? this.folderOwner.get(source.folderId) : this.options.accounts[0]?.id;
+    const account = this.options.accounts.find((a) => a.id === accountId);
+    const sentFolder = account?.folders.find((f) => f.specialUse?.includes("sent"));
+    if (!account || !sentFolder) {
+      this.onAfterSend.emitSync({ id: tabId }, { mode: "sendNow", messages: [] });
+      return;
+    }
+    const identities = account.identities ?? [{ email: `${account.id}@example.com` }];
+    const identity =
+      identities[Number(details.identityId?.split("-id")[1] ?? 0)] ?? identities[0]!;
+    const asList = (v: unknown): string[] => (Array.isArray(v) ? v : v ? [String(v)] : []);
+    const headers: Record<string, string[]> = {};
+    if (source) {
+      headers["In-Reply-To"] = [source.headerMessageId];
+      headers["References"] = [source.headerMessageId];
+    }
+    const id = this.insert(sentFolder.id, {
+      author: identity.name ? `${identity.name} <${identity.email}>` : identity.email,
+      recipients: asList(details.to),
+      ccList: asList(details.cc),
+      subject: details.subject || (source ? `Re: ${source.subject.replace(/^Re: /, "")}` : ""),
+      read: true,
+      headers,
+      html: details.body,
+      text: details.plainTextBody,
+    });
+    this.onAfterSend.emitSync(
+      { id: tabId },
+      { mode: "sendNow", messages: [this.header(this.require(id))] },
+    );
   }
 
   /** Adds a message and fires onNewMailReceived, as a delivery would. */
@@ -684,6 +735,13 @@ export class FakeMessenger {
           if (!details) throw new Error(`No compose tab ${tabId}`);
           return { ...details };
         },
+        addAttachment: async (tabId: number, attachment: { file: File; name?: string }) => {
+          const current = self.composeTabs.get(tabId);
+          if (!current) throw new Error(`No compose tab ${tabId}`);
+          const attachments = [...(current.attachments ?? []), attachment];
+          self.composeTabs.set(tabId, { ...current, attachments });
+          return { id: attachments.length, name: attachment.name ?? attachment.file.name, size: attachment.file.size };
+        },
         setComposeDetails: async (tabId: number, details: messenger.compose.ComposeDetails) => {
           const current = self.composeTabs.get(tabId);
           if (!current) throw new Error(`No compose tab ${tabId}`);
@@ -699,9 +757,12 @@ export class FakeMessenger {
           }
           self.calls.sent.push(details);
           self.composeTabs.delete(tabId);
+          const sourceId = self.composeSources.get(tabId);
+          self.composeSources.delete(tabId);
+          setTimeout(() => self.fileSentCopy(tabId, details, sourceId), self.sentCopyDelayMs);
           return { mode: "sendNow", messages: [] };
         },
-        onAfterSend: new Event<[unknown, unknown]>(),
+        onAfterSend: self.onAfterSend,
         onAfterSave: new Event<[unknown, unknown]>(),
         onBeforeSend: new Event<[unknown, unknown]>(),
       },

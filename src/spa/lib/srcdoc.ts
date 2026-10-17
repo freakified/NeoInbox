@@ -187,6 +187,15 @@ const markQuotedHtml = (doc: Document): void => {
     break;
   }
 
+  // The blank lines between the reply and the quote (Thunderbird leaves a
+  // <br> and an empty <p> there) fold away with it; left visible they read
+  // as a tall gap above the "···".
+  while (trimStart > 0 && isInsignificant(children[trimStart - 1]!)) trimStart--;
+  const above = children[trimStart - 1];
+  if (above instanceof Element && TRAILING_DESCEND_TAGS.has(above.tagName)) {
+    trimTrailingBlankLines(above);
+  }
+
   const toHide: Element[] = [];
   for (let i = trimStart; i < children.length; i++) {
     const node = children[i]!;
@@ -424,8 +433,8 @@ const isBlankTrailingNode = (n: Node): boolean => {
  * around everything. Webmail hides them; rendered as-is they leave a tall
  * blank band under every message.
  */
-const trimTrailingBlankLines = (doc: Document): void => {
-  let container: Element | null = doc.body;
+const trimTrailingBlankLines = (root: Element | null): void => {
+  let container: Element | null = root;
   while (container) {
     let last: ChildNode | null = container.lastChild;
     while (last && isBlankTrailingNode(last)) {
@@ -441,11 +450,15 @@ export const buildSrcdoc = (rawHtml: string, showImages: boolean): string => {
   const doc = new DOMParser().parseFromString(rawHtml, "text/html");
   stripActiveContent(doc);
   if (!showImages) blockRemoteImages(doc);
-  trimTrailingBlankLines(doc);
+  trimTrailingBlankLines(doc.body);
   markQuotedHtml(doc);
   doc.head.insertAdjacentHTML("afterbegin", `${cspMeta(showImages)}${BASE_CSS}`);
   return `<!DOCTYPE html>${doc.documentElement.outerHTML}`;
 }
+
+/** What the user just wrote in the composer: its HTML, or its text in plain mode. */
+export const buildComposedSrcdoc = (text: string, html?: string): string =>
+  html?.trim() ? buildSrcdoc(html, false) : buildTextSrcdoc(text);
 
 export const buildTextSrcdoc = (rawText: string): string =>
   `<!DOCTYPE html><html><head>${cspMeta(false)}${BASE_CSS}</head>` +

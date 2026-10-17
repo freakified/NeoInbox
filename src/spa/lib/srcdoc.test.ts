@@ -153,3 +153,25 @@ describe("trailing blank lines", () => {
     }
   });
 });
+
+describe("quoted reply trimming", () => {
+  // What an inline reply sends: the user's part, then Thunderbird's reply body.
+  const reply =
+    "<html><body><div><div>Thanks!</div><div>--Dan</div><div><br></div></div><br>" +
+    '<p><br></p><div class="moz-cite-prefix">On Mon, Ann wrote:<br></div>' +
+    '<blockquote type="cite">original</blockquote></body></html>';
+
+  it("folds the blank lines above the quote away with it", () => {
+    const body = parse(buildSrcdoc(reply, false)).body;
+    const visible = Array.from(body.children).filter(
+      (el) => !el.classList.contains("nb-quoted") && !el.matches("input, label"),
+    );
+    expect(visible.map((el) => el.outerHTML)).toEqual([
+      "<div><div>Thanks!</div><div>--Dan</div></div>",
+    ]);
+    expect(body.querySelector("label.nb-toggle-label")?.previousElementSibling?.tagName).toBe(
+      "INPUT",
+    );
+    expect(body.querySelector("blockquote")?.classList.contains("nb-quoted")).toBe(true);
+  });
+});

@@ -15,6 +15,7 @@ export const RichTextEditor = ({
   onChange,
   placeholder,
   onLinkShortcut,
+  className,
 }: {
   editorRef: RefObject<HTMLDivElement | null>;
   html: string;
@@ -22,6 +23,7 @@ export const RichTextEditor = ({
   placeholder: string;
   /** Ctrl+K, ⌘K on a Mac. */
   onLinkShortcut: () => void;
+  className?: string;
 }) => {
   // The DOM is the source of truth while typing; only push markup in when it
   // changed from outside (a restored draft, a discard's Undo).
@@ -39,7 +41,7 @@ export const RichTextEditor = ({
   return (
     <div
       ref={editorRef}
-      className={clsx(s.editor, isRichTextBlank(html) && s.blank)}
+      className={clsx(s.editor, isRichTextBlank(html) && s.blank, className)}
       contentEditable
       suppressContentEditableWarning
       role="textbox"

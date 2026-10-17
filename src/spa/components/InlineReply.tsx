@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { clsx } from "clsx";
-import { replyRecipients, type ComposeKind } from "../../shared/compose";
+import { pickIdentity, replyRecipients, type ComposeKind } from "../../shared/compose";
 import { resolveLiveMessageId } from "../../shared/liveMessage";
 import type { RawMessage, Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
@@ -245,6 +245,14 @@ export const InlineReply = ({
   const trashThread = useMailStore((st) => st.trashThread);
   const notify = useMailStore((st) => st.notify);
   const draft = isEditableDraft(savedDraft) ? savedDraft : undefined;
+  const identities = useIdentities();
+  const identityContext = {
+    accountId: replyTarget.accountId,
+    addresses: [replyTarget.author, ...replyTarget.recipients, ...replyTarget.ccList],
+  };
+  // Who the reply would be from, for the avatar on the collapsed bar.
+  const defaultIdentity = pickIdentity(identities, identityContext);
+  const meName = defaultIdentity?.name || defaultIdentity?.email || "Me";
 
   /** What's kept for this thread, minus edits to a draft that has since gone. */
   const stored = (): ReplyState | null => {
@@ -318,6 +326,8 @@ export const InlineReply = ({
       );
       return;
     }
+    const body = composerBody(state.value);
+    const identity = identities.find((i) => i.id === identityId) ?? defaultIdentity;
     composeMessage(
       {
         kind: state.kind,
@@ -325,9 +335,24 @@ export const InlineReply = ({
         identityId,
         to: state.value.to,
         cc: state.value.cc,
-        ...composerBody(state.value),
+        ...body,
       },
       send,
+      // A forward may not thread back in here, so only replies show as pending.
+      state.kind === "forward"
+        ? undefined
+        : {
+            threadId: thread.id,
+            knownIds: thread.messages.map((m) => m.id),
+            author: identity
+              ? identity.name
+                ? `${identity.name} <${identity.email}>`
+                : identity.email
+              : "Me",
+            to: state.value.to,
+            cc: state.value.cc,
+            ...body,
+          },
     );
     if (state.kind === "draft" && send) sentDraftIds.add(state.draftId);
     update(null);
@@ -360,6 +385,9 @@ export const InlineReply = ({
 
   if (!state) {
     const unsent = stored();
+    // The bar starts a reply-all, which is a plain reply when it's one person.
+    const all = replyRecipients(replyTarget, "replyAll", myEmails);
+    const replyAllLabel = all.to.length + all.cc.length > 1 ? "Reply all" : "Reply";
     const unsentReply = unsent?.kind === "draft" ? null : unsent;
     return (
       <>
@@ -373,15 +401,16 @@ export const InlineReply = ({
         )}
         {(!draft || unsentReply) && (
           <div className={s.bar} onClick={(e) => e.stopPropagation()}>
+            <div className={s.barAvatar} style={{ backgroundColor: avatarColor(meName) }}>
+              {senderInitial(meName)}
+            </div>
             <button
               type="button"
               className={s.fauxInput}
+              title={unsentReply ? undefined : `Reply to ${senderName(replyTarget.author)}`}
               onClick={() => (unsentReply ? setState(unsentReply) : void start("replyAll"))}
             >
-              <Icon name="reply_all" className={s.fauxIcon} />
-              {unsentReply
-                ? "Continue your reply…"
-                : `Reply to ${senderName(replyTarget.author)}…`}
+              {unsentReply ? "Continue your reply…" : replyAllLabel}
             </button>
             <button
               type="button"
@@ -415,10 +444,7 @@ export const InlineReply = ({
         focus={state.kind === "forward" ? "to" : "text"}
         placeholder={state.kind === "forward" ? "Add a note" : "Write your reply"}
         onSubmit={(send, identityId) => void submit(send, identityId)}
-        identityContext={{
-          accountId: replyTarget.accountId,
-          addresses: [replyTarget.author, ...replyTarget.recipients, ...replyTarget.ccList],
-        }}
+        identityContext={identityContext}
         onDiscard={discard}
         onCollapse={collapse}
       />

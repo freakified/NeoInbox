@@ -1,22 +1,33 @@
+/* Inbox's collapsed reply: your avatar, a plain "Reply", and Forward. */
 .bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
+  gap: 16px;
+  padding: 12px 12px 12px 20px;
   border-top: 1px solid var(--color-md-divider);
-  background: #fafafa;
+  background: #fff;
+}
+
+.barAvatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .fauxInput {
   flex: 1;
   min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border: 1px solid var(--color-md-divider);
-  border-radius: 4px;
-  background: #fff;
+  align-self: stretch;
+  padding: 0;
+  border: none;
+  background: transparent;
   font: inherit;
   font-size: 14px;
   color: var(--color-md-secondary-text);
@@ -28,12 +39,12 @@
 }
 
 .fauxInput:hover {
-  border-color: var(--color-md-field-underline);
+  color: var(--color-md-on-surface);
 }
 
-.fauxIcon {
-  font-size: 18px;
-  color: var(--color-md-secondary-text);
+.fauxInput:focus-visible {
+  outline: none;
+  color: var(--color-md-on-surface);
 }
 
 .iconBtn {
