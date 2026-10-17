@@ -244,6 +244,9 @@ export const InlineReply = ({
   const composeMessage = useMailStore((st) => st.composeMessage);
   const trashThread = useMailStore((st) => st.trashThread);
   const notify = useMailStore((st) => st.notify);
+  const popOutReply = useMailStore((st) => st.popOutReply);
+  // While this thread's reply is out in the floating panel, the thread shows none.
+  const poppedOut = useMailStore((st) => st.poppedReply?.threadId === thread.id);
   const draft = isEditableDraft(savedDraft) ? savedDraft : undefined;
   const identities = useIdentities();
   const identityContext = {
@@ -314,8 +317,7 @@ export const InlineReply = ({
     update({ kind: "draft", draftId: draft.id, value });
   };
 
-  const submit = async (send: boolean, identityId: string | undefined) => {
-    if (!state) return;
+  const submit = async (state: ReplyState, send: boolean, identityId: string | undefined) => {
     const target = state.kind === "draft" ? draft : replyTarget;
     const liveId = target ? await resolveLiveMessageId(target) : null;
     if (liveId === null) {
@@ -365,6 +367,32 @@ export const InlineReply = ({
     trashThread([draft.id]);
   };
 
+  /** Moves the reply into the floating panel, which hands it back on close. */
+  const popOut = (st: ReplyState) => {
+    const subject = (st.kind === "draft" ? draft?.subject : replyTarget.subject) ?? "";
+    const prefix = st.kind === "forward" ? "Fwd: " : st.kind === "draft" ? "" : "Re: ";
+    popOutReply({
+      threadId: thread.id,
+      title: /^(re|fwd?):/i.test(subject) ? subject : `${prefix}${subject}`,
+      value: st.value,
+      identityContext,
+      placeholder: st.kind === "forward" ? "Add a note" : "Write your reply",
+      submit: (value, send, identityId) => void submit({ ...st, value }, send, identityId),
+      keep: (value) => {
+        unsentReplies.set(thread.id, { ...st, value });
+      },
+      discard: (value) => {
+        if (st.kind === "draft") {
+          trashThread([st.draftId]);
+        } else if (!isComposerEmpty(value)) {
+          notify("Reply discarded", [{ label: "Undo", run: () => popOut({ ...st, value }) }]);
+        }
+      },
+    });
+    unsentReplies.delete(thread.id);
+    setState(null);
+  };
+
   const discard = () => {
     if (state?.kind === "draft") {
       discardDraft();
@@ -382,6 +410,8 @@ export const InlineReply = ({
     if (state && state.kind !== "draft" && isComposerEmpty(state.value)) update(null);
     else setState(null);
   };
+
+  if (poppedOut) return null;
 
   if (!state) {
     const unsent = stored();
@@ -443,7 +473,8 @@ export const InlineReply = ({
         }
         focus={state.kind === "forward" ? "to" : "text"}
         placeholder={state.kind === "forward" ? "Add a note" : "Write your reply"}
-        onSubmit={(send, identityId) => void submit(send, identityId)}
+        onSubmit={(send, identityId) => void submit(state, send, identityId)}
+        onPopOut={() => popOut(state)}
         identityContext={identityContext}
         onDiscard={discard}
         onCollapse={collapse}

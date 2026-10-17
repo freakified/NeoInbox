@@ -18,10 +18,17 @@ export const composeSlice = (
   get: StoreGet,
 ): Pick<
   MailStore,
-  "startNewMessage" | "clearNewMessageRequest" | "composeMessage" | "settlePendingReply"
+  | "startNewMessage"
+  | "clearNewMessageRequest"
+  | "composeMessage"
+  | "settlePendingReply"
+  | "popOutReply"
+  | "clearPoppedReply"
 > => ({
   startNewMessage: (prefill) => set({ newMessageRequest: { ...prefill, key: Date.now() } }),
   clearNewMessageRequest: () => set({ newMessageRequest: null }),
+  popOutReply: (reply) => set({ poppedReply: { ...reply, key: Date.now() } }),
+  clearPoppedReply: () => set({ poppedReply: null }),
   composeMessage: (draft, sendNow, pending) => {
     const requestId = `c${++composeSeq}-${Date.now()}`;
     let toastId: string | null = null;

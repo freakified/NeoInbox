@@ -3,8 +3,15 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 12px 12px 12px 20px;
+  box-sizing: border-box;
+  height: 71px;
+  padding: 0 12px 0 20px;
   border-top: 1px solid var(--color-md-divider);
+  background: #f6f6f6;
+  transition: background-color 150ms ease;
+}
+
+.bar:hover {
   background: #fff;
 }
 
@@ -70,7 +77,8 @@
 }
 
 .card {
-  padding: 12px 20px;
+  /* Puts the avatar where it sits on the 71px collapsed bar: (71 - 1 - 36) / 2. */
+  padding: 17px 20px 12px;
   border-top: 1px solid var(--color-md-divider);
   background: #fff;
 }

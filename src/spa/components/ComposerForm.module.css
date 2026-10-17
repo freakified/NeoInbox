@@ -159,6 +159,11 @@
   color: var(--color-md-secondary-text);
 }
 
+/* With To alone there's no column to line up with, so it hugs its chips. */
+.fieldsSolo .fieldLabel {
+  width: auto;
+}
+
 .chips {
   flex: 1;
   min-width: 0;
@@ -331,7 +336,8 @@
 .foldToggle {
   position: absolute;
   right: 0;
-  top: 2px;
+  /* Centred on the To row: 36px min-height plus 8px padding, less the 32px button. */
+  top: 6px;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -205,8 +205,8 @@ const AddressSummary = ({ label, addresses }: { label: string; addresses: string
  * message panel. Basic formatting (bold, lists, links) goes along as HTML;
  * Thunderbird does the rest.
  *
- * In send mode a pop-out button ("finish in Thunderbird") sits at the top
- * right, unless the host shows its own (`hidePopOut`).
+ * With `onPopOut` a pop-out button sits at the top right; the in-thread
+ * reply uses it to move into the floating panel.
  *
  * With `compactAddresses` the From/To/Cc fields start folded into one line
  * that reads like a message header ("Me to Priya, Bob"); clicking it opens
@@ -222,7 +222,7 @@ export const ComposerForm = ({
   compactAddresses,
   foldAddresses,
   fill,
-  hidePopOut,
+  onPopOut,
   identityContext,
   placeholder = "Write your message",
   focus = "text",
@@ -246,8 +246,8 @@ export const ComposerForm = ({
   foldAddresses?: boolean;
   /** Fill the host's height, the message growing and the toolbar at the bottom. */
   fill?: boolean;
-  /** The host puts the pop-out elsewhere (e.g. in its own title bar). */
-  hidePopOut?: boolean;
+  /** Shows the pop-out button; the floating panel keeps its own in the title bar. */
+  onPopOut?: () => void;
   /** What the default From is chosen from (see pickIdentity). */
   identityContext?: { accountId?: string; addresses?: readonly string[] };
   placeholder?: string;
@@ -319,7 +319,7 @@ export const ComposerForm = ({
   const ccRow = foldAddresses ? moreFields || value.cc.length > 0 : showCc;
 
   const fields = (
-    <div className={s.fields}>
+    <div className={clsx(s.fields, foldAddresses && !ccRow && !moreFields && s.fieldsSolo)}>
       {!foldAddresses && fromField}
       <div className={s.recipients}>
         <RecipientField
@@ -434,13 +434,13 @@ export const ComposerForm = ({
               <Icon name="unfold_less" className={s.iconBtnIcon} />
             </button>
           )}
-          {mode === "send" && !hidePopOut && (
+          {onPopOut && (
             <button
               type="button"
               className={s.popOutBtn}
-              onClick={() => onSubmit(false, identityId)}
-              title="Pop out to Thunderbird (attachments, more formatting)"
-              aria-label="Pop out to Thunderbird"
+              onClick={onPopOut}
+              title="Pop out"
+              aria-label="Pop out"
             >
               <Icon name="open_in_new" className={s.iconBtnIcon} />
             </button>

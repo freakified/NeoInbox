@@ -17,6 +17,7 @@ import { scrollKeeper } from "./lib/scrollKeeper";
 import { BundleSliceRow } from "./components/BundleSliceRow";
 import { BundleManagerModal } from "./components/BundleManagerModal";
 import { useBulkActions } from "./components/BulkActionConfirm";
+import { EmptyState, InboxZero } from "./components/EmptyState";
 import { Fab } from "./components/Fab";
 import { Icon } from "./components/Icon";
 import { ReminderRow } from "./components/ReminderRow";
@@ -44,17 +45,37 @@ const STREAM_PAGE_SIZE = 80;
 const SELECTION_HEADER_COLOR = "#5f6368";
 
 
-const emptyTextForView = (view: StreamView, pinnedOnly: boolean): string => {
-  if (view.type === "inbox" && pinnedOnly) return "No pinned messages.";
-  if (view.type === "snoozed") return "No snoozed messages.";
-  if (view.type === "draft") return "No drafts.";
-  if (view.type === "sent") return "No sent messages.";
-  if (view.type === "done") return "No done messages.";
-  if (view.type === "reminders") return "No reminders — create one with the button below.";
+/** What an empty view shows; null for the inbox, which gets its sunny sky. */
+const emptyStateForView = (
+  view: StreamView,
+  pinnedOnly: boolean,
+  customBundles: ReturnType<typeof useMailStore.getState>["customBundles"],
+): { icon: string; color?: string; title: string; hint?: string } | null => {
+  if (view.type === "inbox")
+    return pinnedOnly
+      ? { icon: "push_pin", title: "Nothing pinned", hint: "Pin a conversation to keep it here." }
+      : null;
+  if (view.type === "snoozed") return { icon: "schedule", title: "Nothing snoozed" };
+  if (view.type === "draft") return { icon: "drafts", title: "No drafts" };
+  if (view.type === "sent") return { icon: "send", title: "No sent messages" };
+  if (view.type === "done") return { icon: "done", title: "Nothing marked done" };
+  if (view.type === "reminders")
+    return {
+      icon: "pan_tool_alt",
+      title: "No reminders",
+      hint: "Create one with the button below.",
+    };
   if (view.type === "trips")
-    return "No trips yet — open a conversation's ⋮ menu and choose Move to → New trip.";
-  if (view.type === "bundle") return "No messages in this bundle.";
-  return "No messages found.";
+    return {
+      icon: "travel",
+      title: "No trips yet",
+      hint: "Open a conversation's ⋮ menu and choose Move to → New trip.",
+    };
+  if (view.type === "bundle") {
+    const meta = getCategoryMeta(view.category, customBundles);
+    return { icon: meta.icon, title: `Nothing in ${meta.name}` };
+  }
+  return { icon: "search", title: "No messages found" };
 };
 
 const headerForView = (
@@ -330,6 +351,7 @@ export const App = () => {
     pinnedOnly && activeView.type === "inbox"
       ? { title: "Pinned", color: "var(--color-md-primary)" }
       : headerForView(activeView, customBundles);
+  const emptyState = emptyStateForView(activeView, pinnedOnly, customBundles);
   const visibleStream = useMemo(
     () => limitSections(stream.sections, visibleItemLimit),
     [stream.sections, visibleItemLimit],
@@ -598,7 +620,7 @@ export const App = () => {
         )}
 
         {hydrated && stream.threadCount === 0 && !syncing && (
-          <p className={s.emptyText}>{emptyTextForView(activeView, pinnedOnly)}</p>
+          emptyState ? <EmptyState {...emptyState} /> : <InboxZero />
         )}
 
         {visibleStream.sections.map((group) => {

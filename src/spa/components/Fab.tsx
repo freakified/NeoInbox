@@ -4,7 +4,7 @@ import { useMailStore, type NewMessagePrefill } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { Icon } from "./Icon";
 import { ReminderComposer } from "./ReminderComposer";
-import { ComposePanel } from "./ComposePanel";
+import { ComposeDock, ComposePanel } from "./ComposePanel";
 import { useComposeMode } from "../lib/composePrefs";
 import s from "./Fab.module.css";
 
@@ -89,6 +89,8 @@ export const Fab = () => {
       setNewMessage({ prefill, key });
     }
   }, [newMessageRequest, clearNewMessageRequest, composeMode]);
+  const poppedReply = useMailStore((st) => st.poppedReply);
+  const clearPoppedReply = useMailStore((st) => st.clearPoppedReply);
   const reducedMotion = useReducedMotion();
   const contacts = useTopContacts(3);
 
@@ -211,15 +213,27 @@ export const Fab = () => {
         </motion.button>
       </div>
       {composerOpen && <ReminderComposer onClose={() => setComposerOpen(false)} />}
-      {newMessage && composeMode !== "thunderbird" && (
-        <ComposePanel
-          key={newMessage.key}
-          to={newMessage.to}
-          prefill={newMessage.prefill}
-          mode={composeMode}
-          onClose={() => setNewMessage(null)}
-          onReopen={() => setNewMessage({ key: Date.now() })}
-        />
+      {composeMode !== "thunderbird" && (
+        <ComposeDock>
+          {newMessage && (
+            <ComposePanel
+              key={newMessage.key}
+              to={newMessage.to}
+              prefill={newMessage.prefill}
+              mode={composeMode}
+              onClose={() => setNewMessage(null)}
+              onReopen={() => setNewMessage({ key: Date.now() })}
+            />
+          )}
+          {poppedReply && (
+            <ComposePanel
+              key={poppedReply.key}
+              reply={poppedReply}
+              mode={composeMode}
+              onClose={clearPoppedReply}
+            />
+          )}
+        </ComposeDock>
       )}
     </>
   );

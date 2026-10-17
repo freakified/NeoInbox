@@ -56,6 +56,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   toasts: [],
   pendingReplies: [],
   newMessageRequest: null,
+  poppedReply: null,
   bundleSettings: null,
   reclassifying: false,
   tripScan: null,

@@ -1,5 +1,6 @@
 import type { ComposeDraft } from "../shared/compose";
 import type { FailedCommand, TripScanStatus } from "../shared/messaging";
+import type { ComposerValue } from "../spa/components/ComposerForm";
 import type {
   Category,
   CustomBundleRecord,
@@ -173,6 +174,28 @@ export interface MailStore {
   newMessageRequest: (NewMessagePrefill & { key: number }) | null;
   startNewMessage: (prefill: NewMessagePrefill) => void;
   clearNewMessageRequest: () => void;
+  /** An in-thread reply popped out into the floating compose panel. */
+  poppedReply: PoppedReply | null;
+  popOutReply: (reply: Omit<PoppedReply, "key">) => void;
+  clearPoppedReply: () => void;
+}
+
+/**
+ * A reply moved from its thread into the floating panel. The thread's
+ * InlineReply supplies the callbacks, so sending still threads the reply.
+ */
+export interface PoppedReply {
+  key: number;
+  threadId: string;
+  /** Shown in the panel's title bar, e.g. "Re: Dinner Friday". */
+  title: string;
+  value: ComposerValue;
+  identityContext: { accountId?: string; addresses?: readonly string[] };
+  placeholder: string;
+  submit: (value: ComposerValue, send: boolean, identityId: string | undefined) => void;
+  /** Closed without sending: hand what's written back to the thread. */
+  keep: (value: ComposerValue) => void;
+  discard: (value: ComposerValue) => void;
 }
 
 export interface NewMessagePrefill {

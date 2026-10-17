@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
 import { useMailStore } from "../../store/mailStore";
+import type { PoppedReply } from "../../store/storeTypes";
 import type { ComposeMode } from "../lib/composePrefs";
 import {
   composerBody,
@@ -18,10 +19,19 @@ import s from "./ComposePanel.module.css";
  */
 let unsentNewMessage: ComposerValue | null = null;
 
-/** The floating Inbox-style new-message card the FAB opens. */
+/** Holds the open panels side by side, the first rightmost. */
+export const ComposeDock = ({ children }: { children: ReactNode }) => (
+  <div className={s.dock}>{children}</div>
+);
+
+/**
+ * The floating Inbox-style compose card: a new message from the FAB, or a
+ * reply popped out of its thread (`reply`).
+ */
 export const ComposePanel = ({
   to,
   prefill,
+  reply,
   mode,
   onClose,
   onReopen,
@@ -30,25 +40,46 @@ export const ComposePanel = ({
   to?: string[];
   /** Subject and body to start from (e.g. a forwarded trip itinerary). */
   prefill?: { subject: string; text: string; html: string };
+  /** A popped-out reply; its thread decides how it's sent, kept or discarded. */
+  reply?: PoppedReply;
   mode: Exclude<ComposeMode, "thunderbird">;
   onClose: () => void;
   /** Opens the panel again (with the unsent message); used by discard's Undo. */
-  onReopen: () => void;
+  onReopen?: () => void;
 }) => {
   const composeMessage = useMailStore((st) => st.composeMessage);
   const notify = useMailStore((st) => st.notify);
   const [value, setValue] = useState<ComposerValue>(() =>
-    prefill
-      ? { ...emptyComposerValue(), ...prefill }
-      : to
-        ? { ...emptyComposerValue(), to }
-        : (unsentNewMessage ?? emptyComposerValue()),
+    reply
+      ? reply.value
+      : prefill
+        ? { ...emptyComposerValue(), ...prefill }
+        : to
+          ? { ...emptyComposerValue(), to }
+          : (unsentNewMessage ?? emptyComposerValue()),
   );
 
   /** Folded down to its title bar, out of the way but still open. */
   const [minimized, setMinimized] = useState(false);
 
+  // A reply replaced by another popped-out one goes back to its thread, not away.
+  const latest = useRef(value);
+  latest.current = value;
+  const settled = useRef(false);
+  useEffect(
+    () => () => {
+      if (reply && !settled.current) reply.keep(latest.current);
+    },
+    [],
+  );
+
   const submit = (send: boolean, identityId: string | undefined) => {
+    settled.current = true;
+    if (reply) {
+      reply.submit(value, send, identityId);
+      onClose();
+      return;
+    }
     composeMessage(
       {
         kind: "new",
@@ -65,21 +96,27 @@ export const ComposePanel = ({
   };
 
   const close = () => {
-    unsentNewMessage = isComposerEmpty(value) ? null : value;
+    settled.current = true;
+    if (reply) reply.keep(value);
+    else unsentNewMessage = isComposerEmpty(value) ? null : value;
     onClose();
   };
 
   return (
-    <div className={clsx(s.panel, minimized && s.minimized)} role="dialog" aria-label="New message">
+    <div
+      className={clsx(s.panel, minimized && s.minimized)}
+      role="dialog"
+      aria-label={reply ? "Reply" : "New message"}
+    >
       <div
         className={s.titleBar}
         onClick={() => minimized && setMinimized(false)}
         title={minimized ? "Restore" : undefined}
       >
-        <Icon name="drafts" className={s.titleIcon} />
+        <Icon name={reply ? "reply" : "drafts"} className={s.titleIcon} />
         {/* Like Inbox, the open card's bar is just the envelope until there's a subject. */}
         <span className={s.title}>
-          {value.subject.trim() || (minimized ? "New message" : "")}
+          {reply?.title || value.subject.trim() || (minimized ? "New message" : "")}
         </span>
         <button
           type="button"
@@ -124,14 +161,20 @@ export const ComposePanel = ({
           value={value}
           onChange={setValue}
           mode={mode}
-          showSubject
+          showSubject={!reply}
           foldAddresses
           fill
-          hidePopOut
-          placeholder="Say something"
+          identityContext={reply?.identityContext}
+          placeholder={reply?.placeholder ?? "Say something"}
           focus={value.to.length ? "text" : "to"}
           onSubmit={submit}
           onDiscard={() => {
+            settled.current = true;
+            if (reply) {
+              onClose();
+              reply.discard(value);
+              return;
+            }
             const previous = value;
             unsentNewMessage = null;
             onClose();
@@ -141,7 +184,7 @@ export const ComposePanel = ({
                   label: "Undo",
                   run: () => {
                     unsentNewMessage = previous;
-                    onReopen();
+                    onReopen?.();
                   },
                 },
               ]);

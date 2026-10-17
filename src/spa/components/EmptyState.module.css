@@ -1,0 +1,79 @@
+/* Fills the visible content area (viewport less the header and the content's
+   own vertical padding) and centres in it both ways. */
+.root {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  min-height: calc(100vh - var(--header-height) - 48px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 48px;
+  text-align: center;
+  animation: fadeIn 240ms ease both;
+}
+
+/* .root for specificity over the global material-symbols-rounded rule. */
+.root .icon {
+  font-size: 128px;
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 48;
+  color: #c4c4c4;
+  margin-bottom: 20px;
+}
+
+.title {
+  margin: 0;
+  color: var(--color-md-secondary-text);
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.hint {
+  margin: 8px 0 0;
+  max-width: 420px;
+  color: var(--color-md-secondary-text);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* Inbox zero turns the whole content area sky blue, under the drawer. */
+.sky {
+  position: fixed;
+  inset: var(--header-height) 0 0 0;
+  background: #7baaf7;
+  animation: fadeIn 400ms ease both;
+}
+
+.sun {
+  width: min(320px, 70vw);
+  height: auto;
+}
+
+.cloudFar,
+.cloudNear {
+  animation: drift 9s ease-in-out infinite alternate;
+}
+
+.cloudNear {
+  animation-duration: 7s;
+  animation-direction: alternate-reverse;
+}
+
+@keyframes drift {
+  from { transform: translateX(-6px); }
+  to { transform: translateX(6px); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root,
+  .sky,
+  .cloudFar,
+  .cloudNear {
+    animation: none;
+  }
+}
