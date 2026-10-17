@@ -288,11 +288,20 @@
   font-weight: 500;
 }
 
-.navItemDisabled,
-.navItemDisabled:hover {
-  color: rgba(117, 117, 117, 0.48);
-  background: transparent;
-  cursor: default;
+/* Items that hand off to Thunderbird's own UI, with a trailing hint. */
+.navItemExternal {
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+}
+
+.navExternalIcon {
+  font-size: 16px;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.navItem:hover .navExternalIcon,
+.navItem:focus-visible .navExternalIcon {
+  opacity: 0.6;
 }
 
 .navIcon {

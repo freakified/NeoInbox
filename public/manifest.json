@@ -26,6 +26,7 @@
     "messagesMove",
     "messagesDelete",
     "accountsRead",
+    "addressBooks",
     "storage",
     "alarms",
     "tabs",

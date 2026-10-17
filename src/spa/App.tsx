@@ -31,6 +31,7 @@ import { moveRowFocus } from "./lib/rowNavigation";
 import { useSelection, visibleThreadIds } from "./lib/selection";
 import { TRIP_COLOR, TripSliceRow } from "./components/TripSliceRow";
 import { isSameView, parseHashView, viewHash } from "./lib/routing";
+import { openThunderbirdContacts, openThunderbirdFolder } from "./lib/thunderbirdViews";
 import s from "./App.module.css";
 
 const STREAM_PAGE_SIZE = 80;
@@ -312,7 +313,6 @@ export const App = () => {
 
   const navClass = (view: StreamView) =>
     `${s.navItem} ${isSameView(activeView, view) ? s.navItemActive : ""}`;
-  const unsupportedClass = `${s.navItem} ${s.navItemDisabled}`;
   const showDoneAll = activeView.type === "inbox" || activeView.type === "bundle";
   const header =
     pinnedOnly && activeView.type === "inbox"
@@ -498,17 +498,20 @@ export const App = () => {
                 <Icon name="pan_tool_alt" className={s.navIcon} />
                 <span>Reminders</span>
               </button>
-              <button type="button" className={unsupportedClass} disabled title="Coming later">
+              <button type="button" className={`${s.navItem} ${s.navItemExternal}`} onClick={() => void openThunderbirdFolder("trash")} title="Opens in Thunderbird">
                 <Icon name="delete" className={s.navIcon} />
                 <span>Trash</span>
+                <Icon name="open_in_new" className={s.navExternalIcon} />
               </button>
-              <button type="button" className={unsupportedClass} disabled title="Coming later">
+              <button type="button" className={`${s.navItem} ${s.navItemExternal}`} onClick={() => void openThunderbirdFolder("junk")} title="Opens in Thunderbird">
                 <Icon name="report" className={s.navIcon} />
                 <span>Spam</span>
+                <Icon name="open_in_new" className={s.navExternalIcon} />
               </button>
-              <button type="button" className={unsupportedClass} disabled title="Coming later">
+              <button type="button" className={`${s.navItem} ${s.navItemExternal}`} onClick={() => void openThunderbirdContacts()} title="Opens in Thunderbird">
                 <Icon name="contacts" className={s.navIcon} />
                 <span>Contacts</span>
+                <Icon name="open_in_new" className={s.navExternalIcon} />
               </button>
             </div>
 

@@ -661,6 +661,12 @@ export class FakeMessenger {
         create: async () => ({ id: 1 }),
         update: async () => ({ id: 1 }),
       },
+      mailTabs: {
+        query: async () => [],
+        create: async () => ({ id: 2 }),
+        update: async () => ({ id: 2 }),
+      },
+      addressBooks: { openUI: async () => ({ id: 3 }) },
       browserAction: { onClicked: new Event<[]>() },
       windows: {
         getLastFocused: async () => ({ id: 1, type: "normal" }),
