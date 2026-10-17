@@ -12,5 +12,7 @@ export default defineConfig({
     setupFiles: ["src/test/setup.ts"],
     // The default reporter hides console output from passing tests.
     reporters: ["verbose"],
+    // Scoring 1,000+ real samples runs well past the 5s default.
+    testTimeout: 120_000,
   },
 });

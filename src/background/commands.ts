@@ -19,16 +19,12 @@ import type { ArchivedCopy } from "./archiveFolders";
 import { applyClassification, carryClassification } from "../classifier/version";
 import { headerToRawMessage } from "./messageMap";
 import { snoozeMessage, wakeSnoozedMessage } from "./snooze";
-import {
-  getLastProgress,
-  hydrateDetails,
-  raiseInboxScanCap,
-  runBackfill,
-  serialized,
-} from "./backfill";
+import { raiseInboxScanCap, runBackfill } from "./backfill";
+import { hydrateDetails } from "./detailsFill";
+import { getLastProgress, serialized } from "./scanQueue";
 import { scanActive } from "./scanGuard";
 import { runCompose } from "./compose";
-import { cancelTripScan, getTripScanStatus, runTripScan } from "./extract";
+import { cancelTripScan, getTripScanStatus, runTripScan, writeTrips } from "./extract";
 import { pushMyEmails } from "./sync";
 import { applyLocalState } from "./localState";
 import { broadcast } from "./port";
@@ -372,6 +368,24 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
         result = { outcome: "failed", error: e instanceof Error ? e.message : String(e) };
       }
       broadcast({ type: "compose-result", requestId: msg.requestId, ...result });
+      return;
+    }
+    case "write-trips": {
+      const { type: _type, ...change } = msg;
+      await writeTrips(change);
+      return;
+    }
+    case "heal-message": {
+      // The SPA has already re-keyed its own copy; this mirrors it in the
+      // cache. A snoozed row is keyed by its snooze record, so it stays put.
+      await db.transaction("rw", db.messages, async () => {
+        const stale = await db.messages.get(msg.staleId);
+        if (!stale || stale.snoozed) return;
+        await db.messages.delete(msg.staleId);
+        if (!(await db.messages.get(msg.liveId))) {
+          await db.messages.put({ ...stale, id: msg.liveId });
+        }
+      });
       return;
     }
   }

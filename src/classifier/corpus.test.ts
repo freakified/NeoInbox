@@ -51,13 +51,13 @@ describe("trip candidacy", () => {
     });
   }
 
-  it("leaves candidates unbundled rather than dropping them into Updates", () => {
-    // An unclustered booking must stay visible in the inbox. Without the
-    // explicit null return in classifyByRules these fall through to
-    // matchesUpdates and vanish into a bundle.
+  it("files candidates under Updates until a trip claims them", () => {
+    // Inbox put travel mail no trip had claimed in Updates. The explicit
+    // return in classifyByRules is what keeps an e-ticket's "receipt" or
+    // "payment" wording from landing it in Purchases or Finance first.
     for (const entry of tripCandidacy.filter((c) => c.expect)) {
       const header = { author: entry.author, subject: entry.subject };
-      expect(classifyByRules(extractFeatures(header, {}))).toBeNull();
+      expect(classifyByRules(extractFeatures(header, {}))).toBe("updates");
     }
   });
 });

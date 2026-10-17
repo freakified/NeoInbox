@@ -13,7 +13,7 @@
  * New detectors register a set in SAMPLE_SETS selecting their candidates.
  */
 import { collectBodies, isTripCandidate, type Part } from "./extract";
-import { withTimeout } from "./backfill";
+import { withTimeout } from "./scanQueue";
 import type { MailSample } from "../classifier/samples";
 import { resolveLiveMessageId } from "../shared/liveMessage";
 import { pinKeyOf } from "../shared/pinKey";

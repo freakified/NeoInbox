@@ -29,13 +29,7 @@
     "addressBooks",
     "storage",
     "alarms",
-    "tabs",
-    "https://api-free.deepl.com/*",
-    "https://api.deepl.com/*",
-    "https://translation.googleapis.com/*",
-    "https://api.cognitive.microsofttranslator.com/*",
-    "https://libretranslate.com/*",
-    "http://localhost/*",
-    "http://127.0.0.1/*"
-  ]
+    "tabs"
+  ],
+  "optional_permissions": ["*://*/*"]
 }

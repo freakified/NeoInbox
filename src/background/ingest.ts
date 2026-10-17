@@ -18,6 +18,7 @@ import {
 import { setPinned } from "./localState";
 
 import { DETAILS_LAZY, MESSAGE_DETAILS_VERSION } from "../shared/details";
+import { snippetFromPart } from "../shared/snippet";
 
 export { DETAILS_LAZY, MESSAGE_DETAILS_VERSION };
 
@@ -379,6 +380,7 @@ export interface MessageDetails {
   attachments: AttachmentSummary[];
   references: string[];
   inReplyTo: string[];
+  snippet: string;
 }
 
 const messageIdTokens = (value: string): string[] => {
@@ -429,12 +431,14 @@ export const extractMessageDetails = async (
   let cidRefs = new Set<string>();
   let references: string[] = [];
   let inReplyTo: string[] = [];
+  let snippet = "";
   // No body available: render every attachment as a card, and thread on
   // subject/participant alone.
   if (body.full) {
     cidRefs = scanCidRefs(body.full);
     references = headerValues(body.full.headers, "references").flatMap(messageIdTokens);
     inReplyTo = headerValues(body.full.headers, "in-reply-to").flatMap(messageIdTokens);
+    snippet = snippetFromPart(body.full);
   }
 
   const attachments = list
@@ -446,7 +450,7 @@ export const extractMessageDetails = async (
       partName: a.partName,
     }));
 
-  return { attachments, references, inReplyTo };
+  return { attachments, references, inReplyTo, snippet };
 }
 
 /**
@@ -457,7 +461,11 @@ export const needsMessageDetails = (m: RawMessage): boolean =>
   !Array.isArray(m.attachments) ||
   !Array.isArray(m.references) ||
   !Array.isArray(m.inReplyTo) ||
-  (m.detailsVersion ?? 0) === 0;
+  (m.detailsVersion ?? 0) === 0 ||
+  // Inbox rows from before the latest details (the list snippet) get them
+  // filled in; nothing else does. Done and snoozed mail lives in the archive,
+  // and NeoInbox never fetches a body from there.
+  (m.origin === "inbox" && !m.snoozed && (m.detailsVersion ?? 0) < MESSAGE_DETAILS_VERSION);
 
 export const canReuseMessageDetails = (
   cached: RawMessage | undefined,
@@ -484,6 +492,7 @@ export const applyMessageDetails = async (
     raw.attachments = cached.attachments;
     raw.references = cached.references;
     raw.inReplyTo = cached.inReplyTo;
+    raw.snippet = cached.snippet;
     raw.detailsVersion = cached.detailsVersion ?? 0;
     return;
   }
@@ -492,6 +501,7 @@ export const applyMessageDetails = async (
   raw.attachments = details.attachments;
   raw.references = details.references;
   raw.inReplyTo = details.inReplyTo;
+  raw.snippet = details.snippet;
   raw.detailsVersion = MESSAGE_DETAILS_VERSION;
 }
 
@@ -512,6 +522,7 @@ export const applyMessageDetailsForOrigin = async (
     raw.attachments = cached.attachments;
     raw.references = cached.references;
     raw.inReplyTo = cached.inReplyTo;
+    raw.snippet = cached.snippet;
     raw.detailsVersion = cached.detailsVersion ?? 0;
     return;
   }
@@ -520,6 +531,7 @@ export const applyMessageDetailsForOrigin = async (
   raw.attachments = [];
   raw.references = details.references;
   raw.inReplyTo = details.inReplyTo;
+  raw.snippet = details.snippet;
   raw.detailsVersion = MESSAGE_DETAILS_VERSION;
 }
 

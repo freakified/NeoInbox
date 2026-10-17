@@ -1,11 +1,6 @@
 import { handleSnoozeAlarm, snoozeAlarmName, wakeSnoozedMessage } from "./snooze";
-import {
-  retryIncompleteClassifications,
-  runBackfill,
-  runIncrementalSync,
-  runStartupSync,
-  startClassifierVersionSweep,
-} from "./backfill";
+import { runBackfill, runIncrementalSync, runStartupSync } from "./backfill";
+import { retryIncompleteClassifications, startClassifierVersionSweep } from "./classifierSweep";
 import { handleCommand } from "./commands";
 import { wireSyncEngine } from "./sync";
 import { cleanupLegacyTags } from "./legacyTags";

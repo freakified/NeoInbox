@@ -84,19 +84,19 @@ export const corpus: CorpusCase[] = [
 
   // ---------------------------------------------------------------- travel
   // There is no Travel bundle: itinerary mail belongs to the trips layer, and
-  // until it lands in a trip it sits loose in the inbox. So the interesting
-  // assertion for these is trip candidacy, not category — see tripCandidacy.
+  // what no trip claims is filed under Updates, as Inbox did. Whether it is
+  // read for a trip at all is trip candidacy — see tripCandidacy.
   {
     name: "an airline itinerary from a sending subdomain",
     author: "United Airlines <no-reply@email.united.com>",
     subject: "Your itinerary for SFO to LHR",
-    expect: null,
+    expect: "updates",
   },
   {
     name: "a hotel booking confirmation",
     author: "Marriott <reservations@email.marriott.com>",
     subject: "Reservation confirmed — Lisbon, 14 Sep",
-    expect: null,
+    expect: "updates",
   },
   {
     name: "a booking confirmation from an unknown travel brand",
@@ -104,7 +104,7 @@ export const corpus: CorpusCase[] = [
     // sender — which is how most smaller operators send.
     author: "Bookings <bookings@some-boutique-hotel.example>",
     subject: "Your booking confirmation",
-    expect: null,
+    expect: "updates",
   },
   {
     name: "an airline fare sale is not itinerary mail",

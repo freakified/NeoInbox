@@ -362,6 +362,45 @@ const requestOpenAICompatible = async (
   return translated;
 };
 
+/** Where a config's requests go: its own endpoint, else the provider's default. */
+const translationUrl = (config: TranslationConfig): string => {
+  if (config.provider === "deepl") return config.endpoint || "https://api-free.deepl.com/v2/translate";
+  if (config.provider === "google") return "https://translation.googleapis.com/";
+  if (config.provider === "azure") return config.endpoint || "https://api.cognitive.microsofttranslator.com";
+  if (config.provider === "openaiCompatible") {
+    return config.endpoint || "http://localhost:1234/v1/chat/completions";
+  }
+  return config.endpoint;
+};
+
+/**
+ * The host a config needs, as a match pattern. Match patterns carry no port,
+ * so `http://localhost/*` covers a local model on any port.
+ */
+export const translationOrigin = (config: TranslationConfig): string | null => {
+  try {
+    const url = new URL(translationUrl(config));
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    return `${url.protocol}//${url.hostname}/*`;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Host access is an optional permission, asked for one provider host at a
+ * time when the user configures or first uses translation, so installing
+ * NeoInbox grants it no network access at all. Thunderbird only shows the
+ * prompt from a user gesture, so callers make this their first await.
+ */
+export const ensureTranslationPermission = async (config: TranslationConfig): Promise<boolean> => {
+  const origin = translationOrigin(config);
+  if (!origin) return false;
+  const permissions = { origins: [origin] };
+  if (await messenger.permissions.contains(permissions)) return true;
+  return messenger.permissions.request(permissions);
+};
+
 const requestTranslation = async (text: string): Promise<string> => {
   const config = getTranslationConfig();
   if (config.provider === "deepl") return requestDeepL(text, config);
@@ -409,6 +448,15 @@ const translateHtml = async (rawHtml: string): Promise<string> => {
 export const translateMessageToEnglish = async (
   message: RawMessage,
 ): Promise<TranslationRecord> => {
+  const config = getTranslationConfig();
+  if (!(await ensureTranslationPermission(config))) {
+    const origin = translationOrigin(config);
+    throw new Error(
+      origin
+        ? `NeoInbox needs permission to reach ${new URL(origin.replace("/*", "/")).hostname} to translate.`
+        : "Add a valid translation endpoint in Settings.",
+    );
+  }
   await pruneExpiredTranslations();
 
   const part = await messenger.messages.getFull(message.id);

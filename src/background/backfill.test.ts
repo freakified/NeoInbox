@@ -257,7 +257,9 @@ describe("classifier version sweep", () => {
   });
 });
 
-describe("classifier version sweep across chunk boundaries", () => {
+// Each test runs a real 520-message backfill before the sweep, which under a
+// parallel run can brush the 5s default on its own.
+describe("classifier version sweep across chunk boundaries", { timeout: 20_000 }, () => {
   // The real archive backlog runs to tens of thousands of rows, so the sweep
   // has to chunk. These cover the properties that make it safe to interrupt.
   const TOTAL = 520; // one full chunk of 500, plus a remainder

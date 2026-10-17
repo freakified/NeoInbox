@@ -1,0 +1,168 @@
+import { bufferDelta, flushDelta } from "./deltas";
+import { PENDING_REPLY_TIMEOUT_MS, pendingCompose, pendingReplyTimers } from "./composeSlice";
+import type { StoreGet, StoreSet, ToastRecord } from "./storeTypes";
+import { failureLabel, nextToastId, TOAST_LIMIT } from "./toastsSlice";
+import { loadTripMembers } from "./history";
+import { log } from "../shared/log";
+import type { ServerMsg } from "../shared/messaging";
+import { pinKeyOf } from "../shared/pinKey";
+import type { TripMembershipRecord } from "../shared/types";
+
+/**
+ * A trip the clusterer just grew may now hold Done mail older than the
+ * loaded history; page those rows in so the trip shows all of its mail.
+ */
+const loadMissingTripMembers = async (
+  set: StoreSet,
+  get: StoreGet,
+  memberships: readonly TripMembershipRecord[],
+): Promise<void> => {
+  const loaded = new Set(Object.values(get().messagesById).map(pinKeyOf));
+  const missing = memberships.filter((m) => m.tripId && !loaded.has(m.key));
+  if (!missing.length) return;
+  const rows = await loadTripMembers(missing);
+  if (!rows.length) return;
+  const map = { ...get().messagesById };
+  for (const m of rows) map[m.id] ??= m;
+  set({ messagesById: map });
+};
+
+export const applyServerMsg = (
+  set: StoreSet,
+  get: StoreGet,
+  msg: ServerMsg,
+): void => {
+  switch (msg.type) {
+    case "delta":
+      bufferDelta(set, get, msg);
+      return;
+    case "myEmails":
+      set({ myEmails: new Set(msg.emails) });
+      return;
+    case "backfill-progress":
+      set({
+        syncProgress: {
+          scanned: msg.scanned,
+          classified: msg.classified,
+          done: msg.done,
+          error: msg.error ?? null,
+        },
+      });
+      return;
+    case "inbox-window":
+      set({
+        inboxWindow: { cap: msg.cap, skipped: msg.skipped },
+        loadingMoreInbox: false,
+      });
+      return;
+    case "command-failed": {
+      // The rollback restores the pre-op row, so it must land after any delta
+      // still buffered for that message rather than be overwritten by it.
+      flushDelta(set, get);
+      const pending = { ...get().pendingOps };
+      const op = pending[msg.messageId];
+      const map = { ...get().messagesById };
+      if (op) {
+        map[msg.messageId] = op.message;
+        delete pending[msg.messageId];
+      }
+      const wakeAt = op?.kind === "snooze" ? op.wakeAt : undefined;
+      const snoozesByMessageId = { ...get().snoozesByMessageId };
+      if (msg.command === "snooze") delete snoozesByMessageId[msg.messageId];
+      if (msg.command === "unsnooze" && op?.kind === "unsnooze" && op.snooze) {
+        snoozesByMessageId[msg.messageId] = op.snooze;
+      }
+      const toast: ToastRecord = {
+        id: nextToastId(),
+        message: `${failureLabel(msg.command)} — ${msg.reason}`,
+        retry: { kind: msg.command, messageId: msg.messageId, wakeAt },
+      };
+      const toasts = [...get().toasts, toast].slice(-TOAST_LIMIT);
+      set({ messagesById: map, pendingOps: pending, snoozesByMessageId, toasts });
+      log.warn("store", "command failed", msg);
+      return;
+    }
+    case "reclassify-done": {
+      const message =
+        msg.moved === 0
+          ? `Checked ${msg.scanned} ${msg.scanned === 1 ? "message" : "messages"} — everything already in place`
+          : `Checked ${msg.scanned} ${msg.scanned === 1 ? "message" : "messages"} — ${msg.moved} moved`;
+      const toast: ToastRecord = { id: nextToastId(), message };
+      set({ reclassifying: false, toasts: [...get().toasts, toast].slice(-TOAST_LIMIT) });
+      return;
+    }
+    case "compose-result": {
+      const toastId = pendingCompose.get(msg.requestId);
+      pendingCompose.delete(msg.requestId);
+      const toasts = get().toasts.filter((t) => t.id !== toastId);
+      const message =
+        msg.outcome === "sent"
+          ? "Message sent"
+          : msg.outcome === "failed"
+            ? `Couldn't send${msg.error ? ` — ${msg.error}` : ""}. It's still open in Thunderbird.`
+            : null;
+      if (message) toasts.push({ id: nextToastId(), message });
+      // A failed send is still open in Thunderbird, so its preview goes; a
+      // sent one stays until its Sent copy replaces it.
+      const pendingReplies =
+        msg.outcome === "sent"
+          ? get().pendingReplies.map((r) =>
+              r.requestId === msg.requestId ? { ...r, status: "sent" as const } : r,
+            )
+          : get().pendingReplies.filter((r) => r.requestId !== msg.requestId);
+      if (msg.outcome === "sent" && pendingReplies.some((r) => r.requestId === msg.requestId)) {
+        pendingReplyTimers.set(
+          msg.requestId,
+          setTimeout(() => get().settlePendingReply(msg.requestId), PENDING_REPLY_TIMEOUT_MS),
+        );
+      }
+      set({ toasts: toasts.slice(-TOAST_LIMIT), pendingReplies });
+      return;
+    }
+    case "trip-scan-progress": {
+      const { type: _type, ...status } = msg;
+      const wasRunning = get().tripScan?.running;
+      set({ tripScan: status });
+      // A restarted background answers hello with the last *stored* scan;
+      // only a run that just ended deserves a toast.
+      const justEnded = status.error !== undefined || Date.now() - (status.finishedAt ?? 0) < 60_000;
+      if (wasRunning && !status.running && justEnded) {
+        const message = status.error
+          ? "Couldn't finish looking for trips"
+          : status.cancelled
+            ? `Stopped looking for trips after ${status.processed.toLocaleString()} messages`
+            : `Trip scan done — ${(status.trips ?? 0).toLocaleString()} ${status.trips === 1 ? "trip" : "trips"}`;
+        set({ toasts: [...get().toasts, { id: nextToastId(), message }].slice(-TOAST_LIMIT) });
+      }
+      return;
+    }
+    case "trips-delta": {
+      // Already persisted to Dexie. Merge into the store, but a manual
+      // membership made here always beats an incoming auto row for the same
+      // key — the clusterer read our state before this user action landed.
+      // An authoritative delta is what the database now holds, manual rows
+      // included (another tab's edit, or our own echoed back).
+      const tripsById = { ...get().tripsById };
+      for (const id of msg.removedTripIds) delete tripsById[id];
+      for (const trip of msg.trips) tripsById[trip.id] = trip;
+      const membershipByKey = { ...get().tripMembershipByKey };
+      const keepManual = (key: string): boolean =>
+        !msg.authoritative && membershipByKey[key]?.source === "manual";
+      for (const key of msg.removedMembershipKeys) {
+        if (keepManual(key)) continue;
+        delete membershipByKey[key];
+      }
+      for (const m of msg.memberships) {
+        if (keepManual(m.key)) continue;
+        membershipByKey[m.key] = m;
+      }
+      set({ tripsById, tripMembershipByKey: membershipByKey });
+      if (get().historyFrom) void loadMissingTripMembers(set, get, msg.memberships);
+      return;
+    }
+    case "error":
+      log.warn("store", "server error", msg.message);
+      return;
+  }
+}
+

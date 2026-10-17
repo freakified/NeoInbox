@@ -64,7 +64,8 @@
   box-shadow: var(--shadow-elevation-2);
   /* 28px left puts the menu icon over the drawer's icon column and the title
      over its labels, as Inbox lined them up. */
-  padding: 12px 16px 12px 28px;
+  height: var(--header-height);
+  padding: 0 16px 0 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -113,6 +114,66 @@
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* Inbox's search: a translucent bar in the app bar that turns white when
+   focused. It starts where the content column does when the drawer is open. */
+.search {
+  flex: 1 1 auto;
+  max-width: 800px;
+  min-width: 0;
+  margin: 0 24px;
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+.search:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.search:focus-within {
+  background: #fff;
+  color: var(--color-md-secondary-text);
+  box-shadow: var(--shadow-elevation-2);
+}
+
+.searchIcon {
+  display: inline-flex;
+  font-size: 24px;
+  margin-right: 16px;
+  opacity: 0.9;
+  cursor: text;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+}
+
+.search:focus-within .searchInput {
+  color: var(--color-md-on-surface);
+}
+
+.searchInput::placeholder {
+  color: inherit;
+  opacity: 0.9;
+}
+
+.searchInput::-webkit-search-cancel-button {
+  display: none;
 }
 
 .syncText {
@@ -439,6 +500,12 @@
 }
 
 @media (min-width: 980px) {
+  /* Lines the search bar up with the cards (content margin + its centring). */
+  .headerLeft {
+    width: calc(var(--drawer-width) + 60px);
+    flex: none;
+  }
+
   .drawerOpen .content {
     width: calc(100% - var(--drawer-width) - 128px);
     margin-left: calc(var(--drawer-width) + 64px);
@@ -468,7 +535,40 @@
   }
 
   .header {
-    padding: 10px 12px;
+    padding: 0 12px;
+  }
+
+  /* No room for a bar: the icon alone, which opens one across the app bar. */
+  .search {
+    flex: none;
+    margin: 0 0 0 auto;
+    padding: 0 8px;
+    background: transparent;
+  }
+
+  .search:hover {
+    background: transparent;
+  }
+
+  .searchIcon {
+    margin-right: 0;
+    cursor: pointer;
+  }
+
+  .searchInput {
+    width: 0;
+  }
+
+  .search:focus-within {
+    position: absolute;
+    inset: 7px 8px;
+    height: auto;
+    z-index: 1;
+    background: #fff;
+  }
+
+  .search:focus-within .searchIcon {
+    margin-right: 12px;
   }
 
   .headerRight {

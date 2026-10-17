@@ -49,7 +49,8 @@ This is a mail client, so it's worth being precise:
   `src/spa/lib/translation.ts`. It is the optional translate-message feature, it
   is off until you enter your own provider and key in Settings, and you can
   point it at a LibreTranslate instance or a local OpenAI-compatible model
-  instead of a cloud API.
+  instead of a cloud API. NeoInbox installs with no host permissions at all;
+  Thunderbird asks you to allow the one provider host when you set it up.
 
 ## Keyboard shortcuts
 
@@ -71,8 +72,8 @@ Press <kbd>?</kbd> in the app for the full list.
 Requires Thunderbird 115 or newer.
 
 ```sh
-npm install
-npm run build
+pnpm install
+pnpm build
 ```
 
 That produces `dist/`, an unpacked MailExtension.
@@ -90,9 +91,9 @@ window by another 1,000 and rescans.
 ## Development
 
 ```sh
-npm run dev        # vite build --watch
-npm test           # vitest
-npm run typecheck  # tsc --noEmit
+pnpm dev           # vite build --watch
+pnpm test          # vitest
+pnpm typecheck     # tsc --noEmit
 ```
 
 After a rebuild, hit **Reload** next to the extension in Debug Add-ons.
@@ -100,15 +101,15 @@ After a rebuild, hit **Reload** next to the extension in Debug Add-ons.
 ### Without Thunderbird
 
 ```sh
-npm run harness    # http://localhost:5199/dev.html
-npm run shot       # headless Chrome screenshot -> shots/inbox.png
+pnpm harness       # http://localhost:5199/dev.html
+pnpm shot          # headless Chrome screenshot -> shots/inbox.png
 ```
 
 The harness runs the real background and SPA in a plain browser tab against
 the fake `messenger` from the tests, seeded with a mailbox that fills every
 bundle, a few threads and a trip (`src/dev/seed.ts`). Each load starts fresh.
 `window.neo` drives it from the console — `await neo.deliver("promo")`,
-`neo.mail.hang("getFull")`, `neo.store()`. `npm run shot` takes steps in
+`neo.mail.hang("getFull")`, `neo.store()`. `pnpm shot` takes steps in
 order (`--click "text=Promos" --shot promos --eval "neo.deliver()"`); see
 `scripts/shot.mjs`. Anything the fake doesn't model (real MIME, compose,
 Thunderbird quirks) still needs the real thing.
@@ -143,7 +144,6 @@ Layout:
 - Your own replies thread into a conversation by subject and participant until
   you open it, which is when their `References` headers are fetched. A reply
   whose subject was rewritten mid-thread may sit apart until then.
-- Trash, Spam and Contacts are placeholders in the drawer.
 - Inline `cid:` images in message bodies don't render yet.
 
 ## License

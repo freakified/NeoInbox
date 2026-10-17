@@ -13,11 +13,12 @@ import { matchesUpdates } from "./rules/updates";
 /**
  * Changing any rule below means bumping CLASSIFIER_VERSION in ./version.
  *
- * Travel yields null rather than a category: there is no Travel bundle, so
- * itinerary mail belongs loose in the inbox until a trip claims it. It has to
- * be an explicit early return, not an omission — drop it and a booking
- * confirmation falls through to matchesUpdates and gets buried in Updates,
- * which is the one place an unclustered reservation must never end up.
+ * Travel goes to Updates, as Google Inbox filed travel mail no trip had
+ * claimed. A booking that is in a trip still shows there: the stream groups
+ * by trip membership before category. Airline marketing never gets here —
+ * matchesTravel steps aside for a promotional subject, and Promos takes it.
+ * It is an explicit early return so purchases and finance, whose wording
+ * ("receipt", "payment") overlaps an e-ticket's, never claim a booking first.
  *
  * Trip candidacy is decided separately (see isTripCandidate) and never depends
  * on this result, so a user rule routing a travel sender elsewhere still wins
@@ -33,7 +34,7 @@ import { matchesUpdates } from "./rules/updates";
 export const classifyByRules = (f: Features): Category | null => {
   if (matchesForums(f)) return "forums";
   if (matchesPersonal(f)) return null;
-  if (matchesTravel(f)) return null;
+  if (matchesTravel(f)) return "updates";
   if (matchesPurchases(f)) return "purchases";
   if (matchesFinance(f)) return "finance";
   if (matchesSocial(f)) return "social";

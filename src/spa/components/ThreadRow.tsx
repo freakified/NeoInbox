@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import type { Thread } from "../../shared/types";
+import type { RawMessage, Thread } from "../../shared/types";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate, formatTimeAgo } from "../lib/dateBucket";
 import { useShowDeleteActions } from "../lib/deleteActionPrefs";
@@ -64,6 +64,11 @@ export const ThreadRow = ({
   const initial = firstSender ? senderInitial(firstSender.author) : "?";
   const attachmentRefs = collectAttachments(t.messages);
   const hasDraft = t.messages.some((m) => m.origin === "draft");
+  // Inbox's grey text after the subject: the newest message's own words.
+  const snippet = t.messages.reduce<RawMessage | undefined>(
+    (newest, m) => (m.snippet && (!newest || m.date >= newest.date) ? m : newest),
+    undefined,
+  )?.snippet;
   // Whole thread archived: bundle and done views mix these with inbox threads.
   const isDone =
     t.messages.some((m) => m.origin === "done") &&
@@ -125,6 +130,7 @@ export const ThreadRow = ({
             <>
               {hasDraft && <span className={s.draftLabel}>Draft </span>}
               {t.subject || "(no subject)"}
+              {snippet && <span className={s.snippet}> – {snippet}</span>}
             </>
           }
           subline={woke}

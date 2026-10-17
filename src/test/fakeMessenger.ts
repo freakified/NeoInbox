@@ -234,6 +234,7 @@ export class FakeMessenger {
     sent: [] as messenger.compose.ComposeDetails[],
     /** Windows focused through windows.update, in order. */
     focusedWindows: [] as number[],
+    quickFilters: [] as { tabId: number; properties: messenger.mailTabs._SetQuickFilterProperties }[],
   };
 
   /** Open compose windows by tab id; tab and window ids are the same here. */
@@ -716,8 +717,15 @@ export class FakeMessenger {
         query: async () => [],
         create: async () => ({ id: 2 }),
         update: async () => ({ id: 2 }),
+        setQuickFilter: async (
+          tabId: number,
+          properties: messenger.mailTabs._SetQuickFilterProperties,
+        ) => {
+          self.calls.quickFilters.push({ tabId, properties });
+        },
       },
       addressBooks: { openUI: async () => ({ id: 3 }) },
+      permissions: { contains: async () => true, request: async () => true },
       browserAction: { onClicked: new Event<[]>() },
       windows: {
         getLastFocused: async () => ({ id: 1, type: "normal" }),

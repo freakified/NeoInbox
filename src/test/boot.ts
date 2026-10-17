@@ -17,7 +17,11 @@ export interface Booted {
   useMailStore: (typeof import("../store/mailStore"))["useMailStore"];
   store: () => ReturnType<(typeof import("../store/mailStore"))["useMailStore"]["getState"]>;
   deriveStream: (typeof import("../store/stream"))["deriveStream"];
-  backfill: typeof import("../background/backfill");
+  /** The scan, details and classifier-sweep modules, as one namespace. */
+  backfill: typeof import("../background/backfill") &
+    typeof import("../background/detailsFill") &
+    typeof import("../background/classifierSweep") &
+    typeof import("../background/scanQueue");
 }
 
 export interface BootOptions {
@@ -43,7 +47,12 @@ export const boot = async (
   const { wireSyncEngine } = await import("../background/sync");
   const { onCommand, startPortServer } = await import("../background/port");
   const { handleCommand } = await import("../background/commands");
-  const backfill = await import("../background/backfill");
+  const backfill = {
+    ...(await import("../background/backfill")),
+    ...(await import("../background/detailsFill")),
+    ...(await import("../background/classifierSweep")),
+    ...(await import("../background/scanQueue")),
+  };
   const { useMailStore } = await import("../store/mailStore");
   const { deriveStream } = await import("../store/stream");
 

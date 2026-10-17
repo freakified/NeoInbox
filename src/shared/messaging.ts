@@ -9,6 +9,19 @@ import type {
 
 export const PORT_NAME = "neoinbox";
 
+/**
+ * An SPA trip edit. The background is the only writer to trips and
+ * tripMemberships, so these queue behind the auto-clusterer instead of racing
+ * it. deleteTripIds names trips the SPA believes are now empty; the background
+ * re-checks that against the stored memberships before deleting.
+ */
+export interface TripWrite {
+  trips: TripRecord[];
+  memberships: TripMembershipRecord[];
+  deleteTripIds: string[];
+  deleteMembershipKeys: string[];
+}
+
 export type ClientMsg =
   | { type: "hello" }
   | { type: "pin"; messageId: number; pinned: boolean }
@@ -42,7 +55,13 @@ export type ClientMsg =
    * `rebuild` deletes the auto-built trips and re-reads everything first.
    */
   | { type: "trip-scan"; archive: boolean; rebuild?: boolean }
-  | { type: "trip-scan-cancel" };
+  | { type: "trip-scan-cancel" }
+  | ({ type: "write-trips" } & TripWrite)
+  /**
+   * A cached row's TB id turned out stale: re-key it to the live id, or drop
+   * it when the live id is already cached (see healStaleMessage).
+   */
+  | { type: "heal-message"; staleId: number; liveId: number };
 
 /** Progress of the archive trip scan; the last finished one is persisted. */
 export interface TripScanStatus {
@@ -88,12 +107,14 @@ export type ServerMsg =
    */
   | { type: "inbox-window"; cap: number; skipped: number }
   /**
-   * Auto-clusterer output (already persisted to Dexie by the background).
-   * memberships only ever carry source "auto" rows; the SPA must keep any
-   * local manual row over an incoming auto row for the same key.
+   * Trip rows already persisted to Dexie by the background. Auto-clusterer
+   * output only ever carries auto rows, and the SPA must keep any local manual
+   * row over them for the same key. `authoritative` deltas (a write-trips
+   * echo, a full reset) are what the database now holds and apply as is.
    */
   | {
       type: "trips-delta";
+      authoritative: boolean;
       trips: TripRecord[];
       removedTripIds: string[];
       memberships: TripMembershipRecord[];

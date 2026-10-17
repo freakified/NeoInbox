@@ -30,14 +30,14 @@ import { matchesTravel } from "../classifier/rules/travel";
 import { findLegs, findFlights } from "../classifier/extractors/flights";
 import { findConfirmationCodes, findDates } from "../classifier/extractors/text";
 import { buildExtractorInput } from "../classifier/samples";
-import { withTimeout } from "./backfill";
+import { withTimeout } from "./scanQueue";
 import { broadcast } from "./port";
 import { resolveLiveMessageId } from "../shared/liveMessage";
 import { log } from "../shared/log";
 import { pinKeyOf } from "../shared/pinKey";
 import { parseSender } from "../shared/senders";
 import { clusterTrips } from "../shared/tripCluster";
-import type { TripScanStatus } from "../shared/messaging";
+import type { TripScanStatus, TripWrite } from "../shared/messaging";
 import type {
   RawMessage,
   ReservationRecord,
@@ -242,7 +242,56 @@ const sweepReservations = async (options: SweepOptions = {}): Promise<number> =>
  * and memberships fresh so a manual assignment the SPA just saved always
  * wins; only auto rows are ever written or deleted here.
  */
-const recluster = async (report?: TripExtractReport): Promise<void> => {
+/**
+ * Every write to trips and tripMemberships runs through this queue, one at a
+ * time: the clusterer's read-compute-write, a reset, and the SPA's edits. A
+ * manual edit landing in the middle of a recluster would otherwise be judged
+ * against a picture the clusterer read before it.
+ */
+let tripWrites: Promise<unknown> = Promise.resolve();
+const withTripWrites = <T>(work: () => Promise<T>): Promise<T> => {
+  const run = tripWrites.then(work, work);
+  tripWrites = run.catch(() => undefined);
+  return run;
+};
+
+/** Apply an SPA trip edit and echo what landed to every open tab. */
+export const writeTrips = (change: TripWrite): Promise<void> =>
+  withTripWrites(async () => {
+    const kept: TripRecord[] = [];
+    const deleted: string[] = [];
+    await db.transaction("rw", db.trips, db.tripMemberships, async () => {
+      if (change.trips.length) await db.trips.bulkPut(change.trips);
+      if (change.memberships.length) await db.tripMemberships.bulkPut(change.memberships);
+      if (change.deleteMembershipKeys.length) {
+        await db.tripMemberships.bulkDelete(change.deleteMembershipKeys);
+      }
+      for (const id of change.deleteTripIds) {
+        // The SPA judged this trip empty from its own copy; an auto membership
+        // the clusterer wrote since then says otherwise, and keeps it.
+        if (await db.tripMemberships.where("tripId").equals(id).count()) {
+          const trip = await db.trips.get(id);
+          if (trip) kept.push(trip);
+          continue;
+        }
+        await db.trips.delete(id);
+        deleted.push(id);
+      }
+    });
+    broadcast({
+      type: "trips-delta",
+      authoritative: true,
+      trips: [...change.trips, ...kept],
+      removedTripIds: deleted,
+      memberships: change.memberships,
+      removedMembershipKeys: change.deleteMembershipKeys,
+    });
+  });
+
+const recluster = (report?: TripExtractReport): Promise<void> =>
+  withTripWrites(() => reclusterNow(report));
+
+const reclusterNow = async (report?: TripExtractReport): Promise<void> => {
   const [reservations, trips, memberships] = await Promise.all([
     db.reservations.toArray(),
     db.trips.toArray(),
@@ -312,6 +361,7 @@ const recluster = async (report?: TripExtractReport): Promise<void> => {
 
   broadcast({
     type: "trips-delta",
+    authoritative: false,
     trips: result.tripsToPut,
     removedTripIds: result.tripIdsToDelete,
     memberships: result.membershipsToPut,
@@ -330,7 +380,10 @@ const recluster = async (report?: TripExtractReport): Promise<void> => {
  * every trip no manual membership points at (manual rows, "remove from trip"
  * tombstones and the trips they name survive); "all" deletes everything.
  */
-const resetTrips = async (mode: "auto" | "all"): Promise<void> => {
+const resetTrips = (mode: "auto" | "all"): Promise<void> =>
+  withTripWrites(() => resetTripsNow(mode));
+
+const resetTripsNow = async (mode: "auto" | "all"): Promise<void> => {
   const memberships = await db.tripMemberships.toArray();
   const doomedMemberships = memberships.filter((m) => mode === "all" || m.source === "auto");
   const keptTripIds = new Set(
@@ -343,6 +396,8 @@ const resetTrips = async (mode: "auto" | "all"): Promise<void> => {
   });
   broadcast({
     type: "trips-delta",
+    // "all" removes manual rows too, which the SPA must not keep.
+    authoritative: mode === "all",
     trips: [],
     removedTripIds: doomedTrips.map((t) => t.id),
     memberships: [],

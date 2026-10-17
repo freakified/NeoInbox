@@ -1,9 +1,10 @@
 /**
- * The travel heuristic. There is no Travel bundle, so this never names a
- * category — it has exactly two jobs:
+ * The travel heuristic. There is no Travel bundle; it has exactly two jobs:
  *
- *  1. In the pipeline, it forces null: travel mail stays loose in the inbox
- *     instead of falling through into Updates.
+ *  1. In the pipeline, it files transactional travel mail (bookings,
+ *     itineraries, miles posted) under Updates, ahead of the purchase and
+ *     finance rules. Trip membership, not this, is what puts a booking in a
+ *     trip.
  *  2. In isTripCandidate, it decides whether a message is worth fetching a
  *     body for and running the reservation extractors over.
  *

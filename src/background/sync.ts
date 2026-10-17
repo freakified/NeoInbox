@@ -1,4 +1,4 @@
-import { withTimeout } from "./backfill";
+import { withTimeout } from "./scanQueue";
 import { isTripCandidate, scheduleTripExtraction } from "./extract";
 import {
   applyMessageDetailsForOrigin,

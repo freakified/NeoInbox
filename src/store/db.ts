@@ -266,6 +266,26 @@ class NeoInboxDb extends Dexie {
           m.detailsVersion = DETAILS_LAZY;
         });
     });
+    // The SPA no longer reads the whole table at startup: Sent and Done only
+    // grow, so it pages them newest-first by [origin+date], and finds the old
+    // Done mail a trip still shows by Message-ID.
+    this.version(17).stores({
+      messages:
+        "id, date, accountId, folderId, detailsVersion, headerMessageId, [origin+date], [origin+classifierVersion]",
+    });
+    // MESSAGE_DETAILS_VERSION 3 adds the list snippet, which only inbox rows
+    // go back for (see needsMessageDetails). Restamp everything else that was
+    // complete under version 2, or the details sweep's index range would pull
+    // a year of Sent back in on every scan just to filter it out again.
+    this.version(18).upgrade(async (tx) => {
+      await tx
+        .table<RawMessage>("messages")
+        .where("detailsVersion")
+        .equals(2)
+        .modify((m) => {
+          if (m.origin !== "inbox") m.detailsVersion = 3;
+        });
+    });
   }
 }
 

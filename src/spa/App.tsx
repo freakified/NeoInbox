@@ -31,7 +31,11 @@ import { moveRowFocus } from "./lib/rowNavigation";
 import { useSelection, visibleThreadIds } from "./lib/selection";
 import { TRIP_COLOR, TripSliceRow } from "./components/TripSliceRow";
 import { isSameView, parseHashView, viewHash } from "./lib/routing";
-import { openThunderbirdContacts, openThunderbirdFolder } from "./lib/thunderbirdViews";
+import {
+  openThunderbirdContacts,
+  openThunderbirdFolder,
+  searchInThunderbird,
+} from "./lib/thunderbirdViews";
 import s from "./App.module.css";
 
 const STREAM_PAGE_SIZE = 80;
@@ -145,6 +149,9 @@ export const App = () => {
   const inboxWindow = useMailStore((st) => st.inboxWindow);
   const loadingMoreInbox = useMailStore((st) => st.loadingMoreInbox);
   const loadMoreInbox = useMailStore((st) => st.loadMoreInbox);
+  const historyFrom = useMailStore((st) => st.historyFrom);
+  const loadingHistory = useMailStore((st) => st.loadingHistory);
+  const loadOlderHistory = useMailStore((st) => st.loadOlderHistory);
   const customBundles = useMailStore((st) => st.customBundles);
   const showDeleteActions = useShowDeleteActions();
 
@@ -185,6 +192,8 @@ export const App = () => {
   );
   const [showShortcuts, setShowShortcuts] = useState(false);
   const goPrefixRef = useRef(false);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const [searchText, setSearchText] = useState("");
   const selectedIds = useSelection((st) => st.ids);
   const clearSelection = useSelection((st) => st.clear);
   const retainSelection = useSelection((st) => st.retain);
@@ -297,6 +306,9 @@ export const App = () => {
       } else if (e.key === "?") {
         e.preventDefault();
         setShowShortcuts(true);
+      } else if (e.key === "/") {
+        e.preventDefault();
+        searchRef.current?.focus();
       } else if (e.key === "g") {
         goPrefixRef.current = true;
         window.setTimeout(() => {
@@ -345,6 +357,11 @@ export const App = () => {
       activeView.type === "bundle" ||
       activeView.type === "trips") &&
     (inboxWindow?.skipped ?? 0) > 0;
+  // Sent and Done load a page at a time (see store/history.ts); the views
+  // that show them page further back from Dexie, no mailbox round-trip.
+  const canLoadOlderHistory =
+    historyFrom > 0 &&
+    (activeView.type === "done" || activeView.type === "sent" || activeView.type === "bundle");
 
   return (
     <div
@@ -399,6 +416,35 @@ export const App = () => {
               </button>
               <h1 className={s.title}>{header.title}</h1>
             </div>
+            <form
+              role="search"
+              className={s.search}
+              onSubmit={(e) => {
+                e.preventDefault();
+                void searchInThunderbird(searchText);
+              }}
+            >
+              <label htmlFor="neo-search" className={s.searchIcon}>
+                <Icon name="search" />
+              </label>
+              <input
+                id="neo-search"
+                ref={searchRef}
+                type="search"
+                className={s.searchInput}
+                placeholder="Search"
+                aria-label="Search in Thunderbird"
+                title="Searches your Inbox in Thunderbird"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setSearchText("");
+                    e.currentTarget.blur();
+                  }
+                }}
+              />
+            </form>
             <div className={s.headerRight}>
               {syncing && sync && (
                 <span className={s.syncText}>
@@ -723,6 +769,21 @@ export const App = () => {
               {loadingMoreInbox ? "Fetching older mail…" : "Fetch older mail"}
               <span className={s.loadMoreCount}>
                 {inboxWindow?.skipped.toLocaleString()} older in this inbox
+              </span>
+            </button>
+          </div>
+        )}
+        {!hasMoreItems && canLoadOlderHistory && (
+          <div className={s.loadMoreWrap}>
+            <button
+              type="button"
+              className={s.loadMoreBtn}
+              onClick={() => void loadOlderHistory()}
+              disabled={loadingHistory}
+            >
+              {loadingHistory ? "Loading older mail…" : "Show older mail"}
+              <span className={s.loadMoreCount}>
+                before {new Date(historyFrom).toLocaleDateString()}
               </span>
             </button>
           </div>

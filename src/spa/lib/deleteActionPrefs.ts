@@ -5,12 +5,13 @@ const SHOW_DELETE_ACTIONS_EVENT = "neoinbox:show-delete-actions";
 
 /**
  * Google Inbox never offered delete from the stream — only pin/snooze/done on
- * hover and sweep on sections. Delete actions are our extension; this pref
- * lets users turn them off for a faithful Inbox experience. Trash inside the
- * opened conversation stays regardless (Inbox had it there too).
+ * hover and sweep on sections. Delete actions are our extension, so they are
+ * off until this pref turns them on: a trash-all next to every sweep is one
+ * misclick from a bulk delete. Trash inside the opened conversation stays
+ * regardless (Inbox had it there too).
  */
 export const getShowDeleteActions = (): boolean =>
-  localStorage.getItem(SHOW_DELETE_ACTIONS_KEY) !== "false";
+  localStorage.getItem(SHOW_DELETE_ACTIONS_KEY) === "true";
 
 export const setShowDeleteActions = (show: boolean): void => {
   localStorage.setItem(SHOW_DELETE_ACTIONS_KEY, show ? "true" : "false");

@@ -69,6 +69,11 @@ export interface RawMessage {
   references?: string[];
   inReplyTo?: string[];
   attachments?: AttachmentSummary[];
+  /**
+   * The opening of the message's own text, shown grey after the subject in
+   * the list. Filled in with the other details from the same body fetch.
+   */
+  snippet?: string;
   detailsVersion?: number;
   /**
    * True when this row's category was decided without the full message body

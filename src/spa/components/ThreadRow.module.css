@@ -77,6 +77,11 @@
   font-size: 20px;
 }
 
+.snippet {
+  color: var(--color-md-secondary-text);
+  font-weight: 400;
+}
+
 .draftLabel {
   color: #c5221f;
   font-weight: 600;

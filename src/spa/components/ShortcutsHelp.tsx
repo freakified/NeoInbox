@@ -9,6 +9,7 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
       ["k / ↑", "Previous conversation"],
       ["Enter", "Open or close"],
       ["Esc", "Close the open conversation, or clear the selection"],
+      ["/", "Search in Thunderbird"],
     ],
   },
   {
