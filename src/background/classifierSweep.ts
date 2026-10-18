@@ -109,7 +109,10 @@ export const runClassifierVersionSweep = async (): Promise<{
   if (sweepingVersion) return idle;
   const stored = await messenger.storage.local.get(CLASSIFIER_VERSION_KEY);
   const previous = Number(stored[CLASSIFIER_VERSION_KEY] ?? 0);
-  if (previous >= CLASSIFIER_VERSION) return idle;
+  // Any difference, not just a lower stored version: storage.local outlives a
+  // dropped IndexedDB, so a stamp left by an older numbering would otherwise
+  // suppress every sweep until the counter climbed back past it.
+  if (previous === CLASSIFIER_VERSION) return idle;
   sweepingVersion = true;
   // Serialized with scans: the sweep writes the same rows a scan batches, and
   // interleaving the two would let a stale batch overwrite a fresh category.

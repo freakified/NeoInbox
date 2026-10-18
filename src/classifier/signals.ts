@@ -33,7 +33,36 @@ export const MACHINE_SENDER_RE =
  * the millions of senders no domain list will ever cover.
  */
 export const ROLE_SENDER_RE =
-  /^(support|help|helpdesk|service|services|customer|customercare|customerservice|care|contact|hello|hey|team|info|information|admin|administrator|office|sales|marketing|promo|promotions|offers|deals|billing|bill|invoice|invoices|invoicing|account|accounts|accounting|payment|payments|payables|receivable|security|privacy|legal|compliance|hr|people|careers|jobs|recruiting|recruitment|membership|member|members|subscription|subscriptions|renewals|order|orders|receipt|receipts|shipment|shipping|ship|delivery|deliveries|tracking|fulfillment|store|shop|news|newsletter|press|media|digest|updates|update|mail|email|messages|message|inbox|community|forum|events|event|webinar|welcome|onboarding|feedback|survey|reminder|reminders|appointment|appointments|booking|bookings|reservation|reservations|itinerary|confirm|confirmation|confirmations|verify|verification|register|registration|registrar|admissions|enrollment|frontdesk|front[-.]?desk|reception|clinic|patient|patients|pharmacy|rent|rents|rental|rentals|leasing|property|parking|utility|utilities|donate|donations|giving|fundraising|volunteer|library|alumni|noreply2|donotrespond)(?:[-._+]|\d|$)/;
+  /^(support|help|helpdesk|service|services|customer|customercare|customerservice|care|contact|hello|hey|hi|team|info|information|admin|administrator|office|sales|marketing|promo|promotions|offers|deals|billing|bill|invoice|invoices|invoicing|statements?|e[-.]?statements?|account|accounts|accounting|payment|payments|payables|receivable|security|privacy|legal|compliance|hr|people|careers|jobs|recruiting|recruitment|membership|member|members|subscription|subscriptions|renewals|order|orders|receipt|receipts|returns|shipment|shipping|ship|delivery|deliveries|tracking|fulfillment|store|shop|news|newsletter|press|media|digest|updates|update|status|tickets?|mail|email|messages|message|inbox|community|forum|events|event|webinar|welcome|onboarding|feedback|survey|reminder|reminders|appointment|appointments|booking|bookings|reservation|reservations|itinerary|confirm|confirmation|confirmations|verify|verification|register|registration|registrar|admissions|enrollment|frontdesk|front[-.]?desk|reception|clinic|patient|patients|pharmacy|mychart|rent|rents|rental|rentals|leasing|property|parking|utility|utilities|donate|donations|giving|fundraising|volunteer|library|alumni|noreply2|donotrespond)(?:[-._+]|\d|$)/;
+
+/**
+ * A bounce: the mail server telling you something you sent never arrived.
+ *
+ * It reads like a parcel notice ("Delivery Status Notification", "Mail
+ * delivery failed") and comes from a machine, so without this it lands in
+ * Purchases; the pipeline files it under Updates before that can happen.
+ * RFC 3464 reports say so in their Content-Type; the sender and subject cover
+ * servers that omit it.
+ */
+const BOUNCE_SENDER_RE = /^(?:mailer[-._]?daemon|maildaemon|postmaster)(?:[-._+]|\d|$)/;
+const BOUNCE_SUBJECT_RE =
+  /\b(?:undeliverable|undelivered\s+mail|delivery\s+status\s+notification|delivery\s+(?:has\s+)?failed|delivery\s+failure|mail\s+delivery\s+(?:failed|failure|subsystem)|returned\s+mail|failure\s+notice)\b|配信エラー|配信不能/i;
+
+export const isBounce = (f: Features): boolean => {
+  if (/report-type\s*=\s*"?delivery-status/i.test(f.headers["content-type"]?.[0] ?? "")) return true;
+  return BOUNCE_SENDER_RE.test(f.senderLocalPart) && BOUNCE_SUBJECT_RE.test(f.subject);
+};
+
+/**
+ * Subjects that read like an offer. Shared because Purchases has to hand
+ * these back before Promos ever sees them ("free shipping this weekend"
+ * contains a purchase noun), and Promos claims on them.
+ *
+ * Japanese terms sit outside the \b groups: \b only knows ASCII word
+ * characters, so it never matches next to kana or kanji.
+ */
+export const PROMO_SUBJECT_RE =
+  /(\d+%\s*off|%\s*off|\$\d+\s*off|\bsale\b|\bdeals?\b|\bsave\b|\bsavings\b|\bcoupon\b|promo\s*code|discount|limited[- ]time|new\s+arrivals?|exclusive|free\s+shipping|free\s+gift|\bfor\s+free\b|\b\d+\s+months?\s+(?:free|for\s+[$€£¥]?\d)|today\s+only|flash\s+sale|clearance|bogo|buy\s+one|ends\s+(?:tonight|soon|today|tomorrow|this)|last\s+chance|final\s+hours|don'?t\s+miss|hurry|just\s+for\s+you|members?\s+only|early\s+access|shop\s+now|price\s+drop|lowest\s+price|best\s+price|up\s+to\s+\d+%|sitewide|storewide|black\s+friday|cyber\s+monday|prime\s+day|boxing\s+day|back\s+in\s+stock|restock|new\s+season|sneak\s+peek|giveaway|sweepstakes|enter\s+to\s+win|win\s+a\b|treat\s+yourself|introducing\s+the|just\s+dropped|new\s+collection|gift\s+guide|last\s+day|セール|クーポン|割引|特価|お得|キャンペーン|期間限定|数量限定|送料無料|ポイント\d*倍|新商品|新着|先行販売|プレゼント|抽選|タイムセール|最大\d+%)/i;
 
 /**
  * Bulk mail: sent to a list rather than to you.

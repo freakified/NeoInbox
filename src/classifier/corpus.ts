@@ -82,6 +82,12 @@ export const corpus: CorpusCase[] = [
     expect: "forums",
   },
 
+  {
+    name: "a project's donation receipt is not a list post",
+    author: "Python Software Foundation <donations@python.org>",
+    subject: "Thank you for your donation — receipt enclosed",
+    expect: "purchases",
+  },
   // ---------------------------------------------------------------- travel
   // There is no Travel bundle: itinerary mail belongs to the trips layer, and
   // what no trip claims is filed under Updates, as Inbox did. Whether it is
@@ -114,6 +120,41 @@ export const corpus: CorpusCase[] = [
     expect: "promos",
   },
 
+  {
+    name: "an Uber Eats order is a purchase, not a trip",
+    // Uber Eats sends from uber.com, which is on the travel list for rides.
+    author: "Uber Receipts <noreply@uber.com>",
+    subject: "Your Uber Eats order with Sweetgreen",
+    expect: "purchases",
+  },
+  {
+    name: "a Japanese airline itinerary",
+    author: "日本航空 <info@jal.com>",
+    subject: "【JAL】ご予約確認",
+    expect: "updates",
+  },
+  {
+    name: "airline marketing goes to Promos",
+    // Travel steps aside for a promotional subject; Promos has to take it rather
+    // than leaving it for Updates.
+    author: "United Airlines <united@news.united.com>",
+    subject: "Explore new destinations this winter",
+    headers: listUnsubscribe,
+    expect: "promos",
+  },
+  {
+    name: "airline miles marketing goes to Promos",
+    author: "Delta <delta@e.delta.com>",
+    subject: "Earn miles on your next getaway",
+    headers: listUnsubscribe,
+    expect: "promos",
+  },
+  {
+    name: "a Google security notice is not travel for saying \\\"stay\\\"",
+    author: "Google <no-reply@accounts.google.com>",
+    subject: "Stay secure: review your settings",
+    expect: "updates",
+  },
   // ------------------------------------------------------------- purchases
   {
     name: "a retailer order confirmation",
@@ -176,6 +217,111 @@ export const corpus: CorpusCase[] = [
     expect: "purchases",
   },
 
+  {
+    name: "a bounce is not a delivery notice",
+    author: "Mail Delivery Subsystem <mailer-daemon@googlemail.com>",
+    subject: "Delivery Status Notification (Failure)",
+    expect: "updates",
+  },
+  {
+    name: "a bounce recognised by its report Content-Type",
+    author: "Exchange Online <postmaster@outlook.com>",
+    subject: "Undeliverable: quarterly numbers",
+    headers: { "Content-Type": ['multipart/report; report-type=delivery-status; boundary="x"'] },
+    expect: "updates",
+  },
+  {
+    name: "a software package release is not a parcel",
+    author: "npm <support@npmjs.com>",
+    subject: "Successfully published package foo@1.2.0",
+    expect: "updates",
+  },
+  {
+    name: "a time tracking reminder is not a parcel",
+    author: "Toggl <no-reply@toggl.com>",
+    subject: "Time tracking reminder",
+    expect: "updates",
+  },
+  {
+    name: "a product changelog is not a shipment",
+    author: "Linear <changelog@linear.app>",
+    subject: "We shipped project updates",
+    headers: listUnsubscribe,
+    expect: "updates",
+  },
+  {
+    name: "a service's own receipt is still a purchase",
+    author: "GitHub <noreply@github.com>",
+    subject: "[GitHub] Payment receipt",
+    expect: "purchases",
+  },
+  {
+    name: "a restaurant receipt via a POS platform",
+    author: "Toast <noreply@toasttab.com>",
+    subject: "Your receipt from Blue Bottle",
+    expect: "purchases",
+  },
+  {
+    name: "retail marketing with no sale wording goes to Promos",
+    author: "Nike <nike@notifications.nike.com>",
+    subject: "Fresh fits for fall",
+    headers: listUnsubscribe,
+    expect: "promos",
+  },
+  {
+    name: "a retailer's account notice in bulk is not marketing",
+    author: "Apple <no_reply@email.apple.com>",
+    subject: "Your Apple Account information has been updated",
+    headers: listUnsubscribe,
+    expect: "updates",
+  },
+  {
+    name: "a Japanese order confirmation",
+    author: "楽天市場 <order@rakuten.co.jp>",
+    subject: "【楽天市場】注文内容ご確認（自動配信メール）",
+    expect: "purchases",
+  },
+  {
+    name: "a Japanese shipping notice from a carrier",
+    author: "ヤマト運輸 <mail@kuronekoyamato.co.jp>",
+    subject: "お荷物お届けのお知らせ",
+    expect: "purchases",
+  },
+  {
+    name: "a Japanese order notice from an unlisted shop",
+    author: "ショップ <noreply@shop.example.jp>",
+    subject: "ご注文の商品を発送しました",
+    expect: "purchases",
+  },
+  {
+    name: "a Japanese newsletter that \\\"delivers\\\" news is not a parcel",
+    author: "ニュース <info@media.example.jp>",
+    subject: "今週の最新情報をお届けします",
+    headers: listUnsubscribe,
+    expect: "updates",
+  },
+  {
+    name: "a Japanese sale is handed to Promos",
+    author: "楽天市場 <info@emagazine.rakuten.co.jp>",
+    subject: "【楽天スーパーSALE】最大50%OFFクーポン配布中",
+    headers: listUnsubscribe,
+    expect: "promos",
+  },
+  {
+    name: "event tickets from a ticketing platform are a purchase",
+    author: "Eventbrite <noreply@order.eventbrite.com>",
+    subject: "Your Tickets for Spring Jazz Night - Downtown",
+    headers: listUnsubscribe,
+    expect: "purchases",
+  },
+  {
+    name: "food delivery marketing sent through SparkPost",
+    // From real mail: no List-Unsubscribe at all, only SparkPost's X-MSFBL.
+    author: "Uber Eats <uber@uber.com>",
+    subject: "Enjoy $15 off. Here's a free meal on Uber Eats",
+    headers: { "X-MSFBL": ["abc123"] },
+    expect: "promos",
+  },
   // --------------------------------------------------------------- finance
   {
     name: "a bank statement notice",
@@ -191,11 +337,11 @@ export const corpus: CorpusCase[] = [
     expect: "finance",
   },
   {
-    name: "a credit card acquisition offer is not account activity",
+    name: "a credit card acquisition offer is marketing, not account activity",
     author: "Chase <newoffers@chase.com>",
     subject: "Apply now for the new Sapphire card",
     headers: listUnsubscribe,
-    expect: "updates",
+    expect: "promos",
   },
   {
     name: "an insurance premium notice",
@@ -245,6 +391,39 @@ export const corpus: CorpusCase[] = [
     expect: "purchases",
   },
 
+  {
+    name: "a Japan Post Bank notice is finance, not the carrier",
+    author: "ゆうちょ銀行 <info@jp-bank.japanpost.jp>",
+    subject: "【ゆうちょ銀行】お取引のお知らせ",
+    expect: "finance",
+  },
+  {
+    name: "a Japanese card usage alert",
+    author: "三井住友カード <statement@vpass.ne.jp>",
+    subject: "ご利用のお知らせ【三井住友カード】",
+    expect: "finance",
+  },
+  {
+    name: "a Japanese card campaign goes to Promos",
+    author: "楽天カード <info@mail.rakuten-card.co.jp>",
+    subject: "【楽天カード】新規入会キャンペーンのご案内",
+    headers: listUnsubscribe,
+    expect: "promos",
+  },
+  {
+    name: "a Japanese utility bill from an unlisted sender",
+    author: "電力会社 <noreply@denki.example.jp>",
+    subject: "今月のご請求額のお知らせ",
+    expect: "finance",
+  },
+  {
+    name: "a card rewards redemption is account activity, not an offer",
+    // From real mail: "reward" reads as promotional to the finance rule.
+    author: "Citi Cards <citicards@info6.citi.com>",
+    subject: "Confirmation of your cash rewards redemption",
+    headers: listUnsubscribe,
+    expect: "finance",
+  },
   // ---------------------------------------------------------------- social
   {
     name: "a social network notification",
@@ -263,11 +442,11 @@ export const corpus: CorpusCase[] = [
     expect: "social",
   },
   {
-    name: "a chat platform digest",
+    name: "a work chat digest is an update, not social",
     author: "Slack <feedback@slack.com>",
     subject: "Your weekly activity digest",
     headers: listUnsubscribe,
-    expect: "social",
+    expect: "updates",
   },
   {
     name: "a network notification from an unrecognisable sending domain",
@@ -284,6 +463,26 @@ export const corpus: CorpusCase[] = [
     expect: "social",
   },
 
+  {
+    name: "a streaming service's upsell is not social",
+    author: "Spotify <no-reply@spotify.com>",
+    subject: "Get 3 months of Premium for free",
+    headers: listUnsubscribe,
+    expect: "promos",
+  },
+  {
+    name: "a streaming service's account mail is an update",
+    author: "Spotify <no-reply@spotify.com>",
+    subject: "Your 2026 Wrapped is here",
+    headers: listUnsubscribe,
+    expect: "updates",
+  },
+  {
+    name: "a LINE notification",
+    author: "LINE <no-reply@line.me>",
+    subject: "LINEアカウントへのログイン",
+    expect: "social",
+  },
   // ---------------------------------------------------------------- promos
   {
     name: "a marketing blast with a discount subject",
@@ -396,6 +595,18 @@ export const corpus: CorpusCase[] = [
     expect: "updates",
   },
 
+  {
+    name: "a patient portal message",
+    author: "MyChart <mychart@examplehealth.org>",
+    subject: "You have a new message",
+    expect: "updates",
+  },
+  {
+    name: "a government sign-in code",
+    author: "Login.gov <no-reply@login.gov>",
+    subject: "Your one-time code",
+    expect: "updates",
+  },
   // ------------------------------------------------- sending subdomains
   // Brands almost never send from their bare domain, and these cases have
   // nothing else to fall back on — no keyword subject, no no-reply local
@@ -468,6 +679,14 @@ export const corpus: CorpusCase[] = [
     name: "a promo-shaped subject from a person is still a person",
     author: "Dana Ruiz <dana.ruiz@example.com>",
     subject: "50% off tickets if we book today!",
+    expect: null,
+  },
+  {
+    name: "a person mailing from a Japanese carrier mailbox",
+    // A mobile carrier's mailbox, not the carrier talking: docomo, au and
+    // SoftBank hand these out to subscribers the way gmail.com does.
+    author: "Taro <taro0123@docomo.ne.jp>",
+    subject: "明日の予定について",
     expect: null,
   },
 ];
@@ -560,6 +779,36 @@ export const tripCandidacy: TripCandidacyCase[] = [
     name: "ordinary mail from an unrelated sender",
     author: "Sam <sam@example.com>",
     subject: "lunch next week",
+    expect: false,
+  },
+  {
+    name: "a Japanese hotel booking from an unknown brand",
+    author: "予約センター <reservations@ryokan.example.jp>",
+    subject: "【宿泊予約確認】ご予約ありがとうございます",
+    expect: true,
+  },
+  {
+    name: "a Shinkansen reservation",
+    author: "EX予約 <noreply@expy.jp>",
+    subject: "【EX予約】予約内容のお知らせ",
+    expect: true,
+  },
+  {
+    name: "a food delivery from a ride-hailing brand is not a trip",
+    author: "Uber Receipts <noreply@uber.com>",
+    subject: "Your Uber Eats order with Sweetgreen",
+    expect: false,
+  },
+  {
+    name: "a security notice that says \"stay\" is not a trip",
+    author: "Google <no-reply@accounts.google.com>",
+    subject: "Stay secure: review your settings",
+    expect: false,
+  },
+  {
+    name: "a team check-in is not a flight check-in",
+    author: "15Five <noreply@15five.com>",
+    subject: "Your weekly check-in is due",
     expect: false,
   },
 ];

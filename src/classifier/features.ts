@@ -52,6 +52,7 @@ export const CAMPAIGN_HEADER_PREFIXES = [
   "x-mailgun",
   "x-sparkpost",
   "x-msys-api",
+  "x-msfbl",
   "x-klaviyo",
   "x-braze",
   "x-iterable",

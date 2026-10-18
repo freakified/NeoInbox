@@ -17,24 +17,25 @@ const SOCIAL_DOMAINS = [
   "joinmastodon.org", "tumblr.com", "pinterest.com", "snapchat.com",
   "tiktok.com", "tiktokmail.com", "vk.com", "xing.com", "nextdoor.com",
   // Messaging and voice.
-  "discord.com", "discordapp.com", "slack.com", "slack-mail.com",
-  "telegram.org", "signal.org", "whatsapp.com", "matrix.org",
-  "element.io", "guilded.gg",
+  "discord.com", "discordapp.com", "telegram.org", "signal.org",
+  "whatsapp.com", "matrix.org", "element.io", "guilded.gg", "groupme.com",
+  "line.me",
   // Publishing, video and audio. Newsletter platforms (Substack, Ghost,
-  // Buttondown) are deliberately absent: what they carry is a newsletter, and
-  // newsletters belong to Updates or Promos on their own merits.
-  "medium.com",
+  // Buttondown, Medium) are deliberately absent: what they carry is a
+  // newsletter, and newsletters belong to Updates or Promos on their own
+  // merits. So are services that only talk about your own account — Spotify,
+  // Duolingo, Peloton: membership in Social is for mail about other people.
   "youtube.com", "vimeo.com", "twitch.tv", "dailymotion.com", "rumble.com",
-  "spotify.com", "soundcloud.com", "bandsintown.com", "songkick.com",
+  "soundcloud.com", "bandsintown.com", "songkick.com", "note.com",
+  "pixiv.net",
   "last.fm", "letterboxd.com", "goodreads.com", "storygraph.com",
   // Creative and hobby communities.
   "flickr.com", "500px.com", "deviantart.com", "behance.net", "dribbble.com",
-  "artstation.com", "ravelry.com", "duolingo.com", "strava.com",
-  "myfitnesspal.com", "peloton.com", "garmin.com", "runkeeper.com",
+  "artstation.com", "ravelry.com", "strava.com", "runkeeper.com",
   "alltrails.com", "untappd.com", "chess.com", "lichess.org",
   // Q&A, reviews and local.
   "reddit.com", "redditmail.com", "quora.com", "quoramail.com", "yelp.com",
-  "tripadvisor-mail.com", "foursquare.com", "meetup.com", "eventbrite-mail.com",
+  "foursquare.com", "meetup.com", "connpass.com", "researchgate.net",
   // Creator support.
   "patreon.com", "ko-fi.com", "buymeacoffee.com", "onlyfans.com",
   // Dating.
@@ -55,7 +56,6 @@ export const SOCIAL_HEADER_PREFIXES = [
   "x-twitter",
   "x-reddit",
   "x-discord",
-  "x-slack",
   "x-pinterest",
   "x-tiktok",
   "x-snapchat",

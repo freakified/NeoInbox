@@ -35,11 +35,17 @@ const SERVICE_DOMAINS = [
   "amazonaws.com", "aws.amazon.com", "azure.com", "cloud.google.com",
   "namecheap.com", "godaddy.com", "gandi.net", "hover.com", "porkbun.com",
   "dnsimple.com", "hetzner.com", "ovh.com", "dreamhost.com", "bluehost.com",
+  "codeberg.org", "readthedocs.org", "huggingface.co", "supabase.com",
+  "supabase.io", "railway.app", "tailscale.com", "backblaze.com",
   // Work and productivity.
+  // Slack is work chat, and sits with the rest of the work tools rather than
+  // with the social networks.
+  "slack.com", "slack-mail.com",
   "notion.so", "figma.com", "zoom.us", "dropbox.com", "box.com",
   "asana.com", "trello.com", "monday.com", "clickup.com", "linear.app",
   "airtable.com", "basecamp.com", "smartsheet.com", "miro.com", "loom.com",
-  "calendly.com", "docusign.net", "docusign.com", "hellosign.com",
+  "calendly.com", "cal.com", "doodle.com", "webex.com", "wetransfer.com",
+  "docusign.net", "docusign.com", "hellosign.com", "pandadoc.com",
   "adobe.com", "canva.com", "grammarly.com", "evernote.com", "todoist.com",
   "zendesk.com", "freshdesk.com", "intercom.io", "helpscout.com",
   "surveymonkey.com", "typeform.com", "mailchimp.com", "squarespace.com",
@@ -50,11 +56,15 @@ const SERVICE_DOMAINS = [
   "yubico.com",
   // Newsletters and reading.
   "substack.com", "buttondown.email", "beehiiv.com", "convertkit.com",
-  "revue.email", "tinyletter.com", "feedly.com", "pocket.co",
+  "revue.email", "tinyletter.com", "feedly.com", "pocket.co", "medium.com",
   // Media subscriptions and streaming.
   "netflix.com", "hulu.com", "disneyplus.com", "max.com", "hbomax.com",
   "paramountplus.com", "peacocktv.com", "primevideo.com", "crunchyroll.com",
-  "audible.com", "kindle.com",
+  "audible.com", "kindle.com", "spotify.com",
+  // Apps whose mail is reminders and progress, not other people's activity.
+  "duolingo.com", "myfitnesspal.com",
+  // Home, devices and cars.
+  "ring.com", "tesla.com",
   // Telecom and utilities.
   "verizon.com", "verizonwireless.com", "att.com", "t-mobile.com",
   "sprint.com", "mintmobile.com", "googlefi.com", "visible.com",
@@ -62,16 +72,24 @@ const SERVICE_DOMAINS = [
   "frontier.com", "optimum.com", "vodafone.com", "o2.co.uk", "ee.co.uk",
   "three.co.uk", "bt.com", "sky.com", "virginmedia.com",
   // Health, government and education (mail that is notices, not money).
-  "kaiserpermanente.org", "myuhc.com", "uhc.com", "aetna.com", "cigna.com",
+  "kaiserpermanente.org", "kp.org", "myuhc.com", "uhc.com", "aetna.com", "cigna.com",
   "anthem.com", "bcbs.com", "humana.com", "cvsspecialty.com", "labcorp.com",
   "questdiagnostics.com", "zocdoc.com", "mychart.com", "teladoc.com",
+  "onemedical.com", "optum.com", "optumrx.com", "express-scripts.com",
+  "caremark.com", "deltadental.com",
   "ssa.gov", "usa.gov", "dmv.ca.gov", "uscis.gov", "state.gov",
+  "login.gov", "id.me", "va.gov", "medicare.gov", "healthcare.gov",
+  "notifications.service.gov.uk",
   "usajobs.gov", "collegeboard.org", "commonapp.org", "coursera.org",
   "edx.org", "udemy.com", "khanacademy.org", "canvaslms.com",
-  "instructure.com", "blackboard.com", "gradescope.com",
+  "instructure.com", "blackboard.com", "gradescope.com", "piazza.com",
+  "schoology.com", "powerschool.com", "parentsquare.com", "remind.com",
+  "classdojo.com", "seesaw.me",
   // Jobs.
   "indeed.com", "glassdoor.com", "ziprecruiter.com", "monster.com",
   "greenhouse.io", "lever.co", "workable.com", "ashbyhq.com",
+  "myworkday.com", "myworkdayjobs.com", "icims.com", "smartrecruiters.com",
+  "jobvite.com", "wellfound.com",
 ];
 
 /** Vendor headers from services whose notifications are Updates. */
@@ -87,6 +105,7 @@ export const SERVICE_HEADER_PREFIXES = [
   "x-notion",
   "x-asana",
   "x-trello",
+  "x-slack",
   "x-google-appengine",
   "x-ms-exchange-organization-authas",
   "x-auto-response-suppress",
@@ -98,7 +117,10 @@ export const SERVICE_HEADER_PREFIXES = [
  * enough to bundle anything.
  */
 const TRANSACTIONAL_SUBJECT_RE =
-  /\b(verification|verify|confirm\s+your|activate|activation|password|passcode|one[- ]time|2fa|two[- ]factor|security\s+(?:alert|code)|sign[- ]?in|log\s?in|new\s+device|unusual\s+activity|suspicious|account\s+(?:update|created|closed|suspended|locked)|terms|privacy\s+policy|policy\s+update|maintenance|downtime|scheduled|outage|incident|status\s+update|action\s+required|expir(?:es|ing|ed)|renew(?:al|ing|s)?|subscription|trial|welcome\s+to|getting\s+started|invitation|invited\s+you|has\s+(?:been|shared)|assigned\s+to\s+you|mentioned\s+you|commented|ticket\s*#|case\s*#|request\s+(?:received|approved|denied)|appointment|reminder|survey|feedback|webinar|digest|weekly\s+(?:summary|report|digest)|monthly\s+(?:summary|report|statement)|release\s+notes|what'?s\s+new|now\s+available|update\s+available)\b/i;
+  /\b(verification|verify|confirm\s+your|activate|activation|password|passcode|one[- ]time|2fa|two[- ]factor|security\s+(?:alert|code)|sign[- ]?in|log\s?in|new\s+device|unusual\s+activity|suspicious|account\s+(?:update|created|closed|suspended|locked)|terms|privacy\s+policy|policy\s+update|maintenance|downtime|scheduled|outage|incident|status\s+update|action\s+required|expir(?:es|ing|ed)|renew(?:al|ing|s)?|subscription|trial|welcome\s+to|getting\s+started|invitation|invited\s+you|has\s+(?:been|shared)|assigned\s+to\s+you|mentioned\s+you|commented|ticket\s*#|case\s*#|request\s+(?:received|approved|denied)|appointment|reminder|survey|feedback|webinar|digest|weekly\s+(?:summary|report|digest)|monthly\s+(?:summary|report|statement)|release\s+notes|what'?s\s+new|now\s+available|update\s+available)\b|パスワード|ログイン|認証|確認コード|ワンタイム|メンテナンス|障害|規約|お問い合わせ番号|受付番号/i;
+
+export const isServiceDomain = (domain: string): boolean =>
+  domainMatches(domain, SERVICE_DOMAINS);
 
 export const matchesUpdates = (f: Features): boolean => {
   // Bulk in any of its forms: List-Unsubscribe, Precedence, or a campaign
@@ -106,7 +128,7 @@ export const matchesUpdates = (f: Features): boolean => {
   if (isBulk(f)) return true;
   if (f.autoSubmitted) return true;
   if (MACHINE_SENDER_RE.test(f.senderLocalPart)) return true;
-  if (domainMatches(f.senderDomain, SERVICE_DOMAINS)) return true;
+  if (isServiceDomain(f.senderDomain)) return true;
   if (hasAnyHeaderPrefix(f, SERVICE_HEADER_PREFIXES)) return true;
 
   if (ROLE_SENDER_RE.test(f.senderLocalPart)) {

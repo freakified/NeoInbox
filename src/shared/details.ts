@@ -4,8 +4,8 @@
  * Dexie schema can reference them without depending on the background.
  */
 
-/** 3: adds the list snippet. */
-export const MESSAGE_DETAILS_VERSION = 3;
+/** 1: attachments, References/In-Reply-To and the list snippet. */
+export const MESSAGE_DETAILS_VERSION = 1;
 
 /**
  * detailsVersion for a row whose details are fetched on demand rather than in

@@ -1,6 +1,7 @@
 import type { Category } from "../shared/types";
 import type { Features } from "./features";
 import { matchRouteRules } from "./routeRules";
+import { isBounce } from "./signals";
 import { matchesForums } from "./rules/forums";
 import { matchesPersonal } from "./rules/personal";
 import { matchesTravel } from "./rules/travel";
@@ -30,9 +31,14 @@ import { matchesUpdates } from "./rules/updates";
  * instead of being re-hedged in each of them. Forums still goes first —
  * every reply on a mailing list carries In-Reply-To and would otherwise read
  * as human correspondence.
+ *
+ * A bounce is settled just as early, as Updates: "Delivery Status
+ * Notification" and "Mail delivery failed" read like parcel notices to every
+ * rule behind it.
  */
 export const classifyByRules = (f: Features): Category | null => {
   if (matchesForums(f)) return "forums";
+  if (isBounce(f)) return "updates";
   if (matchesPersonal(f)) return null;
   if (matchesTravel(f)) return "updates";
   if (matchesPurchases(f)) return "purchases";

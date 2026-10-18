@@ -2,18 +2,19 @@
  * Marketing: mail sent to sell you something.
  *
  * The gate is always bulk — a promotional-sounding subject from a person is a
- * person talking about a sale. Beyond that there are two ways in: the subject
- * reads like an offer, or the sender is literally the marketing mailbox.
+ * person talking about a sale. Beyond that there are three ways in: the
+ * subject reads like an offer, the sender is literally the marketing mailbox,
+ * or the sender is a brand on the retail, travel or finance list.
  *
  * Promos deliberately sits behind Purchases, Finance and Social so that a
  * retailer's shipping notice, a bank's statement and a network's upsell each
  * stay with the rest of that sender's mail.
  */
 import type { Features } from "../features";
-import { isBulk } from "../signals";
-
-export const PROMO_SUBJECT_RE =
-  /(\d+%\s*off|%\s*off|\$\d+\s*off|\bsale\b|\bdeals?\b|\bsave\b|\bsavings\b|\bcoupon\b|promo\s*code|discount|limited[- ]time|new\s+arrivals?|exclusive|free\s+shipping|free\s+gift|today\s+only|flash\s+sale|clearance|bogo|buy\s+one|ends\s+(?:tonight|soon|today|tomorrow|this)|last\s+chance|final\s+hours|don'?t\s+miss|hurry|just\s+for\s+you|members?\s+only|early\s+access|shop\s+now|price\s+drop|lowest\s+price|best\s+price|up\s+to\s+\d+%|sitewide|storewide|black\s+friday|cyber\s+monday|prime\s+day|boxing\s+day|back\s+in\s+stock|restock|new\s+season|sneak\s+peek|giveaway|sweepstakes|enter\s+to\s+win|win\s+a\b|treat\s+yourself|introducing\s+the|just\s+dropped|new\s+collection|gift\s+guide|last\s+day)/i;
+import { isBulk, PROMO_SUBJECT_RE } from "../signals";
+import { isFinanceDomain } from "./finance";
+import { isRetailDomain } from "./purchases";
+import { isTravelDomain } from "./travel";
 
 /**
  * Sender mailboxes whose entire purpose is campaigns. Newsletter-shaped
@@ -31,11 +32,24 @@ const PROMO_SENDER_RE =
  * but a sender not on any list reaches here, and Updates is the safer home.
  */
 const TRANSACTIONAL_OVERRIDE_RE =
-  /\b(receipt|invoice|your\s+order|shipped|delivered|refund|password|verification|security\s+alert|sign[- ]in|two[- ]factor|appointment|statement)\b/i;
+  /\b(receipt|invoice|your\s+order|shipped|delivered|refund|password|verification|security\s+alert|sign[- ]in|two[- ]factor|appointment|statement|your\s+(?:\w+\s+)?account|privacy\s+(?:policy|notice)|terms\s+(?:of|and)|policy\s+update|(?:membership|subscription)\s+(?:renew\w*|expir\w*|cancel\w*))\b|領収書|ご注文|発送|配達|パスワード|認証|ログイン|明細|規約/i;
+
+/**
+ * A known brand sending in bulk, on a subject its own rule passed over.
+ *
+ * Each domain rule claims everything a brand sends except what it reads as
+ * marketing — an airline's "Explore new destinations", a bank's pre-approval,
+ * a retailer's "Fresh fits for fall" — and that is exactly what reaches here.
+ * Their wording is too varied for PROMO_SUBJECT_RE; the sender plus the bulk
+ * run is the evidence.
+ */
+const isBrandDomain = (domain: string): boolean =>
+  isRetailDomain(domain) || isTravelDomain(domain) || isFinanceDomain(domain);
 
 export const matchesPromos = (f: Features): boolean => {
   if (!isBulk(f)) return false;
   if (TRANSACTIONAL_OVERRIDE_RE.test(f.subject)) return false;
   if (PROMO_SUBJECT_RE.test(f.subject)) return true;
+  if (isBrandDomain(f.senderDomain)) return true;
   return PROMO_SENDER_RE.test(f.senderLocalPart);
 }

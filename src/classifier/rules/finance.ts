@@ -42,6 +42,16 @@ const FINANCE_DOMAINS = [
   "unicredit.eu", "intesasanpaolo.com", "nubank.com.br", "itau.com.br",
   "barclays.com", "chase.co.uk", "firstdirect.com", "tsb.co.uk",
   "metrobankonline.co.uk", "wealthsimple.com", "questrade.com",
+  // Japan. Japan Post Bank and Japan Post Insurance send from under the
+  // carrier's japanpost.jp, which is why Purchases defers to this list.
+  "mufg.jp", "smbc.co.jp", "smbc-card.com", "vpass.ne.jp",
+  "mizuhobank.co.jp", "resonabank.co.jp", "jp-bank.japanpost.jp",
+  "jp-life.japanpost.jp", "rakuten-bank.co.jp", "rakuten-card.co.jp",
+  "rakuten-sec.co.jp", "netbk.co.jp", "sbisec.co.jp", "monex.co.jp",
+  "matsui.co.jp", "aeonbank.co.jp", "paypay.ne.jp", "paypay-bank.co.jp",
+  "paypay-card.co.jp", "jcb.co.jp", "saisoncard.co.jp", "orico.co.jp",
+  "epos-card.co.jp", "nta.go.jp", "moneyforward.com", "zaim.net",
+  "freee.co.jp",
   // Brokerages, retirement and equity.
   "fidelity.com", "netbenefits.com", "schwab.com", "vanguard.com",
   "tdameritrade.com", "etrade.com", "merrilledge.com", "ml.com",
@@ -100,10 +110,10 @@ const FINANCE_DOMAINS = [
 ];
 
 const FINANCE_SUBJECT_RE =
-  /\b(statement|bill|billing|payment|transaction|balance|deposit|withdrawal|transfer|receipt|alert|activity|payment\s+due|auto[- ]?pay|invoice|dividend|interest|premium|renewal|claim|policy|escrow|mortgage|loan|contribution|portfolio|tax|refund|1099|w[- ]?2|payroll|paystub|pay\s+stub|direct\s+deposit|overdraft|credit\s+score|fraud|dispute|wire|ach|autopay|due\s+date|minimum\s+payment|account\s+summary)\b/i;
+  /\b(statement|bill|billing|payment|transaction|balance|deposit|withdrawal|transfer|receipt|alert|activity|payment\s+due|auto[- ]?pay|invoice|dividend|interest|premium|renewal|claim|policy|escrow|mortgage|loan|contribution|portfolio|tax|refund|1099|w[- ]?2|payroll|paystub|pay\s+stub|direct\s+deposit|overdraft|credit\s+score|fraud|dispute|wire|ach|autopay|due\s+date|minimum\s+payment|account\s+summary|redemption|redeemed)\b|明細|請求|利用|引き?落と?し|振込|振替|入金|出金|残高|取引|返済|配当|分配金|積立|約定|送金/i;
 
 const FINANCE_PROMO_RE =
-  /(offer|apply|open\s+account|new\s+card|%\s*apr|%\s*rate|upgrade|refer\s+a\s+friend|reward|pre[- ]?approved|earn\s+up\s+to|limited[- ]time|introducing|webinar|survey)/i;
+  /(offer|apply|open\s+account|new\s+card|%\s*apr|%\s*rate|upgrade|refer\s+a\s+friend|reward|pre[- ]?approved|earn\s+up\s+to|limited[- ]time|introducing|webinar|survey|キャンペーン|特典|プレゼント|お得|新規|入会|お申込|ポイント\d*倍|限定)/i;
 
 /**
  * Billing wording strong enough to name a category on its own. Deliberately
@@ -111,7 +121,7 @@ const FINANCE_PROMO_RE =
  * owns those, and a shop's invoice is a purchase, not a bill.
  */
 const BILLING_STRONG_RE =
-  /\b(statement\s+is\s+ready|statement\s+available|your\s+statement|new\s+statement|e[- ]statement|billing\s+statement|account\s+statement|statement\s+of\s+account|(?:monthly|annual|quarterly|rent)\s+statement|your\s+(?:\w+\s+)?bill\b|bill\s+is\s+ready|rent\s+(?:due|payment|reminder)|payment\s+due|past\s+due|payment\s+reminder|minimum\s+payment|autopay|auto[- ]pay|automatic\s+payment|direct\s+deposit|overdraft|insufficient\s+funds|low\s+balance|account\s+balance|wire\s+transfer|payment\s+(?:posted|processed|failed|declined)|premium\s+(?:due|notice)|policy\s+(?:renewal|documents?)|loan\s+(?:payment|statement)|mortgage\s+(?:payment|statement)|tax\s+(?:return|document|statement)|1099|w[- ]?2\b|payroll|pay\s*stub|credit\s+score)\b/i;
+  /\b(statement\s+is\s+ready|statement\s+available|your\s+statement|new\s+statement|e[- ]statement|billing\s+statement|account\s+statement|statement\s+of\s+account|(?:monthly|annual|quarterly|rent)\s+statement|your\s+(?:\w+\s+)?bill\b|bill\s+is\s+ready|rent\s+(?:due|payment|reminder)|payment\s+due|past\s+due|payment\s+reminder|minimum\s+payment|autopay|auto[- ]pay|automatic\s+payment|direct\s+deposit|overdraft|insufficient\s+funds|low\s+balance|account\s+balance|wire\s+transfer|payment\s+(?:posted|processed|failed|declined)|premium\s+(?:due|notice)|policy\s+(?:renewal|documents?)|loan\s+(?:payment|statement)|mortgage\s+(?:payment|statement)|tax\s+(?:return|document|statement)|1099|w[- ]?2\b|payroll|pay\s*stub|credit\s+score)\b|利用明細|取引明細|ご請求|請求額|引き?落と?し|口座振替|お振込|入金のお知らせ|出金のお知らせ|残高|源泉徴収|確定申告|年末調整|給与明細/i;
 
 export const isFinanceDomain = (domain: string): boolean =>
   domainMatches(domain, FINANCE_DOMAINS);

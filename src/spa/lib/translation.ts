@@ -7,7 +7,6 @@ const TARGET_LANGUAGE = "en";
 const TARGET_LABEL = "English";
 const TRANSLATION_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 const TRANSLATION_CONFIG_KEY = "neoinbox.translationConfig";
-export const TRANSLATION_ENDPOINT_KEY = "neoinbox.translationEndpoint";
 
 export type TranslationProvider =
   | "deepl"
@@ -112,17 +111,8 @@ export const getTranslationConfig = (): TranslationConfig => {
         model: typeof parsed.model === "string" ? parsed.model : "",
       };
     } catch {
-      // Fall through to legacy endpoint migration.
+      // Unreadable config: fall back to the defaults.
     }
-  }
-
-  const legacyEndpoint = localStorage.getItem(TRANSLATION_ENDPOINT_KEY)?.trim() ?? "";
-  if (legacyEndpoint) {
-    return {
-      ...DEFAULT_TRANSLATION_CONFIG,
-      provider: "custom",
-      endpoint: legacyEndpoint,
-    };
   }
 
   return DEFAULT_TRANSLATION_CONFIG;
@@ -137,7 +127,6 @@ export const setTranslationConfig = (config: TranslationConfig): void => {
     model: config.model.trim(),
   };
   localStorage.setItem(TRANSLATION_CONFIG_KEY, JSON.stringify(normalized));
-  localStorage.removeItem(TRANSLATION_ENDPOINT_KEY);
 };
 
 export const getTranslationEndpoint = (): string =>

@@ -13,12 +13,14 @@ const FORUM_DOMAINS = [
   // Group/list hosts.
   "googlegroups.com", "groups.io", "listserv.com", "freelists.org",
   "yahoogroups.com", "simplelists.com", "mailman3.com", "topicbox.com",
-  "librelist.com", "sourceforge.net", "lists.sourceforge.net",
-  // Project lists that send from their own infrastructure.
+  "librelist.com", "lists.sourceforge.net", "lists.sr.ht",
+  // Project lists that send from their own infrastructure. List hosts only:
+  // the bare project domains also send donation receipts, conference
+  // registrations and bug-tracker mail, and their lists carry List-* headers
+  // that claim them anyway.
   "lists.debian.org", "lists.ubuntu.com", "lists.fedoraproject.org",
   "lists.freedesktop.org", "lists.linux.dev", "vger.kernel.org",
-  "kernel.org", "mail.python.org", "python.org", "lists.apache.org",
-  "apache.org", "lists.gnu.org", "gnu.org", "lists.mozilla.org",
+  "mail.python.org", "lists.apache.org", "lists.gnu.org", "lists.mozilla.org",
   "lists.openwall.com", "lists.w3.org", "ietf.org",
   // Forum platforms.
   "discoursemail.com", "discourse.org", "discourse.group",
