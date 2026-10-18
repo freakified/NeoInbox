@@ -20,20 +20,16 @@ export const TripSettings = () => {
         <div>
           <h3 className={s.editorTitle}>Trips</h3>
           <p className={s.editorDesc}>
-            Flights, stays, rental cars, and reservations, gathered into trips.
+            Travel reservations, grouped into trips.
           </p>
         </div>
       </div>
 
       <section className={s.section}>
-        <h4 className={s.sectionTitle}>Archived mail</h4>
+        <h4 className={s.sectionTitle}>Scan archive</h4>
         <p className={s.helpText}>
-          NeoInbox looks for trips in mail as it arrives and in your inbox.
-          To find past trips, first import your archive (Settings → Archive),
-          then scan it here. The scan reads the full text of each
-          travel-looking archived message — usually a few hundred — and
-          Thunderbird downloads any it doesn&apos;t already have. You can stop at
-          any time; scanning again continues where it left off.
+          Find past trips in your imported archive (Settings → Advanced). You
+          can stop and resume anytime.
         </p>
         {running ? (
           <div className={s.scanProgress}>
@@ -69,9 +65,7 @@ export const TripSettings = () => {
       <section className={s.section}>
         <h4 className={s.sectionTitle}>Rebuild</h4>
         <p className={s.helpText}>
-          Throw away the trips NeoInbox found and look again from scratch
-          {archiveScannedAt !== undefined ? ", archive included" : ""}. Trips
-          you made yourself, and mail you moved in or out of a trip, are kept.
+          Re-detect all trips from scratch. Trips you made or edited are kept.
         </p>
         <button
           type="button"

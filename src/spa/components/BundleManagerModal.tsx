@@ -15,15 +15,15 @@ import {
   type SelectedPane,
   type BundleFormState,
   BUNDLE_CATEGORIES,
+  EXCLUSIONS,
   emptyForm,
   paneKey,
   hasDraftRule,
 } from "./settings/bundleForm";
 import { GeneralSettings } from "./settings/GeneralSettings";
-import { ArchiveSettings } from "./settings/ArchiveSettings";
+import { AdvancedSettings } from "./settings/AdvancedSettings";
 import { TripSettings } from "./settings/TripSettings";
-import { TranslationSettings } from "./settings/TranslationSettings";
-import { RemoteImagesSettings } from "./settings/RemoteImagesSettings";
+import { TRIP_COLOR } from "./TripSliceRow";
 import { BuiltinBundleEditor, CustomBundleEditor, ThreadRouteSummary } from "./settings/BundleEditors";
 
 export const BundleManagerModal = ({
@@ -148,7 +148,7 @@ export const BundleManagerModal = ({
     : undefined;
   const conflictNote =
     composerConflict && composerConflict.target !== selectedTarget
-      ? `Currently routed to ${targetName(composerConflict.target)} — adding it here will move it.`
+      ? `Currently routed to ${targetName(composerConflict.target)}; adding moves it here.`
       : undefined;
 
   const saveForm = () => {
@@ -229,6 +229,8 @@ export const BundleManagerModal = ({
     setRuleValue(thread ? threadRuleDefaults[type] : "");
   };
 
+  const exclusionCount = routeRules.filter((r) => r.target === "personal").length;
+
   const modal = (
     <div
       className={s.overlay}
@@ -239,10 +241,7 @@ export const BundleManagerModal = ({
     >
       <div className={s.dialog} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className={s.head}>
-          <div>
-            <h2 className={s.title}>Settings</h2>
-            {thread && <p className={s.subtitle}>Add rules from this thread or manage any bundle.</p>}
-          </div>
+          <h2 className={s.title}>Settings</h2>
           <button type="button" className={s.closeBtn} onClick={onClose} aria-label="Close">
             <Icon name="close" className={s.closeIcon} />
           </button>
@@ -260,39 +259,23 @@ export const BundleManagerModal = ({
             </button>
             <button
               type="button"
-              className={clsx(s.bundleNavItem, paneKey(selected) === "archive" && s.bundleNavItemActive)}
-              onClick={() => choose({ kind: "archive" })}
+              className={clsx(s.bundleNavItem, paneKey(selected) === "advanced" && s.bundleNavItemActive)}
+              onClick={() => choose({ kind: "advanced" })}
             >
-              <Icon name="archive" className={s.navIcon} />
-              <span className={s.navName}>Archive</span>
+              <Icon name="tune" className={s.navIcon} />
+              <span className={s.navName}>Advanced</span>
             </button>
+
+            <div className={s.sideSectionLabel}>Bundling</div>
             <button
               type="button"
               className={clsx(s.bundleNavItem, paneKey(selected) === "trips" && s.bundleNavItemActive)}
               onClick={() => choose({ kind: "trips" })}
             >
-              <Icon name="travel" className={s.navIcon} />
+              <Icon name="travel" className={s.navIcon} style={{ color: TRIP_COLOR }} />
               <span className={s.navName}>Trips</span>
             </button>
-            <button
-              type="button"
-              className={clsx(s.bundleNavItem, paneKey(selected) === "remoteImages" && s.bundleNavItemActive)}
-              onClick={() => choose({ kind: "remoteImages" })}
-            >
-              <Icon name="image" className={s.navIcon} />
-              <span className={s.navName}>Remote Images</span>
-            </button>
-            <button
-              type="button"
-              className={clsx(s.bundleNavItem, paneKey(selected) === "translation" && s.bundleNavItemActive)}
-              onClick={() => choose({ kind: "translation" })}
-            >
-              <Icon name="translate" className={s.navIcon} />
-              <span className={s.navName}>Translation</span>
-            </button>
-
-            <div className={s.sideSectionLabel}>Bundling</div>
-            {BUNDLE_CATEGORIES.map((cat) => {
+            {BUNDLE_CATEGORIES.filter((cat) => cat !== "personal").map((cat) => {
               const meta = CATEGORIES[cat];
               const selectedKey = paneKey(selected);
               const count = routeRules.filter((r) => r.target === cat).length;
@@ -309,8 +292,17 @@ export const BundleManagerModal = ({
                 </button>
               );
             })}
+            <button
+              type="button"
+              className={clsx(s.bundleNavItem, paneKey(selected) === "builtin:personal" && s.bundleNavItemActive)}
+              onClick={() => choose({ kind: "builtin", id: "personal" })}
+            >
+              <Icon name={EXCLUSIONS.icon} className={s.navIcon} />
+              <span className={s.navName}>{EXCLUSIONS.name}</span>
+              {exclusionCount > 0 && <span className={s.navCount}>{exclusionCount}</span>}
+            </button>
 
-            <div className={s.sideSectionLabel}>Custom</div>
+            <div className={s.sideSectionLabel}>Custom bundles</div>
             {customBundles.map((bundle) => {
               const meta = getCategoryMeta(bundle.id, customBundles);
               return (
@@ -332,21 +324,17 @@ export const BundleManagerModal = ({
               onClick={() => choose({ kind: "new" })}
             >
               <Icon name="add" className={s.navIcon} />
-              New bundle
+              <span className={s.navName}>New bundle</span>
             </button>
           </aside>
 
           <main className={s.content}>
             {selected.kind === "general" ? (
               <GeneralSettings />
-            ) : selected.kind === "archive" ? (
-              <ArchiveSettings />
+            ) : selected.kind === "advanced" ? (
+              <AdvancedSettings />
             ) : selected.kind === "trips" ? (
               <TripSettings />
-            ) : selected.kind === "remoteImages" ? (
-              <RemoteImagesSettings />
-            ) : selected.kind === "translation" ? (
-              <TranslationSettings />
             ) : (
               <>
                 {thread && (
@@ -369,7 +357,6 @@ export const BundleManagerModal = ({
                     onRuleValueChange={setRuleValue}
                     onAddRule={addRule}
                     conflict={conflictNote}
-                    saveHint="Rules are saved immediately."
                   />
                 ) : (
                   <CustomBundleEditor
@@ -390,11 +377,7 @@ export const BundleManagerModal = ({
                     onSave={saveForm}
                     onDelete={selected.kind === "custom" ? removeCustom : undefined}
                     conflict={conflictNote}
-                    saveHint={
-                      selected.kind === "new"
-                        ? "Rules will be created when you save the bundle."
-                        : "Rules are saved immediately."
-                    }
+                    saveHint={selected.kind === "new" ? "Rules are added when you save." : undefined}
                   />
                 )}
               </>

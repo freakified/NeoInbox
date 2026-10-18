@@ -8,7 +8,6 @@ import { BundleMenu } from "./BundleMenu";
 import { Icon } from "./Icon";
 import { InlineMessage } from "./InlineMessage";
 import { InlineReply, isEditableDraft } from "./InlineReply";
-import { useComposeMode } from "../lib/composePrefs";
 import { PendingMessage } from "./PendingMessage";
 import { ReplyFooter } from "./ReplyFooter";
 import { SnoozeMenu } from "./SnoozeMenu";
@@ -48,8 +47,7 @@ export const ThreadView = ({
   // Inline replies can answer your own sent mail too (it goes to its recipients).
   const inlineReplyTarget =
     replyTarget ?? [...t.messages].reverse().find((m) => m.origin !== "draft");
-  const composeMode = useComposeMode();
-  const inlineCompose = composeMode !== "thunderbird" && !!inlineReplyTarget;
+  const inlineCompose = !!inlineReplyTarget;
   // With inline compose the latest draft sits at the bottom as an editable
   // card (see InlineReply) instead of in the message list.
   const messages = useMemo(
@@ -266,7 +264,6 @@ export const ThreadView = ({
           thread={t}
           replyTarget={inlineReplyTarget}
           draft={latestDraft}
-          mode={composeMode}
         />
       ) : (
         <ReplyFooter replyTarget={replyTarget} draft={latestDraft} />

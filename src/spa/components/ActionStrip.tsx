@@ -1,6 +1,5 @@
 import { clsx } from "clsx";
 import type { Thread } from "../../shared/types";
-import { useShowDeleteActions } from "../lib/deleteActionPrefs";
 import { useThreadActions } from "../lib/useThreadActions";
 import { BundleMenu } from "./BundleMenu";
 import { Icon } from "./Icon";
@@ -8,7 +7,6 @@ import { SnoozeMenu } from "./SnoozeMenu";
 import s from "./ActionStrip.module.css";
 
 export const ActionStrip = ({ thread }: { thread: Thread }) => {
-  const showDeleteActions = useShowDeleteActions();
   const actions = useThreadActions(thread);
 
   return (
@@ -25,11 +23,9 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
           <Icon name="alarm_off" className={clsx(s.iconBase, s.iconMuted)} />
         </ActionBtn>
       )}
-      {showDeleteActions && (
-        <ActionBtn title="Trash (#)" onClick={actions.trash}>
-          <Icon name="delete" className={clsx(s.iconBase, s.iconMuted)} />
-        </ActionBtn>
-      )}
+      <ActionBtn title="Trash (#)" onClick={actions.trash}>
+        <Icon name="delete" className={clsx(s.iconBase, s.iconMuted)} />
+      </ActionBtn>
       {actions.hasInboxMessages && (
         <ActionBtn title="Done (e)" onClick={actions.done}>
           <Icon name="check" className={clsx(s.iconBase, s.iconMuted)} />

@@ -2,7 +2,6 @@ import { clsx } from "clsx";
 import type { RawMessage, Thread } from "../../shared/types";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate, formatTimeAgo } from "../lib/dateBucket";
-import { useShowDeleteActions } from "../lib/deleteActionPrefs";
 import { overlayIsOpen } from "../lib/overlays";
 import { keepFocusAfterRowRemoval } from "../lib/rowNavigation";
 import { useIsSelected, useSelection, useSelectionActive } from "../lib/selection";
@@ -27,7 +26,6 @@ export const ThreadRow = ({
   onToggle: () => void;
 }) => {
   const actions = useThreadActions(t);
-  const showDeleteActions = useShowDeleteActions();
   const selected = useIsSelected(t.id);
   const selecting = useSelectionActive();
   const toggleSelected = useSelection((st) => st.toggle);
@@ -54,7 +52,7 @@ export const ThreadRow = ({
 
     if (e.key === "e") run(actions.hasInboxMessages, actions.done);
     else if (e.key === "s") run(actions.hasInboxMessages, actions.snoozeDefault);
-    else if (e.key === "#") run(showDeleteActions, actions.trash);
+    else if (e.key === "#") run(true, actions.trash);
     else if (e.key === "p") run(true, actions.togglePin, false);
     else if (e.key === "x") run(true, () => toggleSelected(t.id), false);
   };

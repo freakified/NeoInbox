@@ -7,7 +7,6 @@ import { liveTbId } from "../../shared/liveMessage";
 import type { RawMessage, Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
-import type { ComposeMode } from "../lib/composePrefs";
 import { formatDate } from "../lib/dateBucket";
 import { loadDraftValue } from "../lib/draftValue";
 import { useIdentities } from "../lib/identities";
@@ -233,13 +232,11 @@ export const InlineReply = ({
   thread,
   replyTarget,
   draft: savedDraft,
-  mode,
 }: {
   thread: Thread;
   replyTarget: RawMessage;
   /** A Thunderbird draft already saved in this conversation. */
   draft?: RawMessage;
-  mode: Exclude<ComposeMode, "thunderbird">;
 }) => {
   const myEmails = useMailStore((st) => st.myEmails);
   const composeMessage = useMailStore((st) => st.composeMessage);
@@ -463,7 +460,6 @@ export const InlineReply = ({
       <ComposerForm
         value={state.value}
         onChange={(value) => update({ ...state, value })}
-        mode={mode}
         avatar
         compactAddresses
         leading={

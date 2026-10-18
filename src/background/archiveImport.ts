@@ -1,5 +1,5 @@
 /**
- * Settings → Archive: brings mail archived before NeoInbox was installed into
+ * Settings → Advanced: brings mail archived before NeoInbox was installed into
  * the cache, as Done rows, so Done, bundle views, threading and the trip scan
  * can see it.
  *

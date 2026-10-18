@@ -12,7 +12,6 @@ import {
   type StreamView,
 } from "../store/mailStore";
 import { CATEGORIES, getCategoryMeta } from "../shared/categories";
-import { useShowDeleteActions } from "./lib/deleteActionPrefs";
 import { scrollKeeper } from "./lib/scrollKeeper";
 import { BundleSliceRow } from "./components/BundleSliceRow";
 import { BundleManagerModal } from "./components/BundleManagerModal";
@@ -174,9 +173,8 @@ export const App = () => {
   const loadingHistory = useMailStore((st) => st.loadingHistory);
   const loadOlderHistory = useMailStore((st) => st.loadOlderHistory);
   const customBundles = useMailStore((st) => st.customBundles);
-  const showDeleteActions = useShowDeleteActions();
 
-  const { doneMessages, trashMessages } = useBulkActions();
+  const { doneMessages } = useBulkActions();
 
   // Bulk sweeps never touch pinned threads — that's the point of pinning.
   const sectionDoneAll = (items: StreamItem[]) => {
@@ -186,15 +184,6 @@ export const App = () => {
         .flatMap((t) => t.messages.filter((m) => m.origin === "inbox").map((m) => m.key)),
     );
     doneMessages(ids);
-  };
-
-  const sectionTrashAll = (items: StreamItem[]) => {
-    const ids = items.flatMap((item) =>
-      threadsOfItem(item)
-        .filter((t) => !t.pinned)
-        .flatMap((t) => t.messages.map((m) => m.key)),
-    );
-    trashMessages(ids);
   };
 
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -680,15 +669,6 @@ export const App = () => {
                 <SectionLabel>{group.label}</SectionLabel>
                 {showDoneAll && canDoneSection(group.items) && (
                   <div className={s.sectionActions}>
-                    {showDeleteActions && (
-                      <button
-                        onClick={() => sectionTrashAll(group.items)}
-                        title="Delete all"
-                        className={s.sectionActionBtn}
-                      >
-                        <Icon name="delete" className={s.sectionActionIcon} />
-                      </button>
-                    )}
                     <button
                       onClick={() => sectionDoneAll(group.items)}
                       title="Done all"

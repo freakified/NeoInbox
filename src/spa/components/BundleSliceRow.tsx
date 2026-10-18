@@ -5,7 +5,6 @@ import { getCategoryMeta } from "../../shared/categories";
 import { useCustomBundles, useMailStore } from "../../store/mailStore";
 import { senderName } from "../lib/avatar";
 import { groupByBucket } from "../lib/dateBucket";
-import { useShowDeleteActions } from "../lib/deleteActionPrefs";
 import { useBulkActions } from "./BulkActionConfirm";
 import { Icon } from "./Icon";
 import { MessageAttachments, collectAttachments } from "./MessageAttachments";
@@ -34,7 +33,6 @@ export const BundleSliceRow = ({
 }) => {
   const customBundles = useCustomBundles();
   const meta = getCategoryMeta(category, customBundles);
-  const showDeleteActions = useShowDeleteActions();
   const { doneMessages, trashMessages } = useBulkActions();
   const openBundleSettings = useMailStore((st) => st.openBundleSettings);
 
@@ -153,15 +151,13 @@ export const BundleSliceRow = ({
             >
               <Icon name="settings" className={s.actionIcon} />
             </button>
-            {showDeleteActions && (
-              <button
-                onClick={handleTrashAll}
-                title="Delete all"
-                className={s.actionBtn}
-              >
-                <Icon name="delete" className={s.actionIcon} />
-              </button>
-            )}
+            <button
+              onClick={handleTrashAll}
+              title="Delete all"
+              className={s.actionBtn}
+            >
+              <Icon name="delete" className={s.actionIcon} />
+            </button>
             <button
               onClick={handleDoneAll}
               title="Archive all"

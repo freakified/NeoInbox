@@ -2,7 +2,6 @@ import { clsx } from "clsx";
 import { useState } from "react";
 import type { ReminderRecord } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
-import { useShowDeleteActions } from "../lib/deleteActionPrefs";
 import { formatDate, formatTimeAgo } from "../lib/dateBucket";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
 import strip from "./ActionStrip.module.css";
@@ -21,7 +20,6 @@ const ReminderActionStrip = ({ reminder }: { reminder: ReminderRecord }) => {
   const restoreReminder = useMailStore((st) => st.restoreReminder);
   const deleteReminder = useMailStore((st) => st.deleteReminder);
   const notify = useMailStore((st) => st.notify);
-  const showDeleteActions = useShowDeleteActions();
   const active = reminder.status === "active";
   const snoozed = reminder.snoozeWakeAt !== undefined;
 
@@ -61,18 +59,16 @@ const ReminderActionStrip = ({ reminder }: { reminder: ReminderRecord }) => {
           <Icon name="alarm_off" className={clsx(strip.iconBase, strip.iconMuted)} />
         </button>
       )}
-      {showDeleteActions && (
-        <button
-          title="Delete"
-          onClick={(e) => {
-            e.stopPropagation();
-            deleteReminder(reminder.id);
-          }}
-          className={strip.btn}
-        >
-          <Icon name="delete" className={clsx(strip.iconBase, strip.iconMuted)} />
-        </button>
-      )}
+      <button
+        title="Delete"
+        onClick={(e) => {
+          e.stopPropagation();
+          deleteReminder(reminder.id);
+        }}
+        className={strip.btn}
+      >
+        <Icon name="delete" className={clsx(strip.iconBase, strip.iconMuted)} />
+      </button>
       {active ? (
         <button
           title="Done"

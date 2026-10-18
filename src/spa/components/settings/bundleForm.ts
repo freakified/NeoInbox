@@ -10,10 +10,8 @@ export interface DraftRule {
 export type SelectedBundle = { kind: "builtin"; id: BuiltinCategory } | { kind: "custom"; id: string } | { kind: "new" };
 export type SelectedPane =
   | { kind: "general" }
-  | { kind: "archive" }
+  | { kind: "advanced" }
   | { kind: "trips" }
-  | { kind: "remoteImages" }
-  | { kind: "translation" }
   | SelectedBundle;
 
 export interface BundleFormState {
@@ -25,10 +23,16 @@ export interface BundleFormState {
   order: number;
 }
 
-/** Includes "personal" (the unbundled Inbox), sorted last, so its rules stay manageable. */
+/**
+ * Includes "personal" (the unbundled Inbox), sorted last, so its rules stay
+ * manageable; settings shows it as Exclusions.
+ */
 export const BUNDLE_CATEGORIES = Object.entries(CATEGORIES)
   .sort(([, a], [, b]) => a.order - b.order)
   .map(([cat]) => cat as BuiltinCategory);
+
+/** How settings presents "personal": rules there keep mail out of bundles. */
+export const EXCLUSIONS = { name: "Exclusions", icon: "inbox" };
 
 export const PRESET_COLORS = [
   "#4285F4", "#34A853", "#FBBC04", "#EA4335",
@@ -125,9 +129,9 @@ export const CUSTOM_BUNDLE_ICONS: readonly string[] = [
 ];
 
 export const ruleDescription = (type: RuleType): string => {
-  if (type === "domain") return "Matches any sender at this domain.";
-  if (type === "email") return "Matches this exact sender address.";
-  return "Matches when the subject includes this text anywhere.";
+  if (type === "domain") return "Any sender at this domain.";
+  if (type === "email") return "This exact sender.";
+  return "Subject includes this text.";
 };
 
 export const rulePreview = (type: RuleType, value: string): string => {
@@ -151,11 +155,7 @@ export const bundleKey = (selected: SelectedBundle): string =>
   selected.kind === "new" ? "new" : `${selected.kind}:${selected.id}`;
 
 export const paneKey = (selected: SelectedPane): string =>
-  selected.kind === "general" ||
-  selected.kind === "archive" ||
-  selected.kind === "trips" ||
-  selected.kind === "remoteImages" ||
-  selected.kind === "translation"
+  selected.kind === "general" || selected.kind === "advanced" || selected.kind === "trips"
     ? selected.kind
     : bundleKey(selected);
 

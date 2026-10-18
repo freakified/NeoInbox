@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
 import { useMailStore } from "../../store/mailStore";
 import type { PoppedReply } from "../../store/storeTypes";
-import type { ComposeMode } from "../lib/composePrefs";
 import {
   composerBody,
   ComposerForm,
@@ -32,7 +31,6 @@ export const ComposePanel = ({
   to,
   prefill,
   reply,
-  mode,
   onClose,
   onReopen,
 }: {
@@ -42,7 +40,6 @@ export const ComposePanel = ({
   prefill?: { subject: string; text: string; html: string };
   /** A popped-out reply; its thread decides how it's sent, kept or discarded. */
   reply?: PoppedReply;
-  mode: Exclude<ComposeMode, "thunderbird">;
   onClose: () => void;
   /** Opens the panel again (with the unsent message); used by discard's Undo. */
   onReopen?: () => void;
@@ -129,20 +126,18 @@ export const ComposePanel = ({
         >
           <Icon name={minimized ? "expand_less" : "minimize"} className={s.closeIcon} />
         </button>
-        {mode === "send" && (
-          <button
-            type="button"
-            className={s.closeBtn}
-            onClick={(e) => {
-              e.stopPropagation();
-              submit(false, value.identityId);
-            }}
-            title="Pop out to Thunderbird (attachments, more formatting)"
-            aria-label="Pop out to Thunderbird"
-          >
-            <Icon name="open_in_new" className={s.closeIcon} />
-          </button>
-        )}
+        <button
+          type="button"
+          className={s.closeBtn}
+          onClick={(e) => {
+            e.stopPropagation();
+            submit(false, value.identityId);
+          }}
+          title="Pop out to Thunderbird (attachments, more formatting)"
+          aria-label="Pop out to Thunderbird"
+        >
+          <Icon name="open_in_new" className={s.closeIcon} />
+        </button>
         <button
           type="button"
           className={s.closeBtn}
@@ -160,7 +155,6 @@ export const ComposePanel = ({
         <ComposerForm
           value={value}
           onChange={setValue}
-          mode={mode}
           showSubject={!reply}
           foldAddresses
           fill

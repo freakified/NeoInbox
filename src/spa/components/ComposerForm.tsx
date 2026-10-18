@@ -7,7 +7,6 @@ import {
   splitAddressList,
 } from "../../shared/compose";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
-import type { ComposeMode } from "../lib/composePrefs";
 import { useKnownContacts } from "../lib/contacts";
 import { useIdentities } from "../lib/identities";
 import { sanitizeComposerHtml } from "../lib/richText";
@@ -215,7 +214,6 @@ const AddressSummary = ({ label, addresses }: { label: string; addresses: string
 export const ComposerForm = ({
   value,
   onChange,
-  mode,
   showSubject,
   leading,
   avatar,
@@ -232,7 +230,6 @@ export const ComposerForm = ({
 }: {
   value: ComposerValue;
   onChange: (next: ComposerValue) => void;
-  mode: Exclude<ComposeMode, "thunderbird">;
   showSubject?: boolean;
   /** Sits left of the address line, e.g. the reply/forward menu. */
   leading?: ReactNode;
@@ -296,8 +293,8 @@ export const ComposerForm = ({
   }, [focus]);
 
   const primary = () => {
-    if (mode === "send" && !hasRecipients) return;
-    onSubmit(mode === "send", identityId);
+    if (!hasRecipients) return;
+    onSubmit(true, identityId);
   };
 
   const fromField = identities.length > 1 && (
@@ -480,27 +477,15 @@ export const ComposerForm = ({
           </ul>
         )}
         <div className={s.actions}>
-          {mode === "send" ? (
-            <button
-              type="button"
-              className={s.sendBtn}
-              disabled={!hasRecipients}
-              onClick={primary}
-              title="Send (Ctrl+Enter)"
-            >
-              Send
-            </button>
-          ) : (
-            <button
-              type="button"
-              className={s.sendBtn}
-              onClick={primary}
-              title="Open in Thunderbird to finish (Ctrl+Enter)"
-            >
-              <Icon name="open_in_new" className={s.sendBtnIcon} />
-              Finish in Thunderbird
-            </button>
-          )}
+          <button
+            type="button"
+            className={s.sendBtn}
+            disabled={!hasRecipients}
+            onClick={primary}
+            title="Send (Ctrl+Enter)"
+          >
+            Send
+          </button>
           <button
             type="button"
             className={s.iconBtn}

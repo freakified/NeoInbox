@@ -6,7 +6,6 @@ import { ITINERARY_ICONS, itineraryMessage, type ItineraryItem } from "../../sha
 import { pinKeyOf } from "../../shared/pinKey";
 import { formatTripRange, tripDateRange } from "../../shared/trips";
 import { useMailStore } from "../../store/mailStore";
-import { useShowDeleteActions } from "../lib/deleteActionPrefs";
 import { useTripItinerary } from "../lib/useTripItinerary";
 import { useBulkActions } from "./BulkActionConfirm";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -42,7 +41,6 @@ export const TripSliceRow = ({
 }) => {
   const renameTrip = useMailStore((st) => st.renameTrip);
   const startNewMessage = useMailStore((st) => st.startNewMessage);
-  const showDeleteActions = useShowDeleteActions();
   const { doneMessages, trashMessages } = useBulkActions();
 
   const range = tripDateRange(trip, threads);
@@ -177,11 +175,9 @@ export const TripSliceRow = ({
                   <Icon name="forward" className={b.actionIcon} />
                 </button>
               )}
-              {showDeleteActions && (
-                <button onClick={handleTrashAll} title="Delete" className={s.bannerBtn}>
-                  <Icon name="delete" className={b.actionIcon} />
-                </button>
-              )}
+              <button onClick={handleTrashAll} title="Delete" className={s.bannerBtn}>
+                <Icon name="delete" className={b.actionIcon} />
+              </button>
               <button onClick={handleDoneAll} title="Done" className={s.bannerBtn}>
                 <Icon name="check" className={b.actionIcon} />
               </button>

@@ -1,6 +1,5 @@
 import type { Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
-import { useShowDeleteActions } from "../lib/deleteActionPrefs";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
 import { useBulkActions } from "./BulkActionConfirm";
 import { Icon } from "./Icon";
@@ -29,7 +28,6 @@ export const SelectionBar = ({
   const moveToInboxThread = useMailStore((st) => st.moveToInboxThread);
   const notify = useMailStore((st) => st.notify);
   const { doneMessages, trashMessages } = useBulkActions();
-  const showDeleteActions = useShowDeleteActions();
 
   const messages = threads.flatMap((t) => t.messages);
   const inboxIds = messages.filter((m) => m.origin === "inbox").map((m) => m.key);
@@ -113,17 +111,15 @@ export const SelectionBar = ({
             <Icon name="move_to_inbox" className={s.icon} />
           </button>
         )}
-        {showDeleteActions && (
-          <button
-            type="button"
-            className={s.btn}
-            title="Trash"
-            aria-label="Trash"
-            onClick={act(() => trashMessages(messages.map((m) => m.key)))}
-          >
-            <Icon name="delete" className={s.icon} />
-          </button>
-        )}
+        <button
+          type="button"
+          className={s.btn}
+          title="Trash"
+          aria-label="Trash"
+          onClick={act(() => trashMessages(messages.map((m) => m.key)))}
+        >
+          <Icon name="delete" className={s.icon} />
+        </button>
         {inboxIds.length > 0 && (
           <button
             type="button"

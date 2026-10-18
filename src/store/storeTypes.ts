@@ -98,7 +98,7 @@ export interface MailStore {
   reclassifying: boolean;
   /** The Settings → Trips scan: running progress, else the last result. */
   tripScan: TripScanStatus | null;
-  /** Settings → Archive: the running import, else the last one. */
+  /** Settings → Advanced: the running import, else the last one. */
   archiveImport: ArchiveImportStatus | null;
   /**
    * Every Sent and Done row dated from here on is in messagesByKey; older ones

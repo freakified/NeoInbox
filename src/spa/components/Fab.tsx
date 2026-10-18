@@ -5,7 +5,6 @@ import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { Icon } from "./Icon";
 import { ReminderComposer } from "./ReminderComposer";
 import { ComposeDock, ComposePanel } from "./ComposePanel";
-import { useComposeMode } from "../lib/composePrefs";
 import s from "./Fab.module.css";
 
 interface FabContact {
@@ -68,14 +67,7 @@ export const Fab = () => {
     prefill?: NewMessagePrefill;
     key: number;
   } | null>(null);
-  const composeMode = useComposeMode();
-  const startMessage = (to?: string[]) => {
-    if (composeMode === "thunderbird") {
-      void messenger.compose.beginNew(to ? { to } : undefined);
-    } else {
-      setNewMessage({ to, key: Date.now() });
-    }
-  };
+  const startMessage = (to?: string[]) => setNewMessage({ to, key: Date.now() });
   // Elsewhere in the app (a trip's Forward) can ask for a prefilled message.
   const newMessageRequest = useMailStore((st) => st.newMessageRequest);
   const clearNewMessageRequest = useMailStore((st) => st.clearNewMessageRequest);
@@ -83,12 +75,8 @@ export const Fab = () => {
     if (!newMessageRequest) return;
     const { key, ...prefill } = newMessageRequest;
     clearNewMessageRequest();
-    if (composeMode === "thunderbird") {
-      void messenger.compose.beginNew({ subject: prefill.subject, body: prefill.html });
-    } else {
-      setNewMessage({ prefill, key });
-    }
-  }, [newMessageRequest, clearNewMessageRequest, composeMode]);
+    setNewMessage({ prefill, key });
+  }, [newMessageRequest, clearNewMessageRequest]);
   const poppedReply = useMailStore((st) => st.poppedReply);
   const clearPoppedReply = useMailStore((st) => st.clearPoppedReply);
   const reducedMotion = useReducedMotion();
@@ -213,28 +201,24 @@ export const Fab = () => {
         </motion.button>
       </div>
       {composerOpen && <ReminderComposer onClose={() => setComposerOpen(false)} />}
-      {composeMode !== "thunderbird" && (
-        <ComposeDock>
-          {newMessage && (
-            <ComposePanel
-              key={newMessage.key}
-              to={newMessage.to}
-              prefill={newMessage.prefill}
-              mode={composeMode}
-              onClose={() => setNewMessage(null)}
-              onReopen={() => setNewMessage({ key: Date.now() })}
-            />
-          )}
-          {poppedReply && (
-            <ComposePanel
-              key={poppedReply.key}
-              reply={poppedReply}
-              mode={composeMode}
-              onClose={clearPoppedReply}
-            />
-          )}
-        </ComposeDock>
-      )}
+      <ComposeDock>
+        {newMessage && (
+          <ComposePanel
+            key={newMessage.key}
+            to={newMessage.to}
+            prefill={newMessage.prefill}
+            onClose={() => setNewMessage(null)}
+            onReopen={() => setNewMessage({ key: Date.now() })}
+          />
+        )}
+        {poppedReply && (
+          <ComposePanel
+            key={poppedReply.key}
+            reply={poppedReply}
+            onClose={clearPoppedReply}
+          />
+        )}
+      </ComposeDock>
     </>
   );
 };

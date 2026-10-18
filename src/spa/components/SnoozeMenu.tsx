@@ -11,7 +11,7 @@ import {
   setLastCustomSnooze,
   TIME_OF_DAY_LABELS,
   TIMES_OF_DAY,
-  useSnoozePrefs,
+  SNOOZE_PREFS,
   type TimeOfDay,
 } from "../lib/snoozePrefs";
 import { Icon } from "./Icon";
@@ -58,7 +58,6 @@ export const SnoozeMenu = ({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
-  const prefs = useSnoozePrefs();
 
   const close = () => {
     setOpen(false);
@@ -166,7 +165,7 @@ export const SnoozeMenu = ({
             ) : (
               <>
                 <div className={s.title}>Snooze until...</div>
-                {snoozePresets(prefs).map(({ label, icon, wakeAt }) => (
+                {snoozePresets(SNOOZE_PREFS).map(({ label, icon, wakeAt }) => (
                   <button
                     key={label}
                     className={s.option}
@@ -213,27 +212,26 @@ const SnoozePicker = ({
   onBack: () => void;
   onChoose: (wakeAt: number) => void;
 }) => {
-  const prefs = useSnoozePrefs();
-  const [date, setDate] = useState(() => startOfDay(defaultCustomSnooze(prefs)));
+  const [date, setDate] = useState(() => startOfDay(defaultCustomSnooze(SNOOZE_PREFS)));
   const [timeMenuOpen, setTimeMenuOpen] = useState(false);
   const [timeChoice, setTimeChoice] = useState<TimeChoice>("morning");
-  const [customTime, setCustomTime] = useState(() => localTimeValue(prefs.times.morning));
+  const [customTime, setCustomTime] = useState(() => localTimeValue(SNOOZE_PREFS.times.morning));
   const [error, setError] = useState("");
 
   const now = new Date();
   const isToday = sameDay(date, now);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   // On today, times of day already behind us can't be picked.
-  const timeAvailable = (choice: TimeOfDay) => !isToday || prefs.times[choice] > nowMinutes;
+  const timeAvailable = (choice: TimeOfDay) => !isToday || SNOOZE_PREFS.times[choice] > nowMinutes;
 
-  const minutes = timeChoice === "custom" ? parseTimeValue(customTime) : prefs.times[timeChoice];
+  const minutes = timeChoice === "custom" ? parseTimeValue(customTime) : SNOOZE_PREFS.times[timeChoice];
 
   const pickDate = (next: Date) => {
     setDate(next);
     setError("");
-    if (timeChoice !== "custom" && sameDay(next, now) && prefs.times[timeChoice] <= nowMinutes) {
+    if (timeChoice !== "custom" && sameDay(next, now) && SNOOZE_PREFS.times[timeChoice] <= nowMinutes) {
       // Move to the next time of day still ahead, or a custom time if none is.
-      const upcoming = TIMES_OF_DAY.find((t) => prefs.times[t] > nowMinutes);
+      const upcoming = TIMES_OF_DAY.find((t) => SNOOZE_PREFS.times[t] > nowMinutes);
       if (upcoming) setTimeChoice(upcoming);
       else {
         setTimeChoice("custom");
@@ -279,7 +277,7 @@ const SnoozePicker = ({
             ) : (
               <>
                 <span className={s.selectValue}>{TIME_OF_DAY_LABELS[timeChoice]}</span>
-                <span className={s.selectHint}>{formatMinutes(prefs.times[timeChoice])}</span>
+                <span className={s.selectHint}>{formatMinutes(SNOOZE_PREFS.times[timeChoice])}</span>
               </>
             )}
             <Icon name="arrow_drop_down" className={s.selectArrow} />
@@ -301,7 +299,7 @@ const SnoozePicker = ({
                   }}
                 >
                   <span>{TIME_OF_DAY_LABELS[t]}</span>
-                  <span className={s.selectHint}>{formatMinutes(prefs.times[t])}</span>
+                  <span className={s.selectHint}>{formatMinutes(SNOOZE_PREFS.times[t])}</span>
                 </button>
               ))}
               <button

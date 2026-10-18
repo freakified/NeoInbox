@@ -13,6 +13,7 @@ import {
   PRESET_COLORS,
   CUSTOM_BUNDLE_ICON_GROUPS,
   CUSTOM_BUNDLE_ICONS,
+  EXCLUSIONS,
   rulePreview,
   type RuleBadge,
   threadBadge,
@@ -37,7 +38,7 @@ const RuleComposer = ({
   onRuleValueChange: (value: string) => void;
   onAddRule: () => void;
   conflict?: string;
-  saveHint: string;
+  saveHint?: string;
 }) => (
   <div className={s.ruleComposer}>
     {thread && (
@@ -49,7 +50,7 @@ const RuleComposer = ({
     )}
     <div className={s.ruleHelp}>
       <span>{rulePreview(ruleType, ruleValue)}</span>
-      <span>{saveHint}</span>
+      {saveHint && <span>{saveHint}</span>}
     </div>
     {conflict && (
       <div className={s.ruleConflict}>
@@ -84,8 +85,7 @@ const RuleComposer = ({
   </div>
 );
 
-const PRECEDENCE_NOTE =
-  "When rules overlap, the most specific wins: exact sender, then sender domain, then subject.";
+const PRECEDENCE_NOTE = "Most specific rule wins: sender, then domain, then subject.";
 
 export const ThreadRouteSummary = ({
   thread,
@@ -119,17 +119,17 @@ export const ThreadRouteSummary = ({
 
   const precedence =
     matches.length > 1
-      ? ` ${matches.length} rules match this thread — the most specific one wins.`
+      ? ` ${matches.length} rules match; the most specific wins.`
       : "";
   const text = winner
     ? stale
       ? predatesRule
-        ? `Your ${ruleTypeLabel[winner.type].toLowerCase()} rule “${winner.value}” routes mail like this to ${targetName(winner.target)}, but this thread arrived before the rule and hasn't moved.${precedence}`
-        : `Your ${ruleTypeLabel[winner.type].toLowerCase()} rule “${winner.value}” should route this thread to ${targetName(winner.target)}, but it hasn't been applied yet.${precedence}`
-      : `Your ${ruleTypeLabel[winner.type].toLowerCase()} rule “${winner.value}” routes this thread to ${targetName(winner.target)}.${precedence}`
+        ? `Rule “${winner.value}” routes this to ${targetName(winner.target)}, but the thread predates it.${precedence}`
+        : `Rule “${winner.value}” routes this to ${targetName(winner.target)}, but hasn't been applied yet.${precedence}`
+      : `Rule “${winner.value}” routes this to ${targetName(winner.target)}.${precedence}`
     : liveCategory
-      ? `This thread is in ${targetName(liveCategory)} because it matches the built-in detection. Rules you add always override built-in detection.`
-      : "No rules match this thread, so it stays in the inbox.";
+      ? `Built-in detection put this in ${targetName(liveCategory)}. Rules override it.`
+      : "No rules match this thread.";
   return (
     <div className={s.threadSummary}>
       <Icon name="alt_route" className={s.threadSummaryIcon} />
@@ -173,9 +173,9 @@ export const BuiltinBundleEditor = ({
   onRuleValueChange: (value: string) => void;
   onAddRule: () => void;
   conflict?: string;
-  saveHint: string;
+  saveHint?: string;
 }) => {
-  const meta = CATEGORIES[category];
+  const meta = category === "personal" ? { ...CATEGORIES.personal, ...EXCLUSIONS } : CATEGORIES[category];
   const routeRules = useRouteRules();
   const deleteRouteRule = useMailStore((st) => st.deleteRouteRule);
   const rules = routeRules.filter((r) => r.target === category);
@@ -188,8 +188,8 @@ export const BuiltinBundleEditor = ({
           <h3 className={s.editorTitle}>{meta.name}</h3>
           <p className={s.editorDesc}>
             {category === "personal"
-              ? `Rules here keep matching messages in the main inbox, unbundled. ${PRECEDENCE_NOTE}`
-              : `Rules here route matching messages into this bundle. ${PRECEDENCE_NOTE}`}
+              ? `Matching mail is never bundled. ${PRECEDENCE_NOTE}`
+              : `Matching mail goes here. ${PRECEDENCE_NOTE}`}
           </p>
         </div>
       </div>
@@ -198,9 +198,7 @@ export const BuiltinBundleEditor = ({
         <h4 className={s.sectionTitle}>Rules</h4>
         {rules.length === 0 ? (
           <p className={s.emptyText}>
-            {category === "personal"
-              ? "No custom rules yet."
-              : `No custom rules yet — messages land here when they match the built-in ${meta.name} detection.`}
+            {category === "personal" ? "No rules yet." : "No rules yet; built-in detection still applies."}
           </p>
         ) : (
           <div className={s.ruleList}>
@@ -272,7 +270,7 @@ export const CustomBundleEditor = ({
   onSave: () => void;
   onDelete?: () => void;
   conflict?: string;
-  saveHint: string;
+  saveHint?: string;
 }) => {
   const routeRules = useRouteRules();
   const deleteRouteRule = useMailStore((st) => st.deleteRouteRule);
@@ -409,15 +407,15 @@ export const CustomBundleEditor = ({
         />
       </section>
 
-      <div className={s.actions}>
+      <div className={s.formActions}>
+        <button type="button" className={s.saveBtn} disabled={!form.name.trim()} onClick={onSave}>
+          Save bundle
+        </button>
         {onDelete && (
           <button type="button" className={s.deleteBtn} onClick={onDelete}>
             Delete
           </button>
         )}
-        <button type="button" className={s.saveBtn} disabled={!form.name.trim()} onClick={onSave}>
-          Save bundle
-        </button>
       </div>
     </div>
   );
@@ -445,7 +443,7 @@ const RuleRow = ({
       {badge === "wins" && (
         <span
           className={clsx(s.ruleBadge, s.ruleBadgeWins)}
-          title="Of the rules matching the open thread, this is the most specific — it decides where the thread goes."
+          title="Most specific match; decides where this thread goes."
         >
           Matches this thread
         </span>
@@ -453,7 +451,7 @@ const RuleRow = ({
       {badge === "outranked" && (
         <span
           className={clsx(s.ruleBadge, s.ruleBadgeOutranked)}
-          title="This rule also matches the open thread, but a more specific rule wins: exact sender beats domain beats subject."
+          title="Also matches, but a more specific rule wins."
         >
           Outranked
         </span>

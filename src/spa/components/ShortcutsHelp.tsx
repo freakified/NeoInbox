@@ -20,7 +20,7 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
       ["p", "Pin or unpin"],
       ["x", "Select or deselect (shift-click selects a range)"],
       ["⌘A / Ctrl+A", "Select all"],
-      ["#", "Trash (when delete actions are on)"],
+      ["#", "Trash"],
     ],
   },
   {

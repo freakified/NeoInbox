@@ -58,7 +58,7 @@ export type ClientMsg =
   | { type: "trip-scan"; archive: boolean; rebuild?: boolean }
   | { type: "trip-scan-cancel" }
   /**
-   * Settings → Archive: cache archived mail from headers alone, back to
+   * Settings → Advanced: cache archived mail from headers alone, back to
    * `since` (ms; null for everything). Never fetches a body.
    */
   | { type: "archive-import"; since: number | null }

@@ -15,7 +15,7 @@ import s from "../BundleManagerModal.module.css";
 
 const normalizeEmail = (value: string): string => value.trim().toLowerCase();
 
-export const RemoteImagesSettings = () => {
+export const RemoteImagesSection = () => {
   const notify = useMailStore((st) => st.notify);
   const [senders, setSenders] = useState(() => listTrustedImageSenders());
   const [policy, setPolicy] = useState<RemoteImagePolicy>(() => getRemoteImagePolicy());
@@ -51,37 +51,26 @@ export const RemoteImagesSettings = () => {
   };
 
   return (
-    <div className={s.editor}>
-      <div className={s.editorHeader}>
-        <Icon name="image" className={s.editorIcon} />
-        <div>
-          <h3 className={s.editorTitle}>Remote Images</h3>
-          <p className={s.editorDesc}>Control which senders can display remote images automatically.</p>
-        </div>
+    <section className={s.section}>
+      <h4 className={s.sectionTitle}>Remote images</h4>
+      <div className={s.policyChoices}>
+        <PolicyChoice
+          checked={policy === "never"}
+          label="Never show"
+          onChange={() => updatePolicy("never")}
+        />
+        <PolicyChoice
+          checked={policy === "always"}
+          label="Always show"
+          onChange={() => updatePolicy("always")}
+        />
+        <PolicyChoice
+          checked={policy === "senders"}
+          label="Only from these senders"
+          onChange={() => updatePolicy("senders")}
+        />
       </div>
-
-      <section className={s.section}>
-        <h4 className={s.sectionTitle}>Display</h4>
-        <div className={s.policyChoices}>
-          <PolicyChoice
-            checked={policy === "never"}
-            label="Never show remote images"
-            onChange={() => updatePolicy("never")}
-          />
-          <PolicyChoice
-            checked={policy === "always"}
-            label="Always show remote images"
-            onChange={() => updatePolicy("always")}
-          />
-          <PolicyChoice
-            checked={policy === "senders"}
-            label="Only show from the following senders"
-            onChange={() => updatePolicy("senders")}
-          />
-        </div>
-      </section>
-
-      <section className={clsx(s.section, policy !== "senders" && s.sectionDisabled)}>
+      <div className={clsx(s.senderBlock, policy !== "senders" && s.sectionDisabled)}>
         <div className={s.senderInputRow}>
           <input
             type="email"
@@ -97,7 +86,7 @@ export const RemoteImagesSettings = () => {
           </button>
         </div>
         {senders.length === 0 ? (
-          <p className={s.emptyText}>No senders are allowed yet.</p>
+          <p className={s.emptyText}>No senders yet.</p>
         ) : (
           <div className={s.ruleList}>
             {senders.map((sender) => (
@@ -115,8 +104,8 @@ export const RemoteImagesSettings = () => {
             ))}
           </div>
         )}
-      </section>
-    </div>
+      </div>
+    </section>
   );
 };
 

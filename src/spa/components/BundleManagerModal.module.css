@@ -175,10 +175,33 @@
   gap: 8px;
 }
 
+/* MD1 settings: groups split by a full-width divider. */
+.section + .section {
+  border-top: 1px solid var(--color-md-divider);
+  padding-top: 20px;
+}
+
 .fieldBlock {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+/*
+ * MD1 sizes controls to their content rather than the pane: dropdowns to
+ * their options, text fields to what they hold, buttons to their label.
+ */
+.fieldBlock > .select {
+  max-width: 240px;
+}
+
+.fieldBlock > .input,
+.section > .input {
+  max-width: 400px;
+}
+
+.section > .primaryBtn {
+  align-self: flex-start;
 }
 
 .helpText {
@@ -188,7 +211,14 @@
   line-height: 1.4;
 }
 
-.sectionTitle,
+/* MD1 subheader: primary color, medium weight, sentence case. */
+.sectionTitle {
+  margin: 0;
+  color: var(--color-md-primary-dark);
+  font-size: 14px;
+  font-weight: 500;
+}
+
 .label {
   margin: 0;
   display: block;
@@ -238,6 +268,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
+  /* Room for the active swatch's ring, which sits outside the swatch. */
+  padding: 6px 4px 4px;
 }
 
 .colorSwatch {
@@ -535,12 +567,22 @@
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr) auto;
   gap: 8px;
+  max-width: 560px;
+}
+
+.senderBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 480px;
+  padding-top: 4px;
 }
 
 .senderInputRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
+  max-width: 480px;
 }
 
 .ruleChoices + .ruleInputRow {
@@ -550,27 +592,40 @@
 .policyChoices {
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
 .policyChoice {
-  min-height: 38px;
+  min-height: 36px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 16px;
   color: var(--color-md-on-surface);
   font-size: 14px;
   cursor: pointer;
-  padding: 4px 0;
 }
 
-.policyChoice:hover {
-  color: var(--color-md-primary);
-}
-
+/* MD1 radio: a 2px ring that turns primary, with a dot when checked. */
 .policyInput {
-  margin: 0;
+  appearance: none;
   flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border: 2px solid var(--color-md-icon);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: border-color 150ms, background-size 150ms;
+  background: radial-gradient(circle closest-side, var(--color-md-primary) 94%, transparent 100%) center / 0 0 no-repeat;
+}
+
+.policyInput:checked {
+  border-color: var(--color-md-primary);
+  background-size: 10px 10px;
+}
+
+.policyInput:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 8px rgba(66, 133, 244, 0.15);
 }
 
 .sectionDisabled {
@@ -632,11 +687,16 @@
   background: transparent;
 }
 
-.actions {
+/* MD1 form buttons: left-aligned, primary action first. */
+.formActions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   gap: 8px;
-  padding-top: 2px;
+  padding-top: 4px;
+}
+
+.formActions .deleteBtn {
+  margin-right: 0;
 }
 
 @media (max-width: 720px) {

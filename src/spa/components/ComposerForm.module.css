@@ -307,10 +307,6 @@
   box-shadow: none;
 }
 
-.sendBtnIcon {
-  font-size: 18px;
-}
-
 .iconBtn {
   display: flex;
   align-items: center;

@@ -1,6 +1,6 @@
 import {
   getLastCustomSnooze,
-  getSnoozePrefs,
+  SNOOZE_PREFS,
   type SnoozePrefs,
 } from "./snoozePrefs";
 
@@ -25,7 +25,7 @@ const nextDayOfWeek = (now: Date, day: number, minutes: number): Date => {
 };
 
 export const snoozePresets = (
-  prefs: SnoozePrefs = getSnoozePrefs(),
+  prefs: SnoozePrefs = SNOOZE_PREFS,
   lastCustom: number | null = getLastCustomSnooze(),
 ): SnoozePreset[] => {
   const now = new Date();
@@ -89,7 +89,7 @@ export const snoozePresets = (
   });
 };
 
-export const defaultCustomSnooze = (prefs: SnoozePrefs = getSnoozePrefs()): Date => {
+export const defaultCustomSnooze = (prefs: SnoozePrefs = SNOOZE_PREFS): Date => {
   const date = new Date();
   date.setDate(date.getDate() + 1);
   return setMinutes(date, prefs.times.morning);
