@@ -83,6 +83,11 @@ export interface RawMessage {
    * the list. Filled in with the other details from the same body fetch.
    */
   snippet?: string;
+  /**
+   * Shipments the message lets you track (inbox rows only), shown as cards
+   * on its row. Filled in with the other details; absent when there are none.
+   */
+  parcels?: Parcel[];
   detailsVersion?: number;
   /**
    * True when this row's category was decided without the full message body
@@ -193,6 +198,29 @@ export interface TripMembershipRecord {
   addedAt: number;
   /** Absent on rows written before reasons were recorded. */
   reason?: TripMembershipReason;
+}
+
+/** Who carries a parcel; "unknown" when the mail never says. */
+export type Carrier =
+  | "ups"
+  | "usps"
+  | "fedex"
+  | "dhl"
+  | "ontrac"
+  | "yamato"
+  | "sagawa"
+  | "japanpost"
+  | "amazon"
+  | "yodobashi"
+  | "unknown";
+
+/** A shipment an email lets you track. NeoInbox never tracks its state. */
+export interface Parcel {
+  carrier: Carrier;
+  /** Absent when the mail only links the shop's own tracking page (Amazon). */
+  number?: string;
+  /** Where TRACK goes: the carrier's lookup page, else the mail's own link. */
+  url?: string;
 }
 
 export type ReservationKind =

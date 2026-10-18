@@ -7,7 +7,9 @@ import { pinKeyOf } from "../shared/pinKey";
 import { scanCidRefs } from "../spa/lib/srcdoc";
 import { db } from "../store/db";
 import type { MessageKey } from "../shared/messageKey";
-import type { AttachmentSummary, RawMessage } from "../shared/types";
+import type { AttachmentSummary, Parcel, RawMessage } from "../shared/types";
+import { findParcels } from "../classifier/extractors/tracking";
+import { buildExtractorInput } from "../classifier/samples";
 import {
   type ArchivedCopy,
   findByHeaderMessageIdInFolder,
@@ -370,7 +372,30 @@ export interface MessageDetails {
   references: string[];
   inReplyTo: string[];
   snippet: string;
+  parcels: Parcel[];
 }
+
+/** Tracking numbers in a fetched body; never throws, since they're a nicety. */
+const parcelsFromPart = (
+  full: messenger.messages.MessagePart,
+  m: Pick<RawMessage, "author" | "subject" | "date">,
+): Parcel[] => {
+  const textParts: string[] = [];
+  const htmlParts: string[] = [];
+  const walk = (part: messenger.messages.MessagePart): void => {
+    const ct = (part.contentType ?? "").toLowerCase();
+    if (part.body && ct.startsWith("text/html")) htmlParts.push(part.body);
+    else if (part.body && ct.startsWith("text/plain")) textParts.push(part.body);
+    for (const sub of part.parts ?? []) walk(sub);
+  };
+  walk(full);
+  try {
+    return findParcels(buildExtractorInput({ ...m, textParts, htmlParts }));
+  } catch (e) {
+    log.debug("ingest", "parcel extraction failed", { e: String(e) });
+    return [];
+  }
+};
 
 const messageIdTokens = (value: string): string[] => {
   const bracketed = [...value.matchAll(/<([^>]+)>/g)].map((m) => m[1] ?? "");
@@ -401,6 +426,8 @@ export interface DetailsOptions {
    * round trip spent on a value the caller throws away.
    */
   attachments?: boolean;
+  /** Look for tracking numbers, given the message's sender, subject and date. */
+  parcelsOf?: Pick<RawMessage, "author" | "subject" | "date">;
 }
 
 export const extractMessageDetails = async (
@@ -421,6 +448,7 @@ export const extractMessageDetails = async (
   let references: string[] = [];
   let inReplyTo: string[] = [];
   let snippet = "";
+  let parcels: Parcel[] = [];
   // No body available: render every attachment as a card, and thread on
   // subject/participant alone.
   if (body.full) {
@@ -428,6 +456,7 @@ export const extractMessageDetails = async (
     references = headerValues(body.full.headers, "references").flatMap(messageIdTokens);
     inReplyTo = headerValues(body.full.headers, "in-reply-to").flatMap(messageIdTokens);
     snippet = snippetFromPart(body.full);
+    if (options.parcelsOf) parcels = parcelsFromPart(body.full, options.parcelsOf);
   }
 
   const attachments = list
@@ -439,7 +468,7 @@ export const extractMessageDetails = async (
       partName: a.partName,
     }));
 
-  return { attachments, references, inReplyTo, snippet };
+  return { attachments, references, inReplyTo, snippet, parcels };
 }
 
 /**
@@ -482,15 +511,17 @@ export const applyMessageDetails = async (
     raw.references = cached.references;
     raw.inReplyTo = cached.inReplyTo;
     raw.snippet = cached.snippet;
+    raw.parcels = cached.parcels;
     raw.detailsVersion = cached.detailsVersion ?? 0;
     return;
   }
 
-  const details = await extractMessageDetails(raw.tbId, { body });
+  const details = await extractMessageDetails(raw.tbId, { body, parcelsOf: raw });
   raw.attachments = details.attachments;
   raw.references = details.references;
   raw.inReplyTo = details.inReplyTo;
   raw.snippet = details.snippet;
+  raw.parcels = details.parcels.length ? details.parcels : undefined;
   raw.detailsVersion = MESSAGE_DETAILS_VERSION;
 }
 
@@ -512,6 +543,8 @@ export const applyMessageDetailsForOrigin = async (
     raw.references = cached.references;
     raw.inReplyTo = cached.inReplyTo;
     raw.snippet = cached.snippet;
+    // Mail archived from the inbox keeps the cards it had there.
+    raw.parcels = cached.parcels;
     raw.detailsVersion = cached.detailsVersion ?? 0;
     return;
   }

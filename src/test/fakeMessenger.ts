@@ -240,6 +240,8 @@ export class FakeMessenger {
     sent: [] as messenger.compose.ComposeDetails[],
     /** Windows focused through windows.update, in order. */
     focusedWindows: [] as number[],
+    /** URLs handed to the system browser through windows.openDefaultBrowser. */
+    openedUrls: [] as string[],
     quickFilters: [] as { tabId: number; properties: messenger.mailTabs._SetQuickFilterProperties }[],
   };
 
@@ -764,6 +766,9 @@ export class FakeMessenger {
         update: async (windowId: number, info: { focused?: boolean }) => {
           if (info.focused) self.calls.focusedWindows.push(windowId);
           return { id: windowId };
+        },
+        openDefaultBrowser: async (url: string) => {
+          self.calls.openedUrls.push(url);
         },
       },
       compose: {

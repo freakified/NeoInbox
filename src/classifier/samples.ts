@@ -14,7 +14,7 @@ import { htmlToLines, linesToText, type Line } from "./extractors/layout";
 import { htmlToText } from "./extractors/text";
 import type { ExtractorInput } from "./extractors/types";
 import { parseSender } from "../shared/senders";
-import type { ReservationKind } from "../shared/types";
+import type { Carrier, ReservationKind } from "../shared/types";
 
 export interface MailSample {
   /** pinKeyOf the message (its Message-ID) — stable across folder moves. */
@@ -71,10 +71,41 @@ export interface ExpectedReservation {
   cancelled?: boolean;
 }
 
+/**
+ * One parcel the message lets you track. No `number` means the mail only
+ * links to the shop's own tracking page (Amazon never prints its numbers).
+ */
+export interface ExpectedParcel {
+  carrier: Carrier;
+  number?: string;
+}
+
+/**
+ * Labeling conventions:
+ * - A parcel is a shipment the message gives a way to track, coming or
+ *   going (a label you bought counts): a printed tracking number, a number
+ *   in the subject, a carrier link holding one, or a retailer's per-package
+ *   tracking link (Amazon's progress-tracker; one parcel per shipmentId).
+ * - Numbers are written without spaces or dashes, uppercase. USPS barcode
+ *   strings prefixed with 420 + ZIP+4 are labeled as the 22-digit number.
+ * - Order, invoice, reservation, donation and account numbers are never
+ *   parcels; an order confirmation with nothing to track is `parcels: []`,
+ *   and so is a tracking button hidden behind a click-tracking redirect.
+ * - The carrier is the one the message names next to the number or links it
+ *   to; "unknown" when the mail only prints a bare number or offers several
+ *   carriers. A retailer that delivers itself (Amazon, Yodobashi) is the
+ *   carrier.
+ */
+export interface ExpectedParcels {
+  reviewed: boolean;
+  parcels: ExpectedParcel[];
+}
+
 /** Labels per detector; each carries its own `reviewed` flag. */
 export interface ExpectFile {
   notes?: string;
   reservation?: ExpectedReservation;
+  parcels?: ExpectedParcels;
 }
 
 /** The extractor input for a message, built the same way the sweep builds it. */

@@ -128,6 +128,37 @@ const tripMail = (now: number): FakeMessageSpec[] => {
   ];
 };
 
+/** Shipping notices whose rows carry parcel cards (numbers have valid check digits). */
+const shippingMail = (now: number): FakeMessageSpec[] => [
+  {
+    headerMessageId: mid(),
+    author: "Field Supply <orders@fieldsupply.example>",
+    subject: "Your order #10442 has shipped",
+    date: new Date(now - 3 * HOUR),
+    html: paragraphs(
+      "Good news — your order is on its way.",
+      "Carrier: UPS<br>Tracking number: 1Z999AA10123456784",
+    ),
+  },
+  {
+    headerMessageId: mid(),
+    author: "Amazon.com <shipment-tracking@amazon.com>",
+    subject: "Shipped: \"Ceramic Pour-Over Coffee...\" and 1 more item",
+    date: new Date(now - 7 * HOUR),
+    html:
+      paragraphs("Your package was shipped!") +
+      '<a href="https://www.amazon.com/progress-tracker/package?orderId=111-1&shipmentId=AAA">Track package</a>' +
+      '<a href="https://www.amazon.com/progress-tracker/package?orderId=111-1&shipmentId=BBB">Track package</a>',
+  },
+  {
+    headerMessageId: mid(),
+    author: "ヤマト運輸 <mail@kuronekoyamato.co.jp>",
+    subject: "お荷物お届けのお知らせ",
+    date: new Date(now - 26 * HOUR),
+    html: paragraphs("お荷物をお届けに伺います。", "■送り状番号：1234-5678-9013"),
+  },
+];
+
 export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
   const hike = thread(
     "Hike this weekend?",
@@ -212,6 +243,7 @@ export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
     ...reunion.inbox,
     ...lease.inbox,
     ...tripMail(now),
+    ...shippingMail(now),
     ...bundled,
   ];
 

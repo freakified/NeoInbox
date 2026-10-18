@@ -22,7 +22,7 @@ const ENTITIES: Record<string, string> = {
   middot: "·",
 };
 
-const decodeEntities = (s: string): string =>
+export const decodeEntities = (s: string): string =>
   s.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (whole, name: string) => {
     if (name.startsWith("#x") || name.startsWith("#X")) {
       const code = parseInt(name.slice(2), 16);

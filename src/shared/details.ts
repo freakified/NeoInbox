@@ -4,8 +4,11 @@
  * Dexie schema can reference them without depending on the background.
  */
 
-/** 1: attachments, References/In-Reply-To and the list snippet. */
-export const MESSAGE_DETAILS_VERSION = 1;
+/**
+ * 1: attachments, References/In-Reply-To and the list snippet.
+ * 2: parcel tracking numbers (inbox rows).
+ */
+export const MESSAGE_DETAILS_VERSION = 2;
 
 /**
  * detailsVersion for a row whose details are fetched on demand rather than in

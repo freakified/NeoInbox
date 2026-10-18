@@ -24,7 +24,10 @@ const hydrateRow = async (row: RawMessage, label: string): Promise<RawMessage | 
   const details = await withTimeout(
     // Only inbox rows keep an attachment list (see the write below), so
     // everything else skips that call rather than fetching and dropping it.
-    extractMessageDetails(tbId, { attachments: row.origin === "inbox" }),
+    extractMessageDetails(tbId, {
+      attachments: row.origin === "inbox",
+      parcelsOf: row.origin === "inbox" ? row : undefined,
+    }),
     `${label} ${row.key}`,
   );
   return db.transaction("rw", db.messages, async () => {
@@ -37,6 +40,7 @@ const hydrateRow = async (row: RawMessage, label: string): Promise<RawMessage | 
       references: details.references,
       inReplyTo: details.inReplyTo,
       snippet: details.snippet,
+      parcels: row.origin !== "inbox" ? fresh.parcels : details.parcels.length ? details.parcels : undefined,
       detailsVersion: MESSAGE_DETAILS_VERSION,
     };
     await db.messages.put(next);

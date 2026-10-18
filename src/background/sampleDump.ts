@@ -8,12 +8,16 @@
  *
  *   await neoSampleDump()                      // every trip candidate, incl. archive
  *   await neoSampleDump({ set: "trips", max: 50 })
+ *   await neoSampleDump({ set: "packages" })   // also "bills", "schemaorg"
  *
  * Re-dumping overwrites a sample's body but never touches its .expect.json.
  * New detectors register a set in SAMPLE_SETS selecting their candidates.
  */
 import { collectBodies, isTripCandidate, type Part } from "./extract";
 import { withTimeout } from "./scanQueue";
+import { extractFeatures } from "../classifier/features";
+import { matchesFinance } from "../classifier/rules/finance";
+import { matchesPurchases } from "../classifier/rules/purchases";
 import type { MailSample } from "../classifier/samples";
 import { liveTbId } from "../shared/liveMessage";
 import { pinKeyOf } from "../shared/pinKey";
@@ -21,8 +25,38 @@ import { parseSender } from "../shared/senders";
 import type { RawMessage } from "../shared/types";
 import { db } from "../store/db";
 
-const SAMPLE_SETS: Record<string, (m: RawMessage) => boolean> = {
-  trips: (m) => isTripCandidate(m, true),
+interface SampleSet {
+  /** Candidates by header, before any body is fetched. */
+  select: (m: RawMessage) => boolean;
+  /** Body-level filter for sets the headers can't decide. */
+  keep?: (htmlParts: readonly string[]) => boolean;
+}
+
+const isReceived = (m: RawMessage): boolean => m.origin === "inbox" || m.origin === "done";
+
+/** JSON-LD or microdata — the markup Gmail's own cards were built on. */
+const SCHEMA_ORG_RE = /application\/ld\+json|itemtype\s*=\s*["']?https?:\/\/schema\.org/i;
+
+const SAMPLE_SETS: Record<string, SampleSet> = {
+  trips: { select: (m) => isTripCandidate(m, true) },
+  // Purchase mail broadly, not just shipping notices: the question is how much
+  // of it carries a usable tracking number at all. Informed Delivery is a
+  // daily digest of the mailbox, not tracking for something you're expecting.
+  packages: {
+    select: (m) =>
+      isReceived(m) &&
+      !/(^|\.)informeddelivery\.usps\.com$/.test(parseSender(m.author).domain) &&
+      (m.category === "purchases" || matchesPurchases(extractFeatures(m, {}))),
+  },
+  bills: {
+    select: (m) =>
+      isReceived(m) && (m.category === "finance" || matchesFinance(extractFeatures(m, {}))),
+  },
+  // Fetches the body of nearly every received message; pass `max` to sample.
+  schemaorg: {
+    select: (m) => isReceived(m) && m.category !== "personal",
+    keep: (html) => html.some((h) => SCHEMA_ORG_RE.test(h)),
+  },
 };
 
 const RECEIVER = "http://127.0.0.1:5198";
@@ -37,6 +71,8 @@ interface DumpReport {
   selected: number;
   written: number;
   created: number;
+  /** Fetched but dropped by the set's body filter. */
+  filtered: number;
   failed: number;
 }
 
@@ -45,8 +81,8 @@ export const installSampleDump = (): void => {
     options: DumpOptions = {},
   ): Promise<DumpReport | null> => {
     const { set = "trips", max = Infinity } = options;
-    const select = SAMPLE_SETS[set];
-    if (!select) {
+    const sampleSet = SAMPLE_SETS[set];
+    if (!sampleSet) {
       console.error(`[sample-dump] unknown set "${set}"; known: ${Object.keys(SAMPLE_SETS).join(", ")}`);
       return null;
     }
@@ -60,17 +96,18 @@ export const installSampleDump = (): void => {
     // Inbox and archive copies of one message share a key; keep the newest.
     const byKey = new Map<string, RawMessage>();
     for (const m of await db.messages.toArray()) {
-      if (!select(m)) continue;
+      if (!sampleSet.select(m)) continue;
       const key = pinKeyOf(m);
       const prev = byKey.get(key);
       if (!prev || m.date > prev.date) byKey.set(key, m);
     }
 
-    const report: DumpReport = { set, selected: byKey.size, written: 0, created: 0, failed: 0 };
+    const report: DumpReport = { set, selected: byKey.size, written: 0, created: 0, filtered: 0, failed: 0 };
     let done = 0;
     for (const [key, m] of byKey) {
       if (done >= max) break;
       done++;
+      if (done % 50 === 0) console.log(`[sample-dump] ${done}/${Math.min(byKey.size, max)}…`);
       try {
         const liveId = await withTimeout(liveTbId(m), `resolve ${m.key}`);
         if (liveId === null) throw new Error("message no longer exists");
@@ -78,6 +115,10 @@ export const installSampleDump = (): void => {
         const textParts: string[] = [];
         const htmlParts: string[] = [];
         collectBodies(full as Part, textParts, htmlParts);
+        if (sampleSet.keep && !sampleSet.keep(htmlParts)) {
+          report.filtered++;
+          continue;
+        }
         const sample: MailSample = {
           key,
           set,
@@ -102,11 +143,10 @@ export const installSampleDump = (): void => {
         report.failed++;
         console.warn("[sample-dump] skipped", m.key, m.subject, String(e));
       }
-      if (done % 50 === 0) console.log(`[sample-dump] ${done}/${Math.min(byKey.size, max)}…`);
     }
     console.log(
       `[sample-dump] set "${set}": ${report.written} written (${report.created} new), ` +
-        `${report.failed} failed, of ${report.selected} selected`,
+        `${report.filtered} filtered out, ${report.failed} failed, of ${report.selected} selected`,
     );
     return report;
   };

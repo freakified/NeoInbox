@@ -1,0 +1,87 @@
+.strip {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+/* A white material card, like Inbox's: parcel, carrier over number, TRACK. */
+.card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 320px;
+  padding: 6px 4px 6px 10px;
+  border: none;
+  border-radius: 2px;
+  background: var(--color-md-surface);
+  box-shadow: var(--shadow-material-card);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: box-shadow 150ms;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-material-card-hover);
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--color-md-primary);
+  outline-offset: 1px;
+}
+
+/* The Purchases bundle's brown. */
+.icon {
+  font-size: 22px;
+  color: #795548;
+  flex-shrink: 0;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 16px;
+}
+
+.carrier {
+  font-size: 12px;
+  color: var(--color-md-secondary-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.number {
+  font-size: 13px;
+  color: var(--color-md-on-surface);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--color-md-primary-dark);
+}
+
+.card:hover .action {
+  background: rgba(26, 115, 232, 0.08);
+}
+
+.overflow {
+  font-size: 12px;
+  color: var(--color-md-secondary-text);
+}

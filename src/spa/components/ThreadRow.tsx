@@ -12,6 +12,7 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { Icon } from "./Icon";
 import { MessageAttachments, collectAttachments } from "./MessageAttachments";
 import { FadeIn, MotionRow } from "./Motion";
+import { ParcelCards, collectParcels } from "./ParcelCards";
 import { RowHeader } from "./RowHeader";
 import { ThreadView } from "./ThreadView";
 import s from "./ThreadRow.module.css";
@@ -62,6 +63,7 @@ export const ThreadRow = ({
   const avatarBg = avatarColor(name);
   const initial = firstSender ? senderInitial(firstSender.author) : "?";
   const attachmentRefs = collectAttachments(t.messages);
+  const parcels = collectParcels(t.messages);
   const hasDraft = t.messages.some((m) => m.origin === "draft");
   // Inbox's grey text after the subject: the newest message's own words.
   const snippet = t.messages.reduce<RawMessage | undefined>(
@@ -134,12 +136,17 @@ export const ThreadRow = ({
           }
           subline={woke}
           trailing={
-            attachmentRefs.length > 0 ? (
-              <MessageAttachments
-                attachments={attachmentRefs}
-                compact
-                limit={2}
-              />
+            parcels.length > 0 || attachmentRefs.length > 0 ? (
+              <>
+                {parcels.length > 0 && <ParcelCards parcels={parcels} />}
+                {attachmentRefs.length > 0 && (
+                  <MessageAttachments
+                    attachments={attachmentRefs}
+                    compact
+                    limit={2}
+                  />
+                )}
+              </>
             ) : undefined
           }
           date={date}
