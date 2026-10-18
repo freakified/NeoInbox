@@ -12,6 +12,7 @@ import {
   useTripMemberships,
   useTrips,
 } from "../../store/mailStore";
+import { useAnchoredMenu } from "../lib/useAnchoredMenu";
 import { Icon } from "./Icon";
 import { MoveDestinations } from "./MoveDestinations";
 import { MoveRuleDialog } from "./MoveRuleDialog";
@@ -35,7 +36,9 @@ export const BundleMenu = ({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
+  // The menu is portaled out of the row so later rows (each its own stacking
+  // context) can't paint over it.
+  const menuStyle = useAnchoredMenu(menuOpen, triggerRef, menuRef, view);
 
   const customBundles = useCustomBundles();
   const routeRules = useRouteRules();
@@ -84,24 +87,6 @@ export const BundleMenu = ({
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
-  }, [menuOpen]);
-
-  // The menu is portaled out of the row so later rows (each its own stacking
-  // context) can't paint over it; pin it under the trigger, right-aligned.
-  useEffect(() => {
-    if (!menuOpen) return;
-    const updatePosition = () => {
-      const rect = triggerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setMenuStyle({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
-    };
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-    return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
   }, [menuOpen]);
 
   const openMenu = (open: boolean) => {

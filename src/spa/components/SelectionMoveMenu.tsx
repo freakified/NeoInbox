@@ -12,6 +12,7 @@ import {
   useTrips,
 } from "../../store/mailStore";
 import { type BulkMoveGroup, type BulkMovePlan, planBulkMove, rulesForGroup } from "../lib/bulkMove";
+import { useAnchoredMenu } from "../lib/useAnchoredMenu";
 import { BulkMoveRuleDialog, type BulkRuleChoice } from "./BulkMoveRuleDialog";
 import { Icon } from "./Icon";
 import { MoveDestinations } from "./MoveDestinations";
@@ -48,7 +49,7 @@ export const SelectionMoveMenu = ({
   const [tripPickerOpen, setTripPickerOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
+  const menuStyle = useAnchoredMenu(open, triggerRef, menuRef);
 
   const customBundles = useCustomBundles();
   const routeRules = useRouteRules();
@@ -90,18 +91,6 @@ export const SelectionMoveMenu = ({
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const updatePosition = () => {
-      const rect = triggerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setMenuStyle({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
-    };
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    return () => window.removeEventListener("resize", updatePosition);
   }, [open]);
 
   // setTripMembership owns the toast and its Undo, as for a single thread.
