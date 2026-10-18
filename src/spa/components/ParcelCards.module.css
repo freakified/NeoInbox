@@ -1,27 +1,82 @@
-.strip {
-  display: flex;
-  gap: 6px;
-  align-items: center;
+/* Takes the row's whole width so the strip, not the row, overflows. */
+.frame {
+  position: relative;
+  flex: 1 0 100%;
   min-width: 0;
+  /* Runs under the row's right padding, so cards clip at its edge, as in Inbox. */
+  margin: 2px -12px 6px 0;
 }
 
-/* A white material card, like Inbox's: parcel, carrier over number, TRACK. */
-.card {
+.strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  /* Room for the cards' shadows, which overflow would otherwise clip. */
+  padding: 2px 3px 4px;
+  margin: -2px -3px -4px;
+}
+
+.strip::-webkit-scrollbar {
+  display: none;
+}
+
+/* Inbox's round white paging buttons over the strip's ends. */
+/* Centered on the 88px cards themselves, not the strip around them. */
+.arrow {
+  position: absolute;
+  top: 44px;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-width: 0;
-  max-width: 320px;
-  padding: 6px 4px 6px 10px;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow-material-card-hover);
+  color: var(--color-md-icon);
+  cursor: pointer;
+}
+
+/* A block glyph, so no text baseline nudges the chevron off center. */
+.arrow > span {
+  display: block;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.arrow:hover {
+  background: #f5f5f5;
+}
+
+.arrowLeft {
+  left: 4px;
+}
+
+.arrowRight {
+  right: 16px;
+}
+
+/* TripSliceRow's highlight card metrics, on Inbox's neutral grey. */
+.card {
+  display: flex;
+  flex: 0 0 380px;
+  height: 88px;
+  padding: 0;
   border: none;
   border-radius: 2px;
-  background: var(--color-md-surface);
-  box-shadow: var(--shadow-material-card);
+  overflow: hidden;
+  box-shadow: var(--shadow-elevation-1);
+  background: none;
   font: inherit;
   text-align: left;
   text-decoration: none;
-  color: inherit;
   cursor: pointer;
+  white-space: normal;
   transition: box-shadow 150ms;
 }
 
@@ -34,54 +89,55 @@
   outline-offset: 1px;
 }
 
-/* The Purchases bundle's brown. */
-.icon {
-  font-size: 22px;
-  color: #795548;
-  flex-shrink: 0;
+.art {
+  flex: 0 0 132px;
+  height: 100%;
 }
 
-.meta {
+.text {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  min-width: 0;
-  line-height: 16px;
-}
-
-.carrier {
-  font-size: 12px;
+  justify-content: center;
+  gap: 1px;
+  padding: 0 16px 0 18px;
+  background: #f5f5f5;
   color: var(--color-md-secondary-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.35;
 }
 
-.number {
-  font-size: 13px;
+.name {
+  font-size: 15px;
   color: var(--color-md-on-surface);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.detail {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Where Inbox put VIEW ORDER. */
 .action {
-  flex-shrink: 0;
-  padding: 4px 8px;
+  align-self: flex-start;
+  margin: 4px 0 0 -8px;
+  padding: 2px 8px;
   border-radius: 2px;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: var(--color-md-primary-dark);
+  letter-spacing: 0.3px;
+  color: #3f51b5;
 }
 
 .card:hover .action {
-  background: rgba(26, 115, 232, 0.08);
+  background: rgba(63, 81, 181, 0.08);
 }
 
-.overflow {
-  font-size: 12px;
-  color: var(--color-md-secondary-text);
-}

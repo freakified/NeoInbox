@@ -8,6 +8,7 @@ import { groupByBucket } from "../lib/dateBucket";
 import { useBulkActions } from "./BulkActionConfirm";
 import { Icon } from "./Icon";
 import { MessageAttachments, collectAttachments } from "./MessageAttachments";
+import { ParcelCards, bundleHighlights } from "./ParcelCards";
 import { ExpandableRegion, MotionRow, MotionSurface } from "./Motion";
 import { RowGroup } from "./RowGroup";
 import { RowHeader } from "./RowHeader";
@@ -54,6 +55,7 @@ export const BundleSliceRow = ({
 
   const preview = <span className={s.previewList}>{previewContent}</span>;
   const attachmentRefs = collectAttachments(threads.flatMap((t) => t.messages));
+  const highlights = bundleHighlights(threads);
 
   const [localOpenThreadId, setLocalOpenThreadId] = useState<string | null>(null);
   const activeOpenThreadId = openThreadId !== undefined ? openThreadId : localOpenThreadId;
@@ -118,12 +120,17 @@ export const BundleSliceRow = ({
           }
           secondary={preview}
           trailing={
-            attachmentRefs.length > 0 ? (
-              <MessageAttachments
-                attachments={attachmentRefs}
-                compact
-                limit={3}
-              />
+            highlights.length > 0 || attachmentRefs.length > 0 ? (
+              <>
+                {highlights.length > 0 && <ParcelCards parcels={highlights} />}
+                {attachmentRefs.length > 0 && (
+                  <MessageAttachments
+                    attachments={attachmentRefs}
+                    compact
+                    limit={3}
+                  />
+                )}
+              </>
             ) : undefined
           }
           onClick={() => onToggle(bundleKey)}

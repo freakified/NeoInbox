@@ -136,6 +136,8 @@ export interface FakeMessageSpec {
   html?: string;
   /** Plain-text body, served as a text/plain part alongside any HTML. */
   text?: string;
+  /** What listAttachments() reports; the files themselves are empty. */
+  attachments?: { name: string; contentType: string; size: number }[];
   /**
    * When true getFull() rejects, reproducing an IMAP message whose body has
    * not been synced yet. This is the state a backlog arrives in, and the
@@ -187,6 +189,7 @@ interface StoredMessage {
   headers: Record<string, string[]>;
   html?: string;
   text?: string;
+  attachments: { name: string; contentType: string; size: number }[];
   bodyUnavailable: boolean;
 }
 
@@ -310,6 +313,7 @@ export class FakeMessenger {
       bccList: spec.bccList ?? [],
       headers: spec.headers ?? {},
       html: spec.html,
+      attachments: spec.attachments ?? [],
       text: spec.text,
       bodyUnavailable: spec.bodyUnavailable ?? false,
     });
@@ -646,9 +650,9 @@ export class FakeMessenger {
     },
 
     listAttachments: async (id: number) => {
-      this.require(id);
+      const msg = this.require(id);
       this.calls.listAttachments.push(id);
-      return [];
+      return msg.attachments.map((a, i) => ({ ...a, partName: `1.${i + 2}` }));
     },
 
     getAttachmentFile: async () => new Blob([]),

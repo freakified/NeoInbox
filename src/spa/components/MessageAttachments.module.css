@@ -38,10 +38,12 @@
   cursor: default;
 }
 
+/* Row chips match the art panel on parcel and trip cards (132px). */
 .cardCompact {
   gap: 6px;
   padding: 4px 8px;
-  max-width: 140px;
+  width: 132px;
+  max-width: 132px;
   border-radius: 2px;
 }
 
@@ -60,9 +62,9 @@
 }
 
 .imageCardCompact {
-  width: 104px;
+  width: 132px;
   height: 64px;
-  max-width: 104px;
+  max-width: 132px;
 }
 
 .cardRemoved {
@@ -113,7 +115,7 @@
 
 .cardCompact .name {
   font-size: 12px;
-  max-width: 100px;
+  max-width: none;
 }
 
 .size {

@@ -139,6 +139,7 @@ const shippingMail = (now: number): FakeMessageSpec[] => [
       "Good news — your order is on its way.",
       "Carrier: UPS<br>Tracking number: 1Z999AA10123456784",
     ),
+    attachments: [{ name: "Invoice-10442.pdf", contentType: "application/pdf", size: 48_211 }],
   },
   {
     headerMessageId: mid(),
