@@ -11,6 +11,7 @@ import type {
   FolderCursorRecord,
   PinRecord,
   RawMessage,
+  ResurfacedRecord,
   ReminderRecord,
   ReservationRecord,
   RouteRuleRecord,
@@ -139,6 +140,7 @@ class NeoInboxDb extends Dexie {
   messages!: Table<RawMessage, number>;
   snoozes!: Table<SnoozeRecord, number>;
   pins!: Table<PinRecord, string>;
+  resurfaced!: Table<ResurfacedRecord, string>;
   reminders!: Table<ReminderRecord, string>;
   routeRules!: Table<RouteRuleRecord, string>;
   folderCursors!: Table<FolderCursorRecord, string>;
@@ -301,6 +303,11 @@ class NeoInboxDb extends Dexie {
           if (!Array.isArray(m.bccList)) m.bccList = [];
         });
     });
+    // A snooze wake's stream position used to live only on the cached row,
+    // keyed by numeric id; when the move back to the inbox renumbered the
+    // message, the next scan rebuilt the row without it and the thread sank
+    // back to its original date. Keep it beside pins, keyed by Message-ID.
+    this.version(20).stores({ resurfaced: "key" });
   }
 }
 

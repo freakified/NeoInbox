@@ -28,11 +28,11 @@
   border-radius: 2px;
   border: 1px solid var(--color-md-divider);
   padding: 0;
-  overflow: hidden;
 }
 
 .title {
   padding: 14px 20px 13px;
+  margin-bottom: 8px;
   border-bottom: 1px solid var(--color-md-divider);
   color: var(--color-md-on-surface);
   font-size: 14px;
@@ -77,61 +77,226 @@
   white-space: nowrap;
 }
 
+/* Matches the divider's top margin so the last row sits evenly. */
+.lastOption {
+  margin-bottom: 8px;
+}
+
 .divider {
   border-top: 1px solid var(--color-md-divider);
   margin: 8px 0;
 }
 
-.overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
+.picker {
+  display: flex;
+  flex-direction: column;
+}
+
+.pickerHeader {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgb(0 0 0 / 0.28);
-}
-
-.dialog {
-  width: min(360px, 100%);
-  border: 1px solid var(--color-md-divider);
-  border-radius: 6px;
-  background: #fff;
-  box-shadow: var(--shadow-elevation-2);
-  padding: 18px;
-}
-
-.dialogTitle {
-  margin: 0 0 16px;
+  gap: 8px;
+  padding: 6px 20px 6px 8px;
+  border-bottom: 1px solid var(--color-md-divider);
   color: var(--color-md-on-surface);
-  font-size: 18px;
-  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.35;
 }
 
-.fields {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 120px;
-  gap: 16px;
+.backBtn {
+  display: flex;
+  padding: 8px;
+  border: none;
+  border-radius: 9999px;
+  background: none;
+  color: #757575;
+  cursor: pointer;
 }
 
-.field {
-  min-width: 0;
+.backBtn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.pickerBody {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  padding: 4px 20px 0;
 }
 
-.fieldLabel {
+/* MD1 dropdown field: text on an underline, with the drop-down caret. */
+.select {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-bottom: 1px solid var(--color-md-field-underline);
+  background: none;
+  color: var(--color-md-on-surface);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.select:focus-visible,
+.selectActive {
+  outline: none;
+  border-color: var(--color-md-primary);
+  box-shadow: 0 1px 0 var(--color-md-primary);
+}
+
+.selectValue {
+  flex: 1;
+  min-width: 0;
+}
+
+.selectHint {
+  color: var(--color-md-secondary-text);
+  font-size: 13px;
+}
+
+.selectArrow {
+  color: #757575;
+  font-size: 22px;
+}
+
+.calendar {
+  padding: 4px 0 8px;
+}
+
+.calendarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+}
+
+.calendarMonth {
+  color: var(--color-md-on-surface);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.calendarNav {
+  display: flex;
+  padding: 6px;
+  border: none;
+  border-radius: 9999px;
+  background: none;
+  color: #757575;
+  cursor: pointer;
+}
+
+.calendarNav:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.calendarNav:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.calendarGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  justify-items: center;
+  row-gap: 2px;
+}
+
+.weekday {
+  height: 28px;
+  line-height: 28px;
   color: var(--color-md-secondary-text);
   font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
 }
 
-.input {
-  min-width: 0;
+.day {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 9999px;
+  background: none;
+  color: var(--color-md-on-surface);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.day:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.day:disabled {
+  color: rgba(0, 0, 0, 0.26);
+  cursor: default;
+}
+
+.dayToday {
+  color: var(--color-md-primary);
+  font-weight: 700;
+}
+
+.daySelected,
+.daySelected:hover:not(:disabled) {
+  background: var(--color-md-primary);
+  color: #fff;
+  font-weight: 500;
+}
+
+.timeField {
+  position: relative;
+}
+
+.timeMenu {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  top: 0;
+  padding: 8px 0;
+  background: #fff;
+  box-shadow: var(--shadow-elevation-2);
+  border-radius: 2px;
+}
+
+.timeOption {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 36px;
+  padding: 0 16px;
+  border: none;
+  background: none;
+  color: var(--color-md-on-surface);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.timeOption:hover:not(:disabled) {
+  background: #eeeeee;
+}
+
+.timeOption:disabled {
+  color: rgba(0, 0, 0, 0.26);
+  cursor: default;
+}
+
+.timeOption:disabled .selectHint {
+  color: inherit;
+}
+
+.timeOptionSelected {
+  color: var(--color-md-primary);
+}
+
+.timeInput {
   box-sizing: border-box;
   height: 36px;
   border: none;
@@ -139,18 +304,19 @@
   border-radius: 0;
   background: transparent;
   color: var(--color-md-on-surface);
+  font: inherit;
   font-size: 14px;
   padding: 7px 0 6px;
   outline: none;
 }
 
-.input:focus {
+.timeInput:focus {
   border-color: var(--color-md-primary);
   box-shadow: 0 1px 0 var(--color-md-primary);
 }
 
 .error {
-  margin: 12px 0 0;
+  margin: 8px 0 0;
   color: #b3261e;
   font-size: 13px;
   line-height: 1.35;
@@ -159,41 +325,25 @@
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 20px;
+  padding: 12px 8px 8px;
 }
 
-.cancelBtn,
-.okBtn {
+/* MD1 flat button. */
+.saveBtn {
+  min-width: 64px;
   border: none;
-  border-radius: 4px;
-  padding: 8px 12px;
+  border-radius: 2px;
+  padding: 0 8px;
+  height: 36px;
+  background: none;
+  color: var(--color-md-primary);
+  font: inherit;
   font-size: 14px;
   font-weight: 500;
+  text-transform: uppercase;
   cursor: pointer;
 }
 
-.cancelBtn {
-  background: transparent;
-  color: var(--color-md-secondary-text);
-}
-
-.cancelBtn:hover {
-  background: rgba(0, 0, 0, 0.06);
-  color: var(--color-md-on-surface);
-}
-
-.okBtn {
-  background: var(--color-md-primary);
-  color: #fff;
-}
-
-.okBtn:hover {
-  background: #0b57d0;
-}
-
-@media (max-width: 420px) {
-  .fields {
-    grid-template-columns: 1fr;
-  }
+.saveBtn:hover {
+  background: rgba(66, 133, 244, 0.12);
 }

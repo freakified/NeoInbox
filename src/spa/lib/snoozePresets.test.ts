@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defaultCustomSnooze, snoozePresets } from "./snoozePresets";
+import { defaultCustomSnooze, formatSnoozeOptionTime, snoozePresets } from "./snoozePresets";
+import { DEFAULT_SNOOZE_PREFS, type SnoozePrefs } from "./snoozePrefs";
 
 const at = (iso: string) => vi.setSystemTime(new Date(iso));
 const labels = () => snoozePresets().map((preset) => preset.label);
@@ -76,6 +77,54 @@ describe("snoozePresets", () => {
         expect(preset.wakeAt, `${preset.label} at ${iso}`).toBeGreaterThan(now);
       }
     }
+  });
+});
+
+describe("snoozePresets with custom prefs", () => {
+  const prefs = (over: Partial<SnoozePrefs>): SnoozePrefs => ({ ...DEFAULT_SNOOZE_PREFS, ...over });
+
+  it("uses the configured morning and evening times", () => {
+    at("2026-07-29T09:00:00");
+    const p = prefs({ times: { ...DEFAULT_SNOOZE_PREFS.times, morning: 7 * 60 + 30, evening: 17 * 60 } });
+    const presets = snoozePresets(p, null);
+    const later = new Date(presets.find((x) => x.label === "Later today")!.wakeAt);
+    const tomorrow = new Date(presets.find((x) => x.label === "Tomorrow")!.wakeAt);
+    expect([later.getHours(), later.getMinutes()]).toEqual([17, 0]);
+    expect([tomorrow.getHours(), tomorrow.getMinutes()]).toEqual([7, 30]);
+  });
+
+  it("follows a Friday–Saturday weekend", () => {
+    at("2026-07-26T09:00:00"); // Sunday: the first workday of that week
+    const presets = snoozePresets(prefs({ weekendStart: 5 }), null);
+    const byLabel = (l: string) => new Date(presets.find((x) => x.label === l)!.wakeAt);
+    expect(byLabel("Later this week").getDay()).toBe(2); // Tuesday
+    expect(byLabel("This weekend").getDay()).toBe(5); // Friday
+    expect(byLabel("Next week").getDay()).toBe(0); // Sunday
+  });
+
+  it("offers the last hand-picked time until it passes", () => {
+    at("2026-07-29T09:00:00");
+    const last = new Date("2026-08-12T15:00:00").getTime();
+    expect(snoozePresets(DEFAULT_SNOOZE_PREFS, last).at(-1)).toMatchObject({
+      label: "Last snooze",
+      wakeAt: last,
+    });
+    at("2026-08-12T15:01:00");
+    expect(snoozePresets(DEFAULT_SNOOZE_PREFS, last).map((x) => x.label)).not.toContain("Last snooze");
+  });
+
+  it("drops the last snooze when it matches a preset", () => {
+    at("2026-07-29T09:00:00");
+    const tomorrow = new Date("2026-07-30T08:00:00").getTime();
+    expect(snoozePresets(DEFAULT_SNOOZE_PREFS, tomorrow).map((x) => x.label)).not.toContain("Last snooze");
+  });
+});
+
+describe("formatSnoozeOptionTime", () => {
+  it("shows the date rather than the weekday beyond a week out", () => {
+    at("2026-07-29T09:00:00");
+    expect(formatSnoozeOptionTime(new Date("2026-08-12T15:00:00").getTime())).toMatch(/Aug/);
+    expect(formatSnoozeOptionTime(new Date("2026-07-31T15:00:00").getTime())).toMatch(/Fri/);
   });
 });
 

@@ -26,7 +26,8 @@ import { scanActive } from "./scanGuard";
 import { runCompose } from "./compose";
 import { cancelTripScan, getTripScanStatus, runTripScan, writeTrips } from "./extract";
 import { pushMyEmails } from "./sync";
-import { applyLocalState } from "./localState";
+import { applyLocalState, clearResurfaced } from "./localState";
+import { pinKeyOf } from "../shared/pinKey";
 import { broadcast } from "./port";
 import { invalidateRouteRules } from "../classifier/routeRules";
 import { db } from "../store/db";
@@ -180,6 +181,7 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
       // destination doneMessage reported rather than reading the message back
       // out of the archive folder.
       if (cached) {
+        await clearResurfaced(pinKeyOf(cached));
         const row: RawMessage = {
           ...cached,
           origin: "done",

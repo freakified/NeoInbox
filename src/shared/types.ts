@@ -262,6 +262,17 @@ export interface PinRecord {
   pinnedAt: number;
 }
 
+/**
+ * A message's stream position after a snooze wake, keyed like pins so it
+ * survives Thunderbird renumbering the message after the move back to the
+ * inbox (an IMAP move hands out a placeholder id, then the real UID).
+ */
+export interface ResurfacedRecord {
+  key: string;
+  resurfacedAt: number;
+  snoozeExpired: boolean;
+}
+
 export interface FolderCursorRecord {
   folderId: string;
   /** Newest message date (ms) seen in this folder; incremental scans query from here minus an overlap. */

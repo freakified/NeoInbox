@@ -1,6 +1,12 @@
 import { setComposeMode, useComposeMode, type ComposeMode } from "../../lib/composePrefs";
 import { useMailStore } from "../../../store/mailStore";
 import { setShowDeleteActions, useShowDeleteActions } from "../../lib/deleteActionPrefs";
+import {
+  setSnoozePrefs,
+  TIME_OF_DAY_LABELS,
+  TIMES_OF_DAY,
+  useSnoozePrefs,
+} from "../../lib/snoozePrefs";
 import { Icon } from "../Icon";
 import s from "../BundleManagerModal.module.css";
 
@@ -9,6 +15,56 @@ const COMPOSE_MODE_CHOICES: { mode: ComposeMode; label: string }[] = [
   { mode: "review", label: "Write inline, then finish and send in Thunderbird" },
   { mode: "thunderbird", label: "Always use Thunderbird's compose window" },
 ];
+
+const toTimeValue = (minutes: number): string =>
+  `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+
+const dayName = (day: number): string =>
+  // 2026-02-01 is a Sunday.
+  new Intl.DateTimeFormat(undefined, { weekday: "long" }).format(new Date(2026, 1, 1 + day));
+
+const SnoozeSettings = () => {
+  const prefs = useSnoozePrefs();
+  return (
+    <section className={s.section}>
+      <h4 className={s.sectionTitle}>Snooze</h4>
+      {TIMES_OF_DAY.map((t) => (
+        <label key={t} className={s.twoColumn} style={{ alignItems: "center" }}>
+          <span>{TIME_OF_DAY_LABELS[t]}</span>
+          <input
+            type="time"
+            className={s.input}
+            value={toTimeValue(prefs.times[t])}
+            onChange={(e) => {
+              const [h, m] = e.currentTarget.value.split(":").map(Number);
+              if (h === undefined || m === undefined || Number.isNaN(h) || Number.isNaN(m)) return;
+              setSnoozePrefs({ ...prefs, times: { ...prefs.times, [t]: h * 60 + m } });
+            }}
+          />
+        </label>
+      ))}
+      <label className={s.twoColumn} style={{ alignItems: "center" }}>
+        <span>Weekend</span>
+        <select
+          className={s.select}
+          value={prefs.weekendStart}
+          onChange={(e) => setSnoozePrefs({ ...prefs, weekendStart: Number(e.currentTarget.value) })}
+        >
+          {Array.from({ length: 7 }, (_, day) => (
+            <option key={day} value={day}>
+              {dayName(day)} – {dayName((day + 1) % 7)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className={s.helpText}>
+        Snooze presets use these times: “Tomorrow” and the weekday presets wake
+        in the morning, “Later today” in the evening. “This weekend” wakes on
+        the first weekend day, and “Next week” on the day after the weekend.
+      </p>
+    </section>
+  );
+};
 
 export const GeneralSettings = () => {
   const reclassify = useMailStore((st) => st.reclassify);
@@ -42,6 +98,7 @@ export const GeneralSettings = () => {
           stays available inside the opened conversation either way.
         </p>
       </section>
+      <SnoozeSettings />
       <section className={s.section}>
         <h4 className={s.sectionTitle}>Compose</h4>
         {COMPOSE_MODE_CHOICES.map((choice) => (

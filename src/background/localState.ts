@@ -1,6 +1,6 @@
 import { pinKeyOf } from "../shared/pinKey";
 import { db } from "../store/db";
-import type { RawMessage } from "../shared/types";
+import type { RawMessage, ResurfacedRecord } from "../shared/types";
 
 /**
  * NeoInbox-local per-message state (pin, snooze). It lives entirely in the
@@ -16,6 +16,7 @@ interface SnoozeIndex {
 }
 
 let pinKeys: Set<string> | null = null;
+let resurfaced: Map<string, ResurfacedRecord> | null = null;
 let snoozeIndex: SnoozeIndex | null = null;
 
 const loadPinKeys = async (): Promise<Set<string>> => {
@@ -34,6 +35,30 @@ const loadSnoozeIndex = async (): Promise<SnoozeIndex> => {
     };
   }
   return snoozeIndex;
+};
+
+const loadResurfaced = async (): Promise<Map<string, ResurfacedRecord>> => {
+  resurfaced ??= new Map((await db.resurfaced.toArray()).map((r) => [r.key, r]));
+  return resurfaced;
+};
+
+/** Records where a woken (or unsnoozed) message sits in the stream. */
+export const setResurfaced = async (
+  key: string,
+  resurfacedAt: number,
+  snoozeExpired: boolean,
+): Promise<void> => {
+  const map = await loadResurfaced();
+  const record = { key, resurfacedAt, snoozeExpired };
+  map.set(key, record);
+  await db.resurfaced.put(record);
+};
+
+/** Snoozing again or marking done ends the resurfaced position. */
+export const clearResurfaced = async (key: string): Promise<void> => {
+  const map = await loadResurfaced();
+  if (!map.delete(key)) return;
+  await db.resurfaced.delete(key);
 };
 
 /** Call after any db.snoozes write so subsequent lookups see the change. */
@@ -60,9 +85,15 @@ export const isSnoozedHeader = async (
   return !!header.headerMessageId && index.headerIds.has(header.headerMessageId);
 };
 
-/** Stamps local pin/snooze state onto a freshly built cache row. */
+/** Stamps local pin/snooze/resurfaced state onto a freshly built cache row. */
 export const applyLocalState = async (raw: RawMessage): Promise<RawMessage> => {
-  raw.pinned = (await loadPinKeys()).has(pinKeyOf(raw));
+  const key = pinKeyOf(raw);
+  raw.pinned = (await loadPinKeys()).has(key);
   raw.snoozed = await isSnoozedHeader(raw);
+  const position = (await loadResurfaced()).get(key);
+  if (position && raw.origin === "inbox" && !raw.snoozed) {
+    raw.resurfacedAt = position.resurfacedAt;
+    raw.snoozeExpired = position.snoozeExpired;
+  }
   return raw;
 };

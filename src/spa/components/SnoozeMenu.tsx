@@ -1,42 +1,45 @@
-import { useEffect, useRef, useState } from "react";
+import { clsx } from "clsx";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   defaultCustomSnooze,
   formatSnoozeOptionTime,
+  setMinutes,
   snoozePresets,
 } from "../lib/snoozePresets";
+import {
+  setLastCustomSnooze,
+  TIME_OF_DAY_LABELS,
+  TIMES_OF_DAY,
+  useSnoozePrefs,
+  type TimeOfDay,
+} from "../lib/snoozePrefs";
 import { Icon } from "./Icon";
 import s from "./SnoozeMenu.module.css";
 
-const localDateValue = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
+const localTimeValue = (minutes: number): string =>
+  `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 
-const localTimeValue = (date: Date): string => {
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-  return `${hour}:${minute}`;
-};
-
-const parseLocalDateTime = (dateValue: string, timeValue: string): number => {
-  const [year, month, day] = dateValue.split("-").map(Number);
-  const [hour, minute] = timeValue.split(":").map(Number);
-  if (
-    !year ||
-    !month ||
-    !day ||
-    hour === undefined ||
-    minute === undefined ||
-    Number.isNaN(hour) ||
-    Number.isNaN(minute)
-  ) {
+const parseTimeValue = (value: string): number => {
+  const [hour, minute] = value.split(":").map(Number);
+  if (hour === undefined || minute === undefined || Number.isNaN(hour) || Number.isNaN(minute)) {
     return NaN;
   }
-  return new Date(year, month - 1, day, hour, minute, 0, 0).getTime();
+  return hour * 60 + minute;
 };
+
+const startOfDay = (date: Date): Date =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+const sameDay = (a: Date, b: Date): boolean =>
+  a.getFullYear() === b.getFullYear() &&
+  a.getMonth() === b.getMonth() &&
+  a.getDate() === b.getDate();
+
+const formatMinutes = (minutes: number): string =>
+  new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(
+    setMinutes(new Date(), minutes),
+  );
 
 export const SnoozeMenu = ({
   onChoose,
@@ -49,57 +52,74 @@ export const SnoozeMenu = ({
   iconClassName?: string;
 }) => {
   const [open, setOpen] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  // Like Inbox, "Pick date & time" turns the menu card itself into the form.
+  const [picking, setPicking] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  const prefs = useSnoozePrefs();
 
-  useEffect(() => {
+  const close = () => {
+    setOpen(false);
+    setPicking(false);
+  };
+
+  useLayoutEffect(() => {
     if (!open) return;
 
     const updatePosition = () => {
       const trigger = triggerRef.current;
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
-      const width = Math.min(272, window.innerWidth - 32);
+      const width = Math.min(320, window.innerWidth - 32);
       const left = Math.min(
         window.innerWidth - width - 16,
         Math.max(16, rect.right - width),
       );
-      setDropdownStyle({
-        left,
-        top: rect.bottom + 8,
-        width,
-      });
+      // The picker is taller than the menu; keep it on screen near the bottom.
+      const height = dropdownRef.current?.offsetHeight ?? 0;
+      const top = Math.max(16, Math.min(rect.bottom + 8, window.innerHeight - height - 16));
+      setDropdownStyle({ left, top, width });
     };
 
     updatePosition();
+    const observer = new ResizeObserver(updatePosition);
+    if (dropdownRef.current) observer.observe(dropdownRef.current);
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
     return () => {
+      observer.disconnect();
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open]);
+  }, [open, picking]);
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
+    const onMouseDown = (e: MouseEvent) => {
       const target = e.target as Node;
       if (
         ref.current?.contains(target) ||
         dropdownRef.current?.contains(target)
       ) return;
-      setOpen(false);
+      close();
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      close();
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [open]);
 
   const choose = (wakeAt: number) => {
-    setOpen(false);
-    setPickerOpen(false);
+    close();
     onChoose(wakeAt);
   };
 
@@ -113,7 +133,8 @@ export const SnoozeMenu = ({
         aria-expanded={open}
         onClick={(e) => {
           e.stopPropagation();
-          setOpen((o) => !o);
+          if (open) close();
+          else setOpen(true);
         }}
         className={triggerClassName ?? s.trigger}
       >
@@ -130,80 +151,103 @@ export const SnoozeMenu = ({
             ref={dropdownRef}
             className={s.dropdown}
             style={dropdownStyle}
-            role="menu"
-            aria-label="Snooze until"
+            role={picking ? "dialog" : "menu"}
+            aria-label={picking ? "Pick date & time" : "Snooze until"}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className={s.title}>Snooze until...</div>
-            {snoozePresets().map(({ label, icon, wakeAt }) => (
-              <button
-                key={label}
-                className={s.option}
-                type="button"
-                role="menuitem"
-                onClick={(e) => {
-                  e.stopPropagation();
+            {picking ? (
+              <SnoozePicker
+                onBack={() => setPicking(false)}
+                onChoose={(wakeAt) => {
+                  setLastCustomSnooze(wakeAt);
                   choose(wakeAt);
                 }}
-              >
-                <Icon name={icon} className={s.optionIcon} />
-                <span className={s.optionLabel}>{label}</span>
-                <span className={s.optionTime}>{formatSnoozeOptionTime(wakeAt)}</span>
-              </button>
-            ))}
-            <div className={s.divider} />
-            <button
-              className={s.option}
-              type="button"
-              role="menuitem"
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpen(false);
-                setPickerOpen(true);
-              }}
-            >
-              <Icon name="event" className={s.optionIcon} />
-              <span className={s.optionLabel}>Pick date &amp; time</span>
-            </button>
+              />
+            ) : (
+              <>
+                <div className={s.title}>Snooze until...</div>
+                {snoozePresets(prefs).map(({ label, icon, wakeAt }) => (
+                  <button
+                    key={label}
+                    className={s.option}
+                    type="button"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      choose(wakeAt);
+                    }}
+                  >
+                    <Icon name={icon} className={s.optionIcon} />
+                    <span className={s.optionLabel}>{label}</span>
+                    <span className={s.optionTime}>{formatSnoozeOptionTime(wakeAt)}</span>
+                  </button>
+                ))}
+                <div className={s.divider} />
+                <button
+                  className={clsx(s.option, s.lastOption)}
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPicking(true);
+                  }}
+                >
+                  <Icon name="event" className={s.optionIcon} />
+                  <span className={s.optionLabel}>Pick date &amp; time</span>
+                </button>
+              </>
+            )}
           </div>,
           document.body,
         )}
-      {pickerOpen && (
-        <SnoozePicker
-          onCancel={() => setPickerOpen(false)}
-          onChoose={choose}
-        />
-      )}
     </div>
   );
 };
 
+type TimeChoice = TimeOfDay | "custom";
+
 const SnoozePicker = ({
-  onCancel,
+  onBack,
   onChoose,
 }: {
-  onCancel: () => void;
+  onBack: () => void;
   onChoose: (wakeAt: number) => void;
 }) => {
-  const initial = defaultCustomSnooze();
-  const [dateValue, setDateValue] = useState(localDateValue(initial));
-  const [timeValue, setTimeValue] = useState(localTimeValue(initial));
+  const prefs = useSnoozePrefs();
+  const [date, setDate] = useState(() => startOfDay(defaultCustomSnooze(prefs)));
+  const [timeMenuOpen, setTimeMenuOpen] = useState(false);
+  const [timeChoice, setTimeChoice] = useState<TimeChoice>("morning");
+  const [customTime, setCustomTime] = useState(() => localTimeValue(prefs.times.morning));
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onCancel]);
+  const now = new Date();
+  const isToday = sameDay(date, now);
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  // On today, times of day already behind us can't be picked.
+  const timeAvailable = (choice: TimeOfDay) => !isToday || prefs.times[choice] > nowMinutes;
+
+  const minutes = timeChoice === "custom" ? parseTimeValue(customTime) : prefs.times[timeChoice];
+
+  const pickDate = (next: Date) => {
+    setDate(next);
+    setError("");
+    if (timeChoice !== "custom" && sameDay(next, now) && prefs.times[timeChoice] <= nowMinutes) {
+      // Move to the next time of day still ahead, or a custom time if none is.
+      const upcoming = TIMES_OF_DAY.find((t) => prefs.times[t] > nowMinutes);
+      if (upcoming) setTimeChoice(upcoming);
+      else {
+        setTimeChoice("custom");
+        setCustomTime(localTimeValue(Math.min(nowMinutes + 60, 23 * 60 + 59)));
+      }
+    }
+  };
 
   const submit = () => {
-    const wakeAt = parseLocalDateTime(dateValue, timeValue);
-    if (!Number.isFinite(wakeAt)) {
-      setError("Choose a valid date and time.");
+    if (Number.isNaN(minutes)) {
+      setError("Choose a valid time.");
       return;
     }
+    const wakeAt = setMinutes(new Date(date), minutes).getTime();
     if (wakeAt <= Date.now()) {
       setError("Choose a time in the future.");
       return;
@@ -211,63 +255,171 @@ const SnoozePicker = ({
     onChoose(wakeAt);
   };
 
-  return createPortal(
-    <div
-      className={s.overlay}
-      onClick={onCancel}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onCancel();
-      }}
-    >
-      <div
-        className={s.dialog}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="snooze-picker-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 id="snooze-picker-title" className={s.dialogTitle}>
-          Pick date &amp; time
-        </h2>
-        <div className={s.fields}>
-          <label className={s.field}>
-            <span className={s.fieldLabel}>Date</span>
-            <input
-              className={s.input}
-              type="date"
-              min={localDateValue(new Date())}
-              value={dateValue}
-              onChange={(e) => {
-                setDateValue(e.currentTarget.value);
-                setError("");
-              }}
-              autoFocus
-            />
-          </label>
-          <label className={s.field}>
-            <span className={s.fieldLabel}>Time</span>
-            <input
-              className={s.input}
-              type="time"
-              value={timeValue}
-              onChange={(e) => {
-                setTimeValue(e.currentTarget.value);
-                setError("");
-              }}
-            />
-          </label>
-        </div>
-        {error && <p className={s.error}>{error}</p>}
-        <div className={s.actions}>
-          <button type="button" className={s.cancelBtn} onClick={onCancel}>
-            Cancel
-          </button>
-          <button type="button" className={s.okBtn} onClick={submit}>
-            Snooze
-          </button>
-        </div>
+  return (
+    <div className={s.picker}>
+      <div className={s.pickerHeader}>
+        <button type="button" className={s.backBtn} title="Back" onClick={onBack}>
+          <Icon name="arrow_back" />
+        </button>
+        <span>Pick date &amp; time</span>
       </div>
-    </div>,
-    document.body,
+      <div className={s.pickerBody}>
+        <Calendar selected={date} onPick={pickDate} />
+
+        <div className={s.timeField}>
+          <button
+            type="button"
+            className={clsx(s.select, timeMenuOpen && s.selectActive)}
+            aria-haspopup="listbox"
+            aria-expanded={timeMenuOpen}
+            onClick={() => setTimeMenuOpen((o) => !o)}
+          >
+            {timeChoice === "custom" ? (
+              <span className={s.selectValue}>Custom</span>
+            ) : (
+              <>
+                <span className={s.selectValue}>{TIME_OF_DAY_LABELS[timeChoice]}</span>
+                <span className={s.selectHint}>{formatMinutes(prefs.times[timeChoice])}</span>
+              </>
+            )}
+            <Icon name="arrow_drop_down" className={s.selectArrow} />
+          </button>
+          {timeMenuOpen && (
+            <div className={s.timeMenu} role="listbox" aria-label="Time">
+              {TIMES_OF_DAY.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  role="option"
+                  aria-selected={timeChoice === t}
+                  disabled={!timeAvailable(t)}
+                  className={clsx(s.timeOption, timeChoice === t && s.timeOptionSelected)}
+                  onClick={() => {
+                    setTimeChoice(t);
+                    setTimeMenuOpen(false);
+                    setError("");
+                  }}
+                >
+                  <span>{TIME_OF_DAY_LABELS[t]}</span>
+                  <span className={s.selectHint}>{formatMinutes(prefs.times[t])}</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                role="option"
+                aria-selected={timeChoice === "custom"}
+                className={clsx(s.timeOption, timeChoice === "custom" && s.timeOptionSelected)}
+                onClick={() => {
+                  if (timeChoice !== "custom" && !Number.isNaN(minutes)) {
+                    setCustomTime(localTimeValue(minutes));
+                  }
+                  setTimeChoice("custom");
+                  setTimeMenuOpen(false);
+                  setError("");
+                }}
+              >
+                <span>Custom…</span>
+              </button>
+            </div>
+          )}
+        </div>
+        {timeChoice === "custom" && (
+          <input
+            className={s.timeInput}
+            type="time"
+            aria-label="Custom time"
+            value={customTime}
+            onChange={(e) => {
+              setCustomTime(e.currentTarget.value);
+              setError("");
+            }}
+          />
+        )}
+        {error && <p className={s.error}>{error}</p>}
+      </div>
+      <div className={s.actions}>
+        <button type="button" className={s.saveBtn} onClick={submit}>
+          Save
+        </button>
+      </div>
+    </div>
+  );
+};
+
+/** Material Design 1 month calendar, Sunday first like Inbox's. */
+const Calendar = ({
+  selected,
+  onPick,
+}: {
+  selected: Date;
+  onPick: (date: Date) => void;
+}) => {
+  const [month, setMonth] = useState(
+    () => new Date(selected.getFullYear(), selected.getMonth(), 1),
+  );
+  const today = startOfDay(new Date());
+  const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const firstWeekday = month.getDay();
+  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const weekdayNames = Array.from({ length: 7 }, (_, i) =>
+    new Intl.DateTimeFormat(undefined, { weekday: "narrow" }).format(new Date(2026, 1, 1 + i)),
+  );
+  const shiftMonth = (by: number) =>
+    setMonth(new Date(month.getFullYear(), month.getMonth() + by, 1));
+
+  return (
+    <div className={s.calendar}>
+      <div className={s.calendarHeader}>
+        <button
+          type="button"
+          className={s.calendarNav}
+          title="Previous month"
+          disabled={month <= thisMonth}
+          onClick={() => shiftMonth(-1)}
+        >
+          <Icon name="chevron_left" />
+        </button>
+        <span className={s.calendarMonth}>
+          {new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(month)}
+        </span>
+        <button
+          type="button"
+          className={s.calendarNav}
+          title="Next month"
+          onClick={() => shiftMonth(1)}
+        >
+          <Icon name="chevron_right" />
+        </button>
+      </div>
+      <div className={s.calendarGrid} role="grid">
+        {weekdayNames.map((name, i) => (
+          <span key={i} className={s.weekday}>{name}</span>
+        ))}
+        {Array.from({ length: firstWeekday }, (_, i) => (
+          <span key={`pad-${i}`} />
+        ))}
+        {Array.from({ length: daysInMonth }, (_, i) => {
+          const day = new Date(month.getFullYear(), month.getMonth(), i + 1);
+          const isSelected = sameDay(day, selected);
+          return (
+            <button
+              key={i}
+              type="button"
+              role="gridcell"
+              aria-selected={isSelected}
+              disabled={day < today}
+              className={clsx(
+                s.day,
+                sameDay(day, today) && s.dayToday,
+                isSelected && s.daySelected,
+              )}
+              onClick={() => onPick(day)}
+            >
+              {i + 1}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 };

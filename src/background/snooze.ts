@@ -12,7 +12,13 @@ import {
   loadMessageBody,
 } from "./ingest";
 import { applyClassification } from "../classifier/version";
-import { applyLocalState, invalidateSnoozeIndex } from "./localState";
+import { pinKeyOf } from "../shared/pinKey";
+import {
+  applyLocalState,
+  clearResurfaced,
+  invalidateSnoozeIndex,
+  setResurfaced,
+} from "./localState";
 import { headerToRawMessage } from "./messageMap";
 import { broadcast } from "./port";
 
@@ -51,6 +57,7 @@ export const snoozeMessage = async (
   };
   await db.snoozes.put(record);
   invalidateSnoozeIndex();
+  await clearResurfaced(pinKeyOf({ headerMessageId, id: messageId }));
 
   try {
     const archived = await doneMessage(messageId);
@@ -131,12 +138,9 @@ export const wakeSnoozedMessage = async (
     const raw = headerToRawMessage(restoredHeader, "inbox");
     const body = await loadMessageBody(restoredHeader.id);
     applyClassification(raw, await classifyMessage(restoredHeader, body));
+    if (reason === "alarm") await setResurfaced(pinKeyOf(raw), record.wakeAt, true);
+    else if (reason === "unsnooze") await setResurfaced(pinKeyOf(raw), Date.now(), false);
     await applyLocalState(raw);
-    if (reason === "alarm") {
-      raw.resurfacedAt = record.wakeAt;
-      raw.snoozeExpired = true;
-    }
-    else if (reason === "unsnooze") raw.resurfacedAt = Date.now();
     await applyMessageDetails(raw, undefined, body);
     if (originalId !== raw.id) {
       await db.messages.delete(originalId);
