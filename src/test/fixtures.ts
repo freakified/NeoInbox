@@ -130,6 +130,14 @@ export const shapes = {
     accounts: [account("a", "a", a), account("b", "b", b)],
   }),
 
+  /**
+   * A Gmail account: the archive is All Mail, and moves in and out of it are
+   * label changes (see FakeAccountSpec.gmail).
+   */
+  gmail: (messages: FakeMessageSpec[] = []): FakeMessengerOptions => ({
+    accounts: [{ ...account("a", "a", messages), gmail: true }],
+  }),
+
   /** No Archives folder: archiving must fail loudly rather than lose mail. */
   noArchive: (messages: FakeMessageSpec[] = []): FakeMessengerOptions => ({
     accounts: [account("a", "a", messages, { archive: false })],

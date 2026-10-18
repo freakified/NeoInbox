@@ -15,7 +15,7 @@ import {
   pinMessage,
   trashMessage,
 } from "./ingest";
-import type { ArchivedCopy } from "./archiveFolders";
+import { type ArchivedCopy, findByHeaderMessageIdInFolder } from "./archiveFolders";
 import { applyClassification, carryClassification } from "../classifier/version";
 import { headerToRawMessage } from "./messageMap";
 import { snoozeMessage, wakeSnoozedMessage } from "./snooze";
@@ -216,6 +216,7 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
       const cached = await db.messages.get(msg.messageKey);
       let movedHeader: messenger.messages.MessageHeader | undefined;
       let opId: number | null = null;
+      let inboxId = "";
       try {
         // Done rows hold the oldest ids in the cache; never move an
         // unverified one (it could be a different message entirely).
@@ -224,6 +225,7 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
         const accountId = cached.accountId;
         const target = (await collectInboxFolders()).find((f) => f.accountId === accountId);
         if (!target) throw new Error("No inbox folder found for this account");
+        inboxId = target.id;
         const moved = (await messenger.messages.move(
           [opId],
           target.id as unknown as messenger.folders.MailFolderId,
@@ -240,7 +242,13 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
         return;
       }
       try {
-        const header = await messenger.messages.get(movedHeader?.id ?? opId);
+        // An IMAP move often hands nothing back, so find the inbox copy by
+        // Message-ID. Never fall back to the original id: on Gmail it still
+        // resolves (moving out of All Mail only adds a label), and an inbox
+        // row cached from it is stuck in All Mail, where Done can't archive it.
+        const header =
+          movedHeader ?? (await findByHeaderMessageIdInFolder(inboxId, cached.headerMessageId));
+        if (!header) return;
         const raw = headerToRawMessage(header, "inbox");
         carryClassification(raw, cached);
         await applyLocalState(raw);

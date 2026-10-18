@@ -39,3 +39,11 @@
 .iconPrimary {
   color: var(--color-md-primary);
 }
+
+.iconDone {
+  color: var(--color-done);
+}
+
+.iconSnoozed {
+  color: var(--color-snooze);
+}

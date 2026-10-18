@@ -17,11 +17,16 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
           className={clsx(s.iconBase, thread.pinned ? s.iconPrimary : s.iconMuted)}
         />
       </ActionBtn>
-      {actions.hasInboxMessages && <SnoozeMenu onChoose={actions.snooze} />}
-      {actions.hasSnoozedMessages && (
+      {actions.isSnoozed ? (
         <ActionBtn title="Unsnooze" onClick={actions.unsnooze}>
-          <Icon name="alarm_off" className={clsx(s.iconBase, s.iconMuted)} />
+          <Icon
+            name="schedule"
+            className={clsx(s.iconBase, s.iconSnoozed)}
+            style={{ fontVariationSettings: "'FILL' 0" }}
+          />
         </ActionBtn>
+      ) : (
+        actions.hasInboxMessages && <SnoozeMenu onChoose={actions.snooze} />
       )}
       <ActionBtn title="Trash (#)" onClick={actions.trash}>
         <Icon name="delete" className={clsx(s.iconBase, s.iconMuted)} />
@@ -31,9 +36,9 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
           <Icon name="check" className={clsx(s.iconBase, s.iconMuted)} />
         </ActionBtn>
       )}
-      {!actions.hasInboxMessages && actions.hasDoneMessages && (
+      {actions.isDone && (
         <ActionBtn title="Move to inbox" onClick={actions.moveToInbox}>
-          <Icon name="move_to_inbox" className={clsx(s.iconBase, s.iconMuted)} />
+          <Icon name="check" className={clsx(s.iconBase, s.iconDone)} />
         </ActionBtn>
       )}
       <BundleMenu thread={thread} />

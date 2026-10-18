@@ -69,14 +69,14 @@
      centres on the avatar like the rest of the row. */
   height: 14px;
   gap: 8px;
-  color: #df742c;
+  color: var(--color-snooze);
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
 }
 
 .snoozeIcon {
-  color: #df742c;
+  color: var(--color-snooze);
   font-size: 20px;
 }
 
@@ -110,6 +110,6 @@
 
 .doneIndicator {
   font-size: 16px;
-  color: #5ca46f;
+  color: var(--color-done);
 }
 

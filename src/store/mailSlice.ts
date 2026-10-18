@@ -94,12 +94,13 @@ export const mailSlice = (
     const map = { ...prev };
     const pending = { ...get().pendingOps };
     const snoozesByKey = { ...get().snoozesByKey };
-    const now = Date.now();
     for (const key of messageKeys) {
       const m = prev[key];
       if (!m) continue;
       pending[key] = { kind: "unsnooze", message: m, snooze: snoozesByKey[key] };
-      map[key] = { ...m, snoozed: false, resurfacedAt: now, snoozeExpired: false };
+      // Back at its own date, as if never snoozed (only an alarm wake moves it).
+      const { resurfacedAt: _resurfacedAt, snoozeExpired: _snoozeExpired, ...rest } = m;
+      map[key] = { ...rest, snoozed: false };
       delete snoozesByKey[key];
     }
     set({ messagesByKey: map, pendingOps: pending, snoozesByKey });

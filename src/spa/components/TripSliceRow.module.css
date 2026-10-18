@@ -135,6 +135,11 @@
   background: rgba(255, 255, 255, 0.16);
 }
 
+/* The done green, lifted to read on the dark banner. */
+.bannerIconDone {
+  color: #8fd19e;
+}
+
 .itinerary {
   position: relative;
   z-index: 1;
@@ -150,25 +155,11 @@
   gap: 24px;
   width: 100%;
   padding: 14px 24px;
-  background: none;
-  border: none;
   border-top: 1px solid #e0e0e0;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
 }
 
 .itineraryRow:first-child {
   border-top: none;
-}
-
-.itineraryRow:hover:not(:disabled) {
-  background: #f5f5f5;
-}
-
-.itineraryRow:disabled {
-  cursor: default;
-  color: inherit;
 }
 
 .itineraryIcon {

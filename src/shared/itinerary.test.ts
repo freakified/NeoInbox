@@ -38,7 +38,7 @@ describe("buildItinerary", () => {
     const exact = record([{ kind: "flight", start: at(10, 22, 22, 10), origin: "SFO", destination: "EWR", summary: "AS 1182 SFO → EWR" }]);
     const items = buildItinerary([exact, vague], NOW);
     expect(items).toHaveLength(1);
-    expect(items[0]!.sourceKey).toBe(exact.key);
+    expect(items[0]!.when).toBe("Nov 22, 10:10 PM");
   });
 
   it("drops cancelled reservations", () => {
@@ -56,7 +56,7 @@ describe("formatWhen", () => {
 });
 
 describe("itineraryMessage", () => {
-  it("writes the itinerary out with confirmation codes", () => {
+  it("writes the itinerary out, leaving confirmation codes behind", () => {
     const [item] = buildItinerary(
       [record([{ kind: "flight", start: at(10, 22, 22, 10), origin: "SFO", destination: "EWR", summary: "AS 1182 SFO → EWR" }], { confirmationCodes: ["GFQVKA"] })],
       NOW,
@@ -64,8 +64,9 @@ describe("itineraryMessage", () => {
     const message = itineraryMessage("Trip to New York", "Nov 22–25, 2026", [item!]);
     expect(message.subject).toBe("Trip to New York (Nov 22–25, 2026)");
     expect(message.text).toBe(
-      "Trip to New York\nNov 22–25, 2026\n\nSan Francisco to New York – AS 1182\nNov 22, 10:10 PM · Confirmation GFQVKA",
+      "Trip to New York\nNov 22–25, 2026\n\nSan Francisco to New York – AS 1182\nNov 22, 10:10 PM",
     );
+    expect(message.html).not.toContain("GFQVKA");
     expect(message.html).toContain("<b>Trip to New York</b>");
   });
 });

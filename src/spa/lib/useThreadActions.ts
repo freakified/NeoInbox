@@ -14,6 +14,12 @@ export interface ThreadActions {
   hasInboxMessages: boolean;
   hasDoneMessages: boolean;
   hasSnoozedMessages: boolean;
+  /** Whole thread archived: its check shows green and undoes the done. */
+  isDone: boolean;
+  /** Snoozed: its clock shows orange and unsnoozes. */
+  isSnoozed: boolean;
+  /** When the snooze wakes (the earliest, if its messages differ). */
+  snoozeWakeAt?: number;
   togglePin: () => void;
   done: () => void;
   snooze: (wakeAt: number) => void;
@@ -30,6 +36,7 @@ export const useThreadActions = (thread: Thread): ThreadActions => {
   const unsnoozeThread = useMailStore((st) => st.unsnoozeThread);
   const notify = useMailStore((st) => st.notify);
   const moveToInboxThread = useMailStore((st) => st.moveToInboxThread);
+  const snoozesByKey = useMailStore((st) => st.snoozesByKey);
   const { doneMessages, trashMessages } = useBulkActions();
 
   return useMemo(() => {
@@ -40,6 +47,10 @@ export const useThreadActions = (thread: Thread): ThreadActions => {
       .filter((m) => m.origin === "done")
       .map((m) => m.key);
     const snoozedMessageKeys = thread.messages.filter((m) => m.snoozed).map((m) => m.key);
+    const snoozeWakeAt = snoozedMessageKeys
+      .map((key) => snoozesByKey[key]?.wakeAt)
+      .filter((wakeAt): wakeAt is number => typeof wakeAt === "number")
+      .sort((a, b) => a - b)[0];
 
     const snooze = (wakeAt: number) => {
       snoozeThread(inboxMessageKeys, wakeAt);
@@ -50,6 +61,9 @@ export const useThreadActions = (thread: Thread): ThreadActions => {
       hasInboxMessages: inboxMessageKeys.length > 0,
       hasDoneMessages: doneMessageKeys.length > 0,
       hasSnoozedMessages: snoozedMessageKeys.length > 0,
+      isDone: inboxMessageKeys.length === 0 && doneMessageKeys.length > 0,
+      isSnoozed: snoozedMessageKeys.length > 0,
+      snoozeWakeAt,
       togglePin: () => {
         const next = !thread.pinned;
         for (const m of thread.messages) pin(m.key, next);
@@ -77,6 +91,7 @@ export const useThreadActions = (thread: Thread): ThreadActions => {
     notify,
     pin,
     snoozeThread,
+    snoozesByKey,
     thread,
     trashMessages,
     unsnoozeThread,

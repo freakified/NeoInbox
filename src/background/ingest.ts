@@ -12,6 +12,7 @@ import { findParcels } from "../classifier/extractors/tracking";
 import { buildExtractorInput } from "../classifier/samples";
 import {
   type ArchivedCopy,
+  archiveFolderIdsForAccount,
   findByHeaderMessageIdInFolder,
   locateArchivedCopy,
   messageStillIn,
@@ -19,6 +20,7 @@ import {
   resolveArchiveFolder,
 } from "./archiveFolders";
 import { setPinned } from "./localState";
+import { collectInboxFolders } from "../shared/folders";
 
 import { DETAILS_LAZY, MESSAGE_DETAILS_VERSION } from "../shared/details";
 import { snippetFromPart } from "../shared/snippet";
@@ -209,7 +211,7 @@ export const pinMessage = async (key: MessageKey, pinned: boolean): Promise<void
  * already gone), which is not an error — the archive itself still happened.
  */
 export const doneMessage = async (key: MessageKey): Promise<ArchivedCopy | null> => {
-  const id = await opTbId(key);
+  let id = await opTbId(key);
   if (id === null) {
     log.info("archive", "message no longer exists; treating archive as settled", { key });
     return null;
@@ -231,6 +233,19 @@ export const doneMessage = async (key: MessageKey): Promise<ArchivedCopy | null>
       return null;
     }
     throw e;
+  }
+
+  // A row resolved to the archive copy is one archive() would skip. On Gmail
+  // that happens to inbox mail too, since All Mail holds every message: act on
+  // its Inbox copy if it has one, and otherwise it is archived already.
+  if ((await archiveFolderIdsForAccount(accountId)).includes(sourceFolderId)) {
+    const inboxCopy = await findInboxCopy(accountId, headerMessageId);
+    if (!inboxCopy) {
+      log.info("archive", "message is already in the archive; treating as settled", { id });
+      return { id, folderId: sourceFolderId };
+    }
+    id = inboxCopy.id;
+    sourceFolderId = inboxCopy.folderId;
   }
 
   let archiveError: unknown = null;
@@ -292,6 +307,19 @@ export const doneMessage = async (key: MessageKey): Promise<ArchivedCopy | null>
   }
   // The fallback path knows its own destination, so no search is needed.
   return { id: movedId, folderId: resolved.archiveFolderId };
+}
+
+/** The copy of a message filed in one of its account's inboxes, if any. */
+const findInboxCopy = async (
+  accountId: string,
+  headerMessageId: string,
+): Promise<ArchivedCopy | null> => {
+  for (const inbox of await collectInboxFolders()) {
+    if (inbox.accountId !== accountId) continue;
+    const found = await findByHeaderMessageIdInFolder(inbox.id, headerMessageId);
+    if (found) return { id: found.id, folderId: inbox.id };
+  }
+  return null;
 }
 
 export const trashMessage = async (key: MessageKey): Promise<void> => {

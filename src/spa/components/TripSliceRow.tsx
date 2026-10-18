@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { clsx } from "clsx";
 import type { Thread, TripRecord } from "../../shared/types";
 import { ITINERARY_ICONS, itineraryMessage, type ItineraryItem } from "../../shared/itinerary";
-import { pinKeyOf } from "../../shared/pinKey";
 import { formatTripRange, tripDateRange } from "../../shared/trips";
 import { useMailStore } from "../../store/mailStore";
 import { useTripItinerary } from "../lib/useTripItinerary";
@@ -41,6 +40,8 @@ export const TripSliceRow = ({
 }) => {
   const renameTrip = useMailStore((st) => st.renameTrip);
   const startNewMessage = useMailStore((st) => st.startNewMessage);
+  const moveToInboxThread = useMailStore((st) => st.moveToInboxThread);
+  const notify = useMailStore((st) => st.notify);
   const { doneMessages, trashMessages } = useBulkActions();
 
   const range = tripDateRange(trip, threads);
@@ -66,9 +67,6 @@ export const TripSliceRow = ({
   const toggleThread = (id: string) =>
     setOpenThreadId(activeOpenThreadId === id ? null : id);
 
-  const threadOfKey = (key: string): Thread | undefined =>
-    threads.find((t) => t.messages.some((m) => pinKeyOf(m) === key));
-
   const commitRename = () => {
     setEditing(false);
     renameTrip(trip.id, draftName);
@@ -80,6 +78,18 @@ export const TripSliceRow = ({
       t.messages.filter((m) => m.origin === "inbox").map((m) => m.key),
     );
     doneMessages(ids);
+  };
+
+  // Everything in the trip archived (snoozed mail still counts as inbox): the
+  // check shows green, and clicking it brings the trip back.
+  const messages = threads.flatMap((t) => t.messages);
+  const isDone =
+    messages.some((m) => m.origin === "done") && !messages.some((m) => m.origin === "inbox");
+
+  const handleMoveToInbox = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    moveToInboxThread(messages.filter((m) => m.origin === "done").map((m) => m.key));
+    notify("Moved back to inbox");
   };
 
   const handleForward = (e: React.MouseEvent) => {
@@ -178,9 +188,15 @@ export const TripSliceRow = ({
               <button onClick={handleTrashAll} title="Delete" className={s.bannerBtn}>
                 <Icon name="delete" className={b.actionIcon} />
               </button>
-              <button onClick={handleDoneAll} title="Done" className={s.bannerBtn}>
-                <Icon name="check" className={b.actionIcon} />
-              </button>
+              {isDone ? (
+                <button onClick={handleMoveToInbox} title="Move to inbox" className={s.bannerBtn}>
+                  <Icon name="check" className={clsx(b.actionIcon, s.bannerIconDone)} />
+                </button>
+              ) : (
+                <button onClick={handleDoneAll} title="Done" className={s.bannerBtn}>
+                  <Icon name="check" className={b.actionIcon} />
+                </button>
+              )}
               <TripOverflowMenu
                 onRename={() => {
                   setDraftName(trip.name);
@@ -199,14 +215,7 @@ export const TripSliceRow = ({
       >
         <ErrorBoundary scope="inline" label="trip">
           {itinerary.length > 0 && (
-            <Itinerary
-              items={itinerary}
-              onOpen={(item) => {
-                const thread = threadOfKey(item.sourceKey);
-                if (thread) setOpenThreadId(thread.id);
-              }}
-              canOpen={(item) => threadOfKey(item.sourceKey) !== undefined}
-            />
+            <Itinerary items={itinerary} />
           )}
           {threads.length > 0 && (
             <div className={b.bucketHeader}>
@@ -272,38 +281,19 @@ export const TripSliceRow = ({
   );
 };
 
-const Itinerary = ({
-  items,
-  onOpen,
-  canOpen,
-}: {
-  items: ItineraryItem[];
-  onOpen: (item: ItineraryItem) => void;
-  canOpen: (item: ItineraryItem) => boolean;
-}) => (
+// Read-only: a line can merge several emails (booking, check-in, schedule
+// change), so there's no one source to open.
+const Itinerary = ({ items }: { items: ItineraryItem[] }) => (
   <div className={s.itinerary}>
-    {items.map((item) => {
-      const openable = canOpen(item);
-      return (
-        <button
-          key={item.id}
-          type="button"
-          className={s.itineraryRow}
-          disabled={!openable}
-          title={openable ? "Open the email this came from" : undefined}
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpen(item);
-          }}
-        >
-          <Icon name={ITINERARY_ICONS[item.kind]} className={s.itineraryIcon} />
-          <span className={s.itineraryText}>
-            <span className={s.itineraryTitle}>{item.title}</span>
-            <span className={s.itineraryWhen}>{item.when}</span>
-          </span>
-        </button>
-      );
-    })}
+    {items.map((item) => (
+      <div key={item.id} className={s.itineraryRow}>
+        <Icon name={ITINERARY_ICONS[item.kind]} className={s.itineraryIcon} />
+        <span className={s.itineraryText}>
+          <span className={s.itineraryTitle}>{item.title}</span>
+          <span className={s.itineraryWhen}>{item.when}</span>
+        </span>
+      </div>
+    ))}
   </div>
 );
 

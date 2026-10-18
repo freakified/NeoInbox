@@ -78,9 +78,10 @@ const inFlightWakes = new Set<MessageKey>();
 /**
  * Bring a snoozed message back to the inbox: untag, move to its origin
  * folder, refresh the cache, and notify the UI. `reason` controls where the
- * thread lands in the stream: an alarm wake resurfaces it at its wake time,
- * a manual unsnooze resurfaces it now, and a reply wake keeps natural date
- * order because the new reply already carries the thread.
+ * thread lands in the stream: an alarm wake resurfaces it at its wake time;
+ * a manual unsnooze takes the snooze back, so the thread returns to its own
+ * date; and a reply wake keeps natural date order too, because the new reply
+ * already carries the thread.
  */
 export const wakeSnoozedMessage = async (
   messageKey: MessageKey,
@@ -126,7 +127,6 @@ export const wakeSnoozedMessage = async (
     const body = await loadMessageBody(raw.tbId);
     applyClassification(raw, await classifyMessage(restoredHeader, body));
     if (reason === "alarm") await setResurfaced(pinKeyOf(raw), record.wakeAt, true);
-    else if (reason === "unsnooze") await setResurfaced(pinKeyOf(raw), Date.now(), false);
     await applyLocalState(raw);
     await applyMessageDetails(raw, undefined, body);
     // Back in its origin folder, the message normally gets its old key

@@ -18,6 +18,7 @@ import {
   promoMail,
   shapes,
 } from "./fixtures";
+import { messageKeyOf } from "../shared/messageKey";
 import type { RawMessage } from "../shared/types";
 import type { StreamItem } from "../store/stream";
 
@@ -173,6 +174,84 @@ describe("archiving a thread", () => {
     expect(app.mail.folderOf(id)).toBe(INBOX);
     expect(inboxItems(app)).toHaveLength(1);
     expect(app.store().toasts.at(-1)?.message).toContain("Archives");
+  });
+});
+
+describe("moving archived mail back to the inbox", () => {
+  /** Done, then moved back to the inbox, as un-done does. */
+  const archiveAndRestore = async (app: Booted, id: number): Promise<void> => {
+    app.store().doneThread([app.mail.keyOf(id)]);
+    await commitPendingAction(app);
+    app.store().moveToInboxThread([rowFor(app, id)!.key]);
+    await settle();
+  };
+
+  it("can be archived again on Gmail, where All Mail keeps its copy", async () => {
+    const app = await open(shapes.gmail());
+    // An IMAP move whose destination hasn't synced yet hands nothing back.
+    app.mail.withholdMoveResults = true;
+    const id = await app.mail.deliver(INBOX, forumMail());
+    await settle();
+
+    await archiveAndRestore(app, id);
+
+    // The label was added, not moved: one copy in each folder.
+    expect(app.mail.idsIn(INBOX)).toHaveLength(1);
+    expect(app.mail.idsIn(ARCHIVE)).toHaveLength(1);
+    // The inbox row must be the Inbox copy, never the All Mail one.
+    const rows = Object.values(app.store().messagesByKey);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ origin: "inbox", folderId: INBOX });
+
+    app.store().doneThread([rows[0]!.key]);
+    await commitPendingAction(app);
+
+    expect(app.mail.idsIn(INBOX)).toEqual([]);
+    expect(app.mail.idsIn(ARCHIVE)).toHaveLength(1);
+    expect(rowFor(app, id)).toMatchObject({ origin: "done", folderId: ARCHIVE });
+  });
+
+  it("repairs an inbox row already cached from the All Mail copy", async () => {
+    // The state the Gmail bug above left behind before it was fixed.
+    const app = await open(shapes.gmail());
+    const id = await app.mail.deliver(INBOX, forumMail());
+    await settle();
+    const row = rowFor(app, id)!;
+    const allMailId = app.mail.insert(ARCHIVE, { headerMessageId: row.headerMessageId });
+    const stuck = { ...row, tbId: allMailId, folderId: ARCHIVE };
+    stuck.key = messageKeyOf(stuck);
+    await app.db.messages.delete(row.key);
+    await app.db.messages.put(stuck);
+    await app.store().init();
+    await settle();
+
+    app.store().doneThread([stuck.key]);
+    await commitPendingAction(app);
+
+    expect(app.mail.idsIn(INBOX)).toEqual([]);
+    expect(app.mail.idsIn(ARCHIVE)).toEqual([allMailId]);
+    expect(rowFor(app, id)).toMatchObject({ origin: "done", folderId: ARCHIVE });
+    expect(app.store().toasts.some((t) => /Archives/.test(t.message))).toBe(false);
+  });
+
+  it("can be archived again on plain IMAP when the move hands nothing back", async () => {
+    const app = await open();
+    app.mail.withholdMoveResults = true;
+    const id = await app.mail.deliver(INBOX, forumMail());
+    await settle();
+
+    await archiveAndRestore(app, id);
+
+    expect(app.mail.idsIn(ARCHIVE)).toEqual([]);
+    const rows = Object.values(app.store().messagesByKey);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ origin: "inbox", folderId: INBOX });
+
+    app.store().doneThread([rows[0]!.key]);
+    await commitPendingAction(app);
+
+    expect(app.mail.idsIn(INBOX)).toEqual([]);
+    expect(rowFor(app, id)).toMatchObject({ origin: "done", folderId: ARCHIVE });
   });
 });
 

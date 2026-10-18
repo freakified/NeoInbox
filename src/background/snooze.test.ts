@@ -70,4 +70,27 @@ describe("snooze wake", () => {
     await settle();
     expect(await app.db.resurfaced.count()).toBe(0);
   });
+
+  it("puts a manually unsnoozed thread back at its own date", async () => {
+    app = await boot(shapes.standard(many(3, personalMail)));
+    await app.store().init();
+    await app.backfill.runBackfill();
+    await settle();
+
+    const oldest = Object.values(app.store().messagesByKey).sort((a, b) => a.date - b.date)[0]!;
+    app.store().snoozeThread([oldest.key], Date.now() + 60_000);
+    await settle();
+    app.store().unsnoozeThread([oldest.key]);
+    // Not even briefly on top while the move back is in flight.
+    expect(firstThreadSubject(app)).not.toBe(oldest.subject);
+    await settle();
+
+    const back = Object.values(app.store().messagesByKey).find(
+      (m) => m.headerMessageId === oldest.headerMessageId,
+    )!;
+    expect(back.snoozed).toBe(false);
+    expect(back.resurfacedAt).toBeUndefined();
+    expect(await app.db.resurfaced.count()).toBe(0);
+    expect(firstThreadSubject(app)).not.toBe(oldest.subject);
+  });
 });

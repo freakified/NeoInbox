@@ -72,7 +72,7 @@
 
 /* Inbox's orange "Snoozed 1 day ago" under a snooze that has come due. */
 .subline {
-  color: #df742c;
+  color: var(--color-snooze);
   font-weight: 500;
 }
 

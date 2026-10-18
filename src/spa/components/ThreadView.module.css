@@ -50,6 +50,23 @@
   color: var(--color-md-primary);
 }
 
+.iconBtnIconDone {
+  color: var(--color-done);
+}
+
+.iconBtnIconSnoozed {
+  color: var(--color-snooze);
+}
+
+/* Inbox's orange band under a snoozed conversation's header. */
+.snoozedBanner {
+  padding: 12px 20px;
+  background: var(--color-snooze);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+}
+
 .messages > * + * {
   border-top: 1px solid var(--color-md-divider);
 }

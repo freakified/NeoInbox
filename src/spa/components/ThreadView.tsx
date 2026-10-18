@@ -3,7 +3,7 @@ import { clsx } from "clsx";
 import type { Thread } from "../../shared/types";
 import { useMailStore, type PendingReply } from "../../store/mailStore";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
-import { useBulkActions } from "./BulkActionConfirm";
+import { useThreadActions } from "../lib/useThreadActions";
 import { BundleMenu } from "./BundleMenu";
 import { Icon } from "./Icon";
 import { InlineMessage } from "./InlineMessage";
@@ -20,24 +20,10 @@ export const ThreadView = ({
 }: {
   thread: Thread;
 }) => {
-  const { doneMessages, trashMessages } = useBulkActions();
-  const pin = useMailStore((st) => st.pin);
-  const snoozeThread = useMailStore((st) => st.snoozeThread);
-  const unsnoozeThread = useMailStore((st) => st.unsnoozeThread);
-  const notify = useMailStore((st) => st.notify);
+  const actions = useThreadActions(t);
   const hydrateThreadDetails = useMailStore((st) => st.hydrateThreadDetails);
   const allPendingReplies = useMailStore((st) => st.pendingReplies);
   const settlePendingReply = useMailStore((st) => st.settlePendingReply);
-  const inboxMessageKeys = useMemo(
-    () => t.messages.filter((m) => m.origin === "inbox").map((m) => m.key),
-    [t],
-  );
-  const hasInboxMessages = inboxMessageKeys.length > 0;
-  const snoozedMessageKeys = useMemo(
-    () => t.messages.filter((m) => m.snoozed).map((m) => m.key),
-    [t],
-  );
-
   const latestInbox = useMemo(() => {
     const inbox = t.messages.filter((m) => m.origin === "inbox");
     return inbox[inbox.length - 1] ?? t.messages[t.messages.length - 1];
@@ -111,20 +97,6 @@ export const ThreadView = ({
       return next;
     });
 
-  const onTogglePin = () => {
-    const next = !t.pinned;
-    for (const m of t.messages) pin(m.key, next);
-  };
-  const onDone = () => doneMessages(inboxMessageKeys);
-  const onSnooze = (wakeAt: number) => {
-    snoozeThread(inboxMessageKeys, wakeAt);
-    notify(`Snoozed until ${formatSnoozeToastTime(wakeAt)}`);
-  };
-  const onUnsnooze = () => {
-    unsnoozeThread(snoozedMessageKeys);
-    notify("Moved back to inbox");
-  };
-  const onTrash = () => trashMessages(t.messages.map((m) => m.key));
   const translateLatest = () => {
     setTranslationRequests((prev) => ({
       ...prev,
@@ -141,7 +113,7 @@ export const ThreadView = ({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onTogglePin();
+              actions.togglePin();
             }}
             title={t.pinned ? "Unpin" : "Pin"}
             className={s.iconBtn}
@@ -151,34 +123,39 @@ export const ThreadView = ({
               className={clsx(s.iconBtnIcon, t.pinned && s.iconBtnIconActive)}
             />
           </button>
-          {hasInboxMessages && <SnoozeMenu onChoose={onSnooze} />}
-          {snoozedMessageKeys.length > 0 && (
+          {actions.isSnoozed ? (
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onUnsnooze();
+                actions.unsnooze();
               }}
               title="Unsnooze"
               className={s.iconBtn}
             >
-              <Icon name="alarm_off" className={s.iconBtnIcon} />
+              <Icon
+                name="schedule"
+                className={clsx(s.iconBtnIcon, s.iconBtnIconSnoozed)}
+                style={{ fontVariationSettings: "'FILL' 0" }}
+              />
             </button>
+          ) : (
+            actions.hasInboxMessages && <SnoozeMenu onChoose={actions.snooze} />
           )}
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onTrash();
+              actions.trash();
             }}
             title="Move thread to trash"
             className={s.iconBtn}
           >
             <Icon name="delete" className={s.iconBtnIcon} />
           </button>
-          {hasInboxMessages && (
+          {actions.hasInboxMessages && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onDone();
+                actions.done();
               }}
               title="Archive thread"
               className={s.iconBtn}
@@ -186,10 +163,26 @@ export const ThreadView = ({
               <Icon name="check" className={s.iconBtnIcon} />
             </button>
           )}
+          {actions.isDone && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                actions.moveToInbox();
+              }}
+              title="Move to inbox"
+              className={s.iconBtn}
+            >
+              <Icon name="check" className={clsx(s.iconBtnIcon, s.iconBtnIconDone)} />
+            </button>
+          )}
           <BundleMenu thread={t} onTranslateToEnglish={translateLatest} />
         </div>
       </div>
-
+      {actions.isSnoozed && actions.snoozeWakeAt !== undefined && (
+        <div className={s.snoozedBanner}>
+          Snoozed until {formatSnoozeToastTime(actions.snoozeWakeAt)}
+        </div>
+      )}
 
       <div className={s.messages}>
         {!shouldCollapseMiddleMessages ? (

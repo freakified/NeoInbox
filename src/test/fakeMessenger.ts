@@ -165,6 +165,12 @@ export interface FakeAccountSpec {
   name?: string;
   identities?: { email: string; name?: string }[];
   folders: FakeFolderSpec[];
+  /**
+   * Gmail's labels-as-folders: the archive is All Mail, which holds every
+   * message whatever else it is filed under. Moving out of it only adds a
+   * label, so the All Mail copy stays put; moving into it only removes one.
+   */
+  gmail?: boolean;
 }
 
 export interface FakeMessengerOptions {
@@ -206,6 +212,12 @@ export class FakeMessenger {
   private nextPage = 1;
   private hanging = new Set<HangableCall>();
   private failing = new Map<HangableCall, string>();
+  private gmailAccounts = new Set<string>();
+  /**
+   * When true move() resolves without the copies it made, as an IMAP move does
+   * when the destination folder hasn't synced them yet. onMoved still fires.
+   */
+  withholdMoveResults = false;
 
   readonly storageData: Record<string, unknown> = {};
   readonly alarmsCreated = new Map<string, unknown>();
@@ -284,6 +296,7 @@ export class FakeMessenger {
 
   constructor(private options: FakeMessengerOptions) {
     for (const account of options.accounts) {
+      if (account.gmail) this.gmailAccounts.add(account.id);
       for (const folder of flattenFolders(account.folders)) {
         this.folderOwner.set(folder.id, account.id);
         this.folderSpecs.set(folder.id, folder);
@@ -531,7 +544,21 @@ export class FakeMessenger {
     const moved: StoredMessage[] = [];
     for (const id of ids) {
       const msg = this.require(id);
-      this.messages.delete(id);
+      const accountId = this.folderOwner.get(msg.folderId) ?? "";
+      const allMail = this.gmailAccounts.has(accountId) ? this.archiveFolderFor(accountId) : undefined;
+      if (allMail && targetId === allMail) {
+        // Removing a label: the All Mail copy is already there.
+        const existing = [...this.messages.values()].find(
+          (m) => m.folderId === allMail && m.headerMessageId === msg.headerMessageId,
+        );
+        if (existing) {
+          this.messages.delete(id);
+          moved.push(existing);
+          continue;
+        }
+      }
+      // Adding a label leaves the All Mail copy where it was.
+      if (!allMail || msg.folderId !== allMail) this.messages.delete(id);
       const copy = { ...msg, id: this.nextId++, folderId: targetId };
       this.messages.set(copy.id, copy);
       moved.push(copy);
@@ -623,8 +650,10 @@ export class FakeMessenger {
       return this.paginate(rows);
     },
 
-    move: async (ids: number[], target: unknown) =>
-      ({ messages: await this.moveInternal(ids, this.folderIdOf(target)) }),
+    move: async (ids: number[], target: unknown) => {
+      const moved = await this.moveInternal(ids, this.folderIdOf(target));
+      return { messages: this.withholdMoveResults ? [] : moved };
+    },
 
     archive: async (ids: number[]) => {
       for (const id of ids) {
@@ -632,6 +661,8 @@ export class FakeMessenger {
         const accountId = this.folderOwner.get(msg.folderId) ?? "";
         const target = this.archiveFolderFor(accountId);
         if (!target) throw new Error("No Archives folder configured for this account");
+        // Thunderbird quietly skips mail that is already in the archive.
+        if (msg.folderId === target) continue;
         await this.moveInternal([id], target);
       }
     },
