@@ -63,13 +63,13 @@ const emptyStateForView = (
     return {
       icon: "pan_tool_alt",
       title: "No reminders",
-      hint: "Create one with the button below.",
+      hint: "Create one using the + button in the corner.",
     };
   if (view.type === "trips")
     return {
       icon: "travel",
       title: "No trips yet",
-      hint: "Open a conversation's ⋮ menu and choose Move to → New trip.",
+      hint: "Open a conversation and choose Move to → New trip.",
     };
   if (view.type === "bundle") {
     const meta = getCategoryMeta(view.category, customBundles);
@@ -618,194 +618,194 @@ export const App = () => {
         </aside>
 
         <main ref={contentRef} className={s.content}>
-        {!hydrated && (
-          <p className={s.emptyText}>Loading…</p>
-        )}
+          {!hydrated && (
+            <p className={s.emptyText}>Loading…</p>
+          )}
 
-        {hydrated && stream.threadCount === 0 && !syncing && (
-          emptyState ? <EmptyState {...emptyState}>{archiveFooter}</EmptyState> : <InboxZero />
-        )}
+          {hydrated && stream.threadCount === 0 && !syncing && (
+            emptyState ? <EmptyState {...emptyState}>{archiveFooter}</EmptyState> : <InboxZero />
+          )}
 
-        {visibleStream.sections.map((group) => {
-          const expandedBundleIdx = expandedKey && isGroupKey(expandedKey)
-            ? group.items.findIndex((item) => groupKeyOf(item) === expandedKey)
-            : -1;
+          {visibleStream.sections.map((group) => {
+            const expandedBundleIdx = expandedKey && isGroupKey(expandedKey)
+              ? group.items.findIndex((item) => groupKeyOf(item) === expandedKey)
+              : -1;
 
-          const renderItems = (items: StreamItem[]) =>
-            items.map((item) =>
-              item.type === "thread" ? (
-                <ThreadRow
-                  key={item.thread.id}
-                  thread={item.thread}
-                  isExpanded={expandedKey === `thread:${item.thread.id}`}
-                  onToggle={() => toggleKey(`thread:${item.thread.id}`)}
-                />
-              ) : item.type === "reminder" ? (
-                <ReminderRow key={item.reminder.id} reminder={item.reminder} />
-              ) : item.type === "trip" ? (
-                <TripSliceRow
-                  key={item.trip.id}
-                  tripKey={`trip:${item.trip.id}`}
-                  trip={item.trip}
-                  threads={item.threads}
-                  isOpen={false}
-                  onToggle={toggleKey}
-                />
-              ) : (
-                <BundleSliceRow
-                  key={item.category}
-                  bundleKey={`bundle:${item.category}`}
-                  category={item.category}
-                  threads={item.threads}
-                  isOpen={false}
-                  onToggle={toggleKey}
-                />
-              )
-            );
+            const renderItems = (items: StreamItem[]) =>
+              items.map((item) =>
+                item.type === "thread" ? (
+                  <ThreadRow
+                    key={item.thread.id}
+                    thread={item.thread}
+                    isExpanded={expandedKey === `thread:${item.thread.id}`}
+                    onToggle={() => toggleKey(`thread:${item.thread.id}`)}
+                  />
+                ) : item.type === "reminder" ? (
+                  <ReminderRow key={item.reminder.id} reminder={item.reminder} />
+                ) : item.type === "trip" ? (
+                  <TripSliceRow
+                    key={item.trip.id}
+                    tripKey={`trip:${item.trip.id}`}
+                    trip={item.trip}
+                    threads={item.threads}
+                    isOpen={false}
+                    onToggle={toggleKey}
+                  />
+                ) : (
+                  <BundleSliceRow
+                    key={item.category}
+                    bundleKey={`bundle:${item.category}`}
+                    category={item.category}
+                    threads={item.threads}
+                    isOpen={false}
+                    onToggle={toggleKey}
+                  />
+                )
+              );
 
-          const openBundle = expandedBundleIdx >= 0
-            ? group.items[expandedBundleIdx] as GroupItem
-            : null;
+            const openBundle = expandedBundleIdx >= 0
+              ? group.items[expandedBundleIdx] as GroupItem
+              : null;
 
-          const expandedThreadIdx = !openBundle && expandedKey?.startsWith("thread:")
-            ? group.items.findIndex(
+            const expandedThreadIdx = !openBundle && expandedKey?.startsWith("thread:")
+              ? group.items.findIndex(
                 (item) => item.type === "thread" && expandedKey === `thread:${item.thread.id}`
               )
-            : -1;
+              : -1;
 
-          return (
-            <section key={group.label} className={s.section}>
-              <div className={s.sectionHeader}>
-                <SectionLabel>{group.label}</SectionLabel>
-                {showDoneAll && canDoneSection(group.items) && (
-                  <div className={s.sectionActions}>
-                    <button
-                      onClick={() => sectionDoneAll(group.items)}
-                      title="Done all"
-                      className={s.sectionActionBtn}
-                    >
-                      <Icon name="done_all" className={s.sectionActionIcon} />
-                    </button>
-                  </div>
-                )}
-              </div>
-              <LayoutGroup>
-                {openBundle ? (
-                  <>
-                    {expandedBundleIdx > 0 && (
-                      <MotionSurface className={s.card}>
-                        {renderItems(group.items.slice(0, expandedBundleIdx))}
-                      </MotionSurface>
-                    )}
-                    {openBundle.type === "trip" ? (
-                      <TripSliceRow
-                        tripKey={`trip:${openBundle.trip.id}`}
-                        trip={openBundle.trip}
-                        threads={openBundle.threads}
-                        isOpen={true}
-                        onToggle={toggleKey}
-                        openThreadId={openBundleThreadId}
-                        onOpenThreadChange={setBundleThread}
-                      />
-                    ) : (
-                      <BundleSliceRow
-                        bundleKey={`bundle:${openBundle.category}`}
-                        category={openBundle.category}
-                        threads={openBundle.threads}
-                        isOpen={true}
-                        onToggle={toggleKey}
-                        openThreadId={openBundleThreadId}
-                        onOpenThreadChange={setBundleThread}
-                      />
-                    )}
-                    {expandedBundleIdx < group.items.length - 1 && (
-                      <MotionSurface className={s.card}>
-                        {renderItems(group.items.slice(expandedBundleIdx + 1))}
-                      </MotionSurface>
-                    )}
-                  </>
-                ) : expandedThreadIdx >= 0 ? (
-                  <>
-                    {expandedThreadIdx > 0 && (
-                      <MotionSurface className={s.card}>
-                        {renderItems(group.items.slice(0, expandedThreadIdx))}
-                      </MotionSurface>
-                    )}
-                    {/* Keyed per thread: reusing the previous card's element would
+            return (
+              <section key={group.label} className={s.section}>
+                <div className={s.sectionHeader}>
+                  <SectionLabel>{group.label}</SectionLabel>
+                  {showDoneAll && canDoneSection(group.items) && (
+                    <div className={s.sectionActions}>
+                      <button
+                        onClick={() => sectionDoneAll(group.items)}
+                        title="Done all"
+                        className={s.sectionActionBtn}
+                      >
+                        <Icon name="done_all" className={s.sectionActionIcon} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <LayoutGroup>
+                  {openBundle ? (
+                    <>
+                      {expandedBundleIdx > 0 && (
+                        <MotionSurface className={s.card}>
+                          {renderItems(group.items.slice(0, expandedBundleIdx))}
+                        </MotionSurface>
+                      )}
+                      {openBundle.type === "trip" ? (
+                        <TripSliceRow
+                          tripKey={`trip:${openBundle.trip.id}`}
+                          trip={openBundle.trip}
+                          threads={openBundle.threads}
+                          isOpen={true}
+                          onToggle={toggleKey}
+                          openThreadId={openBundleThreadId}
+                          onOpenThreadChange={setBundleThread}
+                        />
+                      ) : (
+                        <BundleSliceRow
+                          bundleKey={`bundle:${openBundle.category}`}
+                          category={openBundle.category}
+                          threads={openBundle.threads}
+                          isOpen={true}
+                          onToggle={toggleKey}
+                          openThreadId={openBundleThreadId}
+                          onOpenThreadChange={setBundleThread}
+                        />
+                      )}
+                      {expandedBundleIdx < group.items.length - 1 && (
+                        <MotionSurface className={s.card}>
+                          {renderItems(group.items.slice(expandedBundleIdx + 1))}
+                        </MotionSurface>
+                      )}
+                    </>
+                  ) : expandedThreadIdx >= 0 ? (
+                    <>
+                      {expandedThreadIdx > 0 && (
+                        <MotionSurface className={s.card}>
+                          {renderItems(group.items.slice(0, expandedThreadIdx))}
+                        </MotionSurface>
+                      )}
+                      {/* Keyed per thread: reusing the previous card's element would
                         make framer fly it here from wherever that card was. */}
-                    <MotionSurface key={expandedKey} className={s.expandedThread}>
-                      <ThreadRow
-                        thread={(group.items[expandedThreadIdx] as Extract<StreamItem, { type: "thread" }>).thread}
-                        isExpanded={true}
-                        onToggle={() => toggleKey(expandedKey!)}
-                      />
-                    </MotionSurface>
-                    {expandedThreadIdx < group.items.length - 1 && (
-                      <MotionSurface className={s.card}>
-                        {renderItems(group.items.slice(expandedThreadIdx + 1))}
+                      <MotionSurface key={expandedKey} className={s.expandedThread}>
+                        <ThreadRow
+                          thread={(group.items[expandedThreadIdx] as Extract<StreamItem, { type: "thread" }>).thread}
+                          isExpanded={true}
+                          onToggle={() => toggleKey(expandedKey!)}
+                        />
                       </MotionSurface>
-                    )}
-                  </>
-                ) : (
-                  <MotionSurface className={s.card}>
-                    {renderItems(group.items)}
-                  </MotionSurface>
-                )}
-              </LayoutGroup>
-            </section>
-          );
-        })}
-        {hasMoreItems && (
-          <div className={s.loadMoreWrap}>
-            <button
-              type="button"
-              className={s.loadMoreBtn}
-              onClick={() => setVisibleItemLimit((limit) => limit + STREAM_PAGE_SIZE)}
-            >
-              Load more
-              <span className={s.loadMoreCount}>
-                {visibleStream.visibleCount} of {visibleStream.totalCount}
-              </span>
-            </button>
-          </div>
-        )}
-        {/*
+                      {expandedThreadIdx < group.items.length - 1 && (
+                        <MotionSurface className={s.card}>
+                          {renderItems(group.items.slice(expandedThreadIdx + 1))}
+                        </MotionSurface>
+                      )}
+                    </>
+                  ) : (
+                    <MotionSurface className={s.card}>
+                      {renderItems(group.items)}
+                    </MotionSurface>
+                  )}
+                </LayoutGroup>
+              </section>
+            );
+          })}
+          {hasMoreItems && (
+            <div className={s.loadMoreWrap}>
+              <button
+                type="button"
+                className={s.loadMoreBtn}
+                onClick={() => setVisibleItemLimit((limit) => limit + STREAM_PAGE_SIZE)}
+              >
+                Load more
+                <span className={s.loadMoreCount}>
+                  {visibleStream.visibleCount} of {visibleStream.totalCount}
+                </span>
+              </button>
+            </div>
+          )}
+          {/*
           Only once everything already cached is on screen: the button above
           pages what NeoInbox has, this one goes back to the mailbox for older
           inbox mail that the scan window left alone.
         */}
-        {!hasMoreItems && canLoadOlderMail && (
-          <div className={s.loadMoreWrap}>
-            <button
-              type="button"
-              className={s.loadMoreBtn}
-              onClick={loadMoreInbox}
-              disabled={loadingMoreInbox}
-            >
-              {loadingMoreInbox ? "Fetching older mail…" : "Fetch older mail"}
-              <span className={s.loadMoreCount}>
-                {inboxWindow?.skipped.toLocaleString()} older in this inbox
-              </span>
-            </button>
-          </div>
-        )}
-        {!hasMoreItems && canLoadOlderHistory && (
-          <div className={s.loadMoreWrap}>
-            <button
-              type="button"
-              className={s.loadMoreBtn}
-              onClick={() => void loadOlderHistory()}
-              disabled={loadingHistory}
-            >
-              {loadingHistory ? "Loading older mail…" : "Show older mail"}
-              <span className={s.loadMoreCount}>
-                before {new Date(historyFrom).toLocaleDateString()}
-              </span>
-            </button>
-          </div>
-        )}
-        {/* Past the last cached row: offer what's still only in the archive. */}
-        {hydrated && !hasMoreItems && stream.threadCount > 0 && archiveFooter}
+          {!hasMoreItems && canLoadOlderMail && (
+            <div className={s.loadMoreWrap}>
+              <button
+                type="button"
+                className={s.loadMoreBtn}
+                onClick={loadMoreInbox}
+                disabled={loadingMoreInbox}
+              >
+                {loadingMoreInbox ? "Fetching older mail…" : "Fetch older mail"}
+                <span className={s.loadMoreCount}>
+                  {inboxWindow?.skipped.toLocaleString()} older in this inbox
+                </span>
+              </button>
+            </div>
+          )}
+          {!hasMoreItems && canLoadOlderHistory && (
+            <div className={s.loadMoreWrap}>
+              <button
+                type="button"
+                className={s.loadMoreBtn}
+                onClick={() => void loadOlderHistory()}
+                disabled={loadingHistory}
+              >
+                {loadingHistory ? "Loading older mail…" : "Show older mail"}
+                <span className={s.loadMoreCount}>
+                  before {new Date(historyFrom).toLocaleDateString()}
+                </span>
+              </button>
+            </div>
+          )}
+          {/* Past the last cached row: offer what's still only in the archive. */}
+          {hydrated && !hasMoreItems && stream.threadCount > 0 && archiveFooter}
         </main>
       </div>
       <Fab />
