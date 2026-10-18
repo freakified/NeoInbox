@@ -9,6 +9,7 @@
  * listings that stalled, and ids Thunderbird renumbered between sessions, so
  * all three are first-class here.
  */
+import { keyOfHeader } from "../background/messageMap";
 
 type Listener<A extends unknown[]> = (...args: A) => unknown;
 
@@ -150,7 +151,12 @@ export interface FakeFolderSpec {
   specialUse?: string[];
   type?: string;
   messages?: FakeMessageSpec[];
+  /** Nested folders, e.g. the dated `Archives/2026` Thunderbird archives into. */
+  subFolders?: FakeFolderSpec[];
 }
+
+const flattenFolders = (folders: readonly FakeFolderSpec[]): FakeFolderSpec[] =>
+  folders.flatMap((f) => [f, ...flattenFolders(f.subFolders ?? [])]);
 
 export interface FakeAccountSpec {
   id: string;
@@ -273,7 +279,7 @@ export class FakeMessenger {
 
   constructor(private options: FakeMessengerOptions) {
     for (const account of options.accounts) {
-      for (const folder of account.folders) {
+      for (const folder of flattenFolders(account.folders)) {
         this.folderOwner.set(folder.id, account.id);
         this.folderSpecs.set(folder.id, folder);
         for (const spec of folder.messages ?? []) this.insert(folder.id, spec);
@@ -420,6 +426,22 @@ export class FakeMessenger {
     return null;
   }
 
+  /** The cache key NeoInbox gives this message where it lies now. */
+  keyOf(id: number): string {
+    return keyOfHeader(this.header(this.require(id)));
+  }
+
+  /**
+   * Hands out every id afresh from 1, in a different order: a Thunderbird
+   * restart. Unlike remapIds, the new ids collide with the old ones, so a
+   * row cached under one now names a different message.
+   */
+  restartIds(): void {
+    const all = [...this.messages.values()].reverse();
+    this.messages = new Map(all.map((msg, i) => [i + 1, { ...msg, id: i + 1 }]));
+    this.nextId = all.length + 1;
+  }
+
   idsIn(folderId: string): number[] {
     return [...this.messages.values()]
       .filter((m) => m.folderId === folderId)
@@ -493,16 +515,24 @@ export class FakeMessenger {
     return undefined;
   }
 
+  /**
+   * Like Thunderbird, a move hands the message a new id ("it does not follow
+   * an email that has been moved to a different folder"), and the event
+   * carries full headers: the originals as they were, the copies as they are.
+   */
   private async moveInternal(ids: number[], targetId: string): Promise<messenger.messages.MessageHeader[]> {
-    const originals = ids.map((id) => this.require(id));
+    const originals = ids.map((id) => this.header(this.require(id)));
     const moved: StoredMessage[] = [];
-    for (const msg of originals) {
-      msg.folderId = targetId;
-      moved.push(msg);
+    for (const id of ids) {
+      const msg = this.require(id);
+      this.messages.delete(id);
+      const copy = { ...msg, id: this.nextId++, folderId: targetId };
+      this.messages.set(copy.id, copy);
+      moved.push(copy);
     }
     await this.messagesApi.onMoved.emit(
-      { id: null, messages: originals.map((m) => ({ id: m.id })) },
-      { id: null, messages: moved.map((m) => ({ id: m.id })) },
+      { id: null, messages: originals },
+      { id: null, messages: moved.map((m) => this.header(m)) },
     );
     return moved.map((m) => this.header(m));
   }
@@ -512,8 +542,8 @@ export class FakeMessenger {
   readonly messagesApi = {
     onNewMailReceived: new Event<[{ id: string; accountId: string; name: string }, { id: string | null; messages: { id: number }[] }]>(),
     onUpdated: new Event<[messenger.messages.MessageHeader, { tags?: string[]; read?: boolean }]>(),
-    onDeleted: new Event<[{ id: string | null; messages: { id: number }[] }]>(),
-    onMoved: new Event<[{ id: string | null; messages: { id: number }[] }, { id: string | null; messages: { id: number }[] }]>(),
+    onDeleted: new Event<[{ id: string | null; messages: messenger.messages.MessageHeader[] }]>(),
+    onMoved: new Event<[{ id: string | null; messages: messenger.messages.MessageHeader[] }, { id: string | null; messages: messenger.messages.MessageHeader[] }]>(),
 
     get: async (id: number) => this.header(this.require(id)),
 
@@ -601,9 +631,9 @@ export class FakeMessenger {
     },
 
     delete: async (ids: number[], _options?: unknown) => {
-      for (const id of ids) this.require(id);
+      const headers = ids.map((id) => this.header(this.require(id)));
       for (const id of ids) this.messages.delete(id);
-      await this.messagesApi.onDeleted.emit({ id: null, messages: ids.map((id) => ({ id })) });
+      await this.messagesApi.onDeleted.emit({ id: null, messages: headers });
     },
 
     update: async (id: number, props: { read?: boolean; tags?: string[] }) => {
@@ -685,15 +715,17 @@ export class FakeMessenger {
             identities: (acc.identities ?? [{ email: `${acc.id}@example.com` }]).map(
               (identity, i) => ({ id: `${acc.id}-id${i}`, accountId: acc.id, ...identity }),
             ),
-            folders: acc.folders.map((f) => ({
-              id: f.id,
-              name: f.name ?? f.id,
-              path: `/${f.id}`,
-              accountId: acc.id,
-              specialUse: f.specialUse,
-              type: f.type,
-              subFolders: [],
-            })),
+            folders: acc.folders.map(function apiFolder(f): messenger.folders.MailFolder {
+              return {
+                id: f.id,
+                name: f.name ?? f.id,
+                path: `/${f.id}`,
+                accountId: acc.id,
+                specialUse: f.specialUse,
+                type: f.type,
+                subFolders: (f.subFolders ?? []).map(apiFolder),
+              } as unknown as messenger.folders.MailFolder;
+            }),
           })),
       },
       storage: {

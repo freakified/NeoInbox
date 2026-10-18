@@ -4,7 +4,7 @@
  * Thunderbird keeps (and puts back on send, see replaceDraftHtmlBody).
  */
 import { splitDraftHtml, splitDraftPlain } from "../../shared/compose";
-import { resolveLiveMessageId } from "../../shared/liveMessage";
+import { liveTbId } from "../../shared/liveMessage";
 import { log } from "../../shared/log";
 import type { RawMessage } from "../../shared/types";
 import type { ComposerValue } from "../components/ComposerForm";
@@ -57,10 +57,10 @@ export const draftBody = (
   return { html: plainToEditorHtml(text), text };
 };
 
-const loaded = new Map<number, Promise<ComposerValue | null>>();
+const loaded = new Map<string, Promise<ComposerValue | null>>();
 
 const load = async (m: RawMessage): Promise<ComposerValue | null> => {
-  const liveId = await resolveLiveMessageId(m);
+  const liveId = await liveTbId(m);
   if (liveId === null) return null;
   const full = await messenger.messages.getFull(liveId);
   return {
@@ -74,16 +74,16 @@ const load = async (m: RawMessage): Promise<ComposerValue | null> => {
   };
 };
 
-/** Null when the draft is gone or unreadable. Cached per draft id. */
+/** Null when the draft is gone or unreadable. Cached per draft. */
 export const loadDraftValue = (m: RawMessage): Promise<ComposerValue | null> => {
-  let pending = loaded.get(m.id);
+  let pending = loaded.get(m.key);
   if (!pending) {
     pending = load(m).catch((e) => {
       log.warn("compose", "couldn't read draft", e);
-      loaded.delete(m.id);
+      loaded.delete(m.key);
       return null;
     });
-    loaded.set(m.id, pending);
+    loaded.set(m.key, pending);
   }
   return pending;
 };

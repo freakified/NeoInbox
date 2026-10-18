@@ -79,7 +79,7 @@ export const TripSliceRow = ({
   const handleDoneAll = (e: React.MouseEvent) => {
     e.stopPropagation();
     const ids = threads.flatMap((t) =>
-      t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
+      t.messages.filter((m) => m.origin === "inbox").map((m) => m.key),
     );
     doneMessages(ids);
   };
@@ -94,7 +94,7 @@ export const TripSliceRow = ({
   // the mail" here; removing mail one conversation at a time does that.
   const handleTrashAll = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const ids = threads.flatMap((t) => t.messages.map((m) => m.id));
+    const ids = threads.flatMap((t) => t.messages.map((m) => m.key));
     trashMessages(ids);
   };
 

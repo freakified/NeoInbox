@@ -5,7 +5,8 @@ import { buildThreads, normalizeSubject } from "./threading";
 let nextId = 1;
 
 const msg = (over: Partial<RawMessage> = {}): RawMessage => ({
-  id: nextId++,
+  key: `k${nextId}`,
+  tbId: nextId++,
   headerMessageId: `<m${nextId}@example.com>`,
   subject: "Lunch?",
   author: "Ada <ada@example.com>",
@@ -56,7 +57,7 @@ describe("buildThreads", () => {
     const threads = buildThreads([parent, reply], ME);
 
     expect(threads).toHaveLength(1);
-    expect(threads[0]!.messages.map((m) => m.id)).toEqual([parent.id, reply.id]);
+    expect(threads[0]!.messages.map((m) => m.key)).toEqual([parent.key, reply.key]);
     expect(threads[0]!.latestDate).toBe(2_000);
   });
 
@@ -145,7 +146,7 @@ describe("buildThreads", () => {
 
     const threads = buildThreads([old, recent], ME);
 
-    expect(threads[0]!.messages[0]!.id).toBe(old.id);
+    expect(threads[0]!.messages[0]!.key).toBe(old.key);
     expect(threads[0]!.resurfacedAt).toBe(9_000);
   });
 

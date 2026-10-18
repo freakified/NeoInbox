@@ -11,141 +11,140 @@ import {
   undoTimers,
 } from "./toastsSlice";
 import { MESSAGE_DETAILS_VERSION } from "../shared/details";
-import { log } from "../shared/log";
 
 export const mailSlice = (
   set: StoreSet,
   get: StoreGet,
 ): Pick<
   MailStore,
-  "pin" | "doneThread" | "snoozeThread" | "unsnoozeThread" | "trashThread" | "moveToInboxThread" | "setRouteRule" | "deleteRouteRule" | "applyCategoryLocally" | "setCustomBundle" | "deleteCustomBundle" | "healStaleMessage" | "hydrateThreadDetails" | "loadMoreInbox" | "retryBackfill" | "openBundleSettings" | "closeBundleSettings" | "reclassify"
+  "pin" | "doneThread" | "snoozeThread" | "unsnoozeThread" | "trashThread" | "moveToInboxThread" | "setRouteRule" | "deleteRouteRule" | "applyCategoryLocally" | "setCustomBundle" | "deleteCustomBundle" | "hydrateThreadDetails" | "loadMoreInbox" | "retryBackfill" | "openBundleSettings" | "closeBundleSettings" | "reclassify" | "importArchive" | "stopArchiveImport"
 > => ({
-  pin: (messageId, pinned) => {
+  pin: (messageKey, pinned) => {
     flushDelta(set, get);
-    const map = { ...get().messagesById };
-    const m = map[messageId];
+    const map = { ...get().messagesByKey };
+    const m = map[messageKey];
     if (m) {
-      map[messageId] = { ...m, pinned };
-      set({ messagesById: map });
+      map[messageKey] = { ...m, pinned };
+      set({ messagesByKey: map });
     }
-    send({ type: "pin", messageId, pinned });
+    send({ type: "pin", messageKey, pinned });
   },
-  doneThread: (messageIds) => {
-    if (messageIds.length === 0) return;
+  doneThread: (messageKeys) => {
+    if (messageKeys.length === 0) return;
     flushDelta(set, get);
-    const prev = get().messagesById;
+    const prev = get().messagesByKey;
     const map = { ...prev };
     const pending = { ...get().pendingOps };
-    for (const id of messageIds) {
-      const m = prev[id];
+    for (const key of messageKeys) {
+      const m = prev[key];
       if (!m) continue;
-      pending[id] = { kind: "done", message: m };
+      pending[key] = { kind: "done", message: m };
       // Flip to done rather than delete: the row leaves the inbox instantly
       // but stays visible in done/bundle/trip views while the archive (which
       // waits out the undo toast, then an IMAP round-trip) catches up.
-      map[id] = { ...m, origin: "done" };
+      map[key] = { ...m, origin: "done" };
     }
     const toastId = nextToastId();
     const toast: ToastRecord = {
       id: toastId,
-      message: doneToastMessage(messageIds.length),
-      undo: { messageIds, kind: "done" },
+      message: doneToastMessage(messageKeys.length),
+      undo: { messageKeys, kind: "done" },
     };
     const allToasts = [...get().toasts, toast];
     const newToasts = allToasts.slice(-TOAST_LIMIT);
     for (const dropped of allToasts.slice(0, allToasts.length - TOAST_LIMIT)) {
       if (dropped.undo) commitUndoToast(get, set, dropped.id);
     }
-    set({ messagesById: map, pendingOps: pending, toasts: newToasts });
+    set({ messagesByKey: map, pendingOps: pending, toasts: newToasts });
     const timer = setTimeout(() => commitUndoToast(get, set, toastId), UNDO_TIMEOUT_MS);
     undoTimers.set(toastId, timer);
   },
-  snoozeThread: (messageIds, wakeAt) => {
-    if (messageIds.length === 0) return;
+  snoozeThread: (messageKeys, wakeAt) => {
+    if (messageKeys.length === 0) return;
     flushDelta(set, get);
-    const prev = get().messagesById;
+    const prev = get().messagesByKey;
     const map = { ...prev };
     const pending = { ...get().pendingOps };
-    for (const id of messageIds) {
-      const m = prev[id];
-      if (m) pending[id] = { kind: "snooze", message: m, wakeAt };
+    for (const key of messageKeys) {
+      const m = prev[key];
+      if (m) pending[key] = { kind: "snooze", message: m, wakeAt };
       if (m) {
-        map[id] = { ...m, snoozed: true, origin: "inbox" };
+        map[key] = { ...m, snoozed: true, origin: "inbox" };
       }
     }
-    const snoozesByMessageId = { ...get().snoozesByMessageId };
-    for (const id of messageIds) {
-      const m = prev[id];
+    const snoozesByKey = { ...get().snoozesByKey };
+    for (const key of messageKeys) {
+      const m = prev[key];
       if (!m) continue;
-      snoozesByMessageId[id] = {
-        messageId: id,
+      snoozesByKey[key] = {
+        messageKey: key,
         wakeAt,
         originFolderId: m.folderId,
         originAccountId: m.accountId,
         headerMessageId: m.headerMessageId,
       };
     }
-    set({ messagesById: map, pendingOps: pending, snoozesByMessageId });
-    for (const id of messageIds) send({ type: "snooze", messageId: id, wakeAt });
+    set({ messagesByKey: map, pendingOps: pending, snoozesByKey });
+    for (const key of messageKeys) send({ type: "snooze", messageKey: key, wakeAt });
   },
-  unsnoozeThread: (messageIds) => {
-    if (messageIds.length === 0) return;
+  unsnoozeThread: (messageKeys) => {
+    if (messageKeys.length === 0) return;
     flushDelta(set, get);
-    const prev = get().messagesById;
+    const prev = get().messagesByKey;
     const map = { ...prev };
     const pending = { ...get().pendingOps };
-    const snoozesByMessageId = { ...get().snoozesByMessageId };
+    const snoozesByKey = { ...get().snoozesByKey };
     const now = Date.now();
-    for (const id of messageIds) {
-      const m = prev[id];
+    for (const key of messageKeys) {
+      const m = prev[key];
       if (!m) continue;
-      pending[id] = { kind: "unsnooze", message: m, snooze: snoozesByMessageId[id] };
-      map[id] = { ...m, snoozed: false, resurfacedAt: now, snoozeExpired: false };
-      delete snoozesByMessageId[id];
+      pending[key] = { kind: "unsnooze", message: m, snooze: snoozesByKey[key] };
+      map[key] = { ...m, snoozed: false, resurfacedAt: now, snoozeExpired: false };
+      delete snoozesByKey[key];
     }
-    set({ messagesById: map, pendingOps: pending, snoozesByMessageId });
-    for (const id of messageIds) send({ type: "unsnooze", messageId: id });
+    set({ messagesByKey: map, pendingOps: pending, snoozesByKey });
+    for (const key of messageKeys) send({ type: "unsnooze", messageKey: key });
   },
-  trashThread: (messageIds) => {
-    if (messageIds.length === 0) return;
+  trashThread: (messageKeys) => {
+    if (messageKeys.length === 0) return;
     flushDelta(set, get);
-    const prev = get().messagesById;
+    const prev = get().messagesByKey;
     const map = { ...prev };
     const pending = { ...get().pendingOps };
-    for (const id of messageIds) {
-      const m = prev[id];
-      if (m) pending[id] = { kind: "trash", message: m };
-      delete map[id];
+    for (const key of messageKeys) {
+      const m = prev[key];
+      if (m) pending[key] = { kind: "trash", message: m };
+      delete map[key];
     }
     const toastId = nextToastId();
     const toast: ToastRecord = {
       id: toastId,
-      message: trashToastMessage(messageIds.length),
-      undo: { messageIds, kind: "trash" },
+      message: trashToastMessage(messageKeys.length),
+      undo: { messageKeys, kind: "trash" },
     };
     const allToasts = [...get().toasts, toast];
     const newToasts = allToasts.slice(-TOAST_LIMIT);
     for (const dropped of allToasts.slice(0, allToasts.length - TOAST_LIMIT)) {
       if (dropped.undo) commitUndoToast(get, set, dropped.id);
     }
-    set({ messagesById: map, pendingOps: pending, toasts: newToasts });
+    set({ messagesByKey: map, pendingOps: pending, toasts: newToasts });
     const timer = setTimeout(() => commitUndoToast(get, set, toastId), UNDO_TIMEOUT_MS);
     undoTimers.set(toastId, timer);
   },
-  moveToInboxThread: (messageIds) => {
-    if (messageIds.length === 0) return;
+  moveToInboxThread: (messageKeys) => {
+    if (messageKeys.length === 0) return;
     flushDelta(set, get);
-    const prev = get().messagesById;
+    const prev = get().messagesByKey;
     const map = { ...prev };
     const pending = { ...get().pendingOps };
-    for (const id of messageIds) {
-      const m = prev[id];
+    for (const key of messageKeys) {
+      const m = prev[key];
       if (!m) continue;
-      pending[id] = { kind: "moveToInbox", message: m };
-      map[id] = { ...m, origin: "inbox" };
+      pending[key] = { kind: "moveToInbox", message: m };
+      map[key] = { ...m, origin: "inbox" };
     }
-    set({ messagesById: map, pendingOps: pending });
-    for (const id of messageIds) send({ type: "move-to-inbox", messageId: id });
+    set({ messagesByKey: map, pendingOps: pending });
+    for (const key of messageKeys) send({ type: "move-to-inbox", messageKey: key });
   },
   setRouteRule: (rule) => {
     // Mirror the background's invariant: one destination per (type, value) key.
@@ -160,14 +159,14 @@ export const mailSlice = (
     set({ routeRules: get().routeRules.filter((r) => r.id !== id) });
     send({ type: "delete-route-rule", id });
   },
-  applyCategoryLocally: (messageIds, category) => {
+  applyCategoryLocally: (messageKeys, category) => {
     flushDelta(set, get);
-    const map = { ...get().messagesById };
-    for (const id of messageIds) {
-      const m = map[id];
-      if (m) map[id] = { ...m, category };
+    const map = { ...get().messagesByKey };
+    for (const key of messageKeys) {
+      const m = map[key];
+      if (m) map[key] = { ...m, category };
     }
-    set({ messagesById: map });
+    set({ messagesByKey: map });
   },
   setCustomBundle: (bundle) => {
     const bundles = get().customBundles.filter((b) => b.id !== bundle.id);
@@ -183,31 +182,16 @@ export const mailSlice = (
     });
     send({ type: "delete-custom-bundle", id });
   },
-  healStaleMessage: (staleId, liveId) => {
-    flushDelta(set, get);
-    const map = { ...get().messagesById };
-    const stale = map[staleId];
-    if (!stale) return false;
-    // A snoozed row is keyed by its snooze record, not by where the message
-    // is parked; re-keying it would orphan it from Snoozed and from waking.
-    if (stale.snoozed) return false;
-    delete map[staleId];
-    if (!map[liveId]) map[liveId] = { ...stale, id: liveId };
-    send({ type: "heal-message", staleId, liveId });
-    log.info("store", "healed stale message id", { staleId, liveId });
-    set({ messagesById: map });
-    return true;
-  },
-  hydrateThreadDetails: (messageIds) => {
+  hydrateThreadDetails: (messageKeys) => {
     // Sent and draft rows are cached from headers alone so nothing downloads
     // them in the background; opening the conversation is what asks for them.
-    // The background skips ids it has already hydrated, so this is cheap to
+    // The background skips rows it has already hydrated, so this is cheap to
     // fire on every open.
-    const pending = messageIds.filter((id) => {
-      const m = get().messagesById[id];
+    const pending = messageKeys.filter((key) => {
+      const m = get().messagesByKey[key];
       return m && (m.detailsVersion ?? 0) < MESSAGE_DETAILS_VERSION;
     });
-    if (pending.length) send({ type: "hydrate-details", messageIds: pending });
+    if (pending.length) send({ type: "hydrate-details", messageKeys: pending });
   },
   loadMoreInbox: () => {
     if (get().loadingMoreInbox) return;
@@ -229,9 +213,18 @@ export const mailSlice = (
   closeBundleSettings: () => {
     set({ bundleSettings: null });
   },
-  reclassify: (messageIds) => {
+  importArchive: (since) => {
+    if (get().archiveImport?.running) return;
+    // Optimistic, so the button can't be pressed twice before progress lands.
+    set({
+      archiveImport: { running: true, since, scanned: 0, imported: 0, folders: 0, totalFolders: 0 },
+    });
+    send({ type: "archive-import", since });
+  },
+  stopArchiveImport: () => send({ type: "archive-import-cancel" }),
+  reclassify: (messageKeys) => {
     if (get().reclassifying) return;
     set({ reclassifying: true });
-    send({ type: "reclassify", messageIds });
+    send({ type: "reclassify", messageKeys });
   },
 });

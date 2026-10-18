@@ -8,6 +8,7 @@
  * src/classifier/corpus.ts so a misclassification becomes a test before it
  * becomes a fix.
  */
+import { liveTbId } from "../shared/liveMessage";
 import { classifyByRules } from "../classifier/pipeline";
 import { CAMPAIGN_HEADER_PREFIXES, extractFeatures } from "../classifier/features";
 import {
@@ -137,8 +138,10 @@ export const installClassifyDump = (): void => {
 
     for (const row of rows) {
       let headers: Record<string, string[]> = {};
+      const tbId = await liveTbId(row);
+      if (tbId === null) continue;
       try {
-        const full = await messenger.messages.getFull(row.id);
+        const full = await messenger.messages.getFull(tbId);
         headers = full.headers ?? {};
       } catch {
         // No body synced: the rules would see bare headers here too, so the
@@ -147,7 +150,7 @@ export const installClassifyDump = (): void => {
         continue;
       }
 
-      const header = await messenger.messages.get(row.id);
+      const header = await messenger.messages.get(tbId);
       const now = classifyByRules(extractFeatures(header, headers));
       const cached = row.category ?? null;
 
@@ -159,7 +162,7 @@ export const installClassifyDump = (): void => {
       counts[nowKey]!.now++;
 
       if (cached !== now) {
-        disagreements.push({ id: row.id, cached: cachedKey, now: nowKey, subject: row.subject });
+        disagreements.push({ id: tbId, cached: cachedKey, now: nowKey, subject: row.subject });
       }
       if (disagreementsOnly && cached === now) continue;
       if (category !== undefined && cachedKey !== category) continue;

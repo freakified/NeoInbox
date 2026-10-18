@@ -3,29 +3,28 @@ import { log } from "./log";
 type Header = messenger.messages.MessageHeader & { folder?: { id?: string } };
 
 /**
- * A cached row's numeric TB id can go stale: archived ("done") rows are never
- * rescanned, and Thunderbird can remap ids across moves, compactions, and
- * sessions. A stale id silently refers to a completely different message, so
- * anything that fetches bodies or acts destructively must verify first.
+ * The Thunderbird id to use for a cached row right now. Row ids are hints
+ * (RawMessage.tbId): Thunderbird renumbers on restart and on moves, and a
+ * stale id silently refers to a completely different message, so anything
+ * that fetches bodies or acts on a message must come through here.
  *
- * Returns an id verified (by Message-ID header) to be the cached row's
- * message — the same id when it still checks out, a re-resolved one when the
- * id had gone stale, or null when the message can no longer be found.
+ * Returns the hint when it still checks out by Message-ID, a re-resolved id
+ * when it had gone stale, or null when the message can no longer be found.
  */
-export const resolveLiveMessageId = async (m: {
-  id: number;
+export const liveTbId = async (m: {
+  tbId: number;
   headerMessageId: string;
   folderId?: string;
   accountId?: string;
 }): Promise<number | null> => {
   try {
-    const header = await messenger.messages.get(m.id);
+    const header = await messenger.messages.get(m.tbId);
     // Rows without a Message-ID can't be verified or re-resolved; trust the id.
     if (!m.headerMessageId || header.headerMessageId === m.headerMessageId) {
-      return m.id;
+      return m.tbId;
     }
-    log.warn("live-message", "cached id points at a different message", {
-      id: m.id,
+    log.debug("live-message", "cached id points at a different message", {
+      tbId: m.tbId,
       cached: m.headerMessageId,
       found: header.headerMessageId,
     });
@@ -49,7 +48,7 @@ export const resolveLiveMessageId = async (m: {
       if (found) return found.id;
     } catch (e) {
       log.debug("live-message", "folder-scoped lookup failed; widening", {
-        id: m.id,
+        tbId: m.tbId,
         e: String(e),
       });
     }
@@ -67,7 +66,7 @@ export const resolveLiveMessageId = async (m: {
     const sameFolder = matches.find((h) => h.folder?.id === m.folderId);
     return (sameFolder ?? matches[0])?.id ?? null;
   } catch (e) {
-    log.warn("live-message", "Message-ID lookup failed", { id: m.id, e: String(e) });
+    log.warn("live-message", "Message-ID lookup failed", { tbId: m.tbId, e: String(e) });
     return null;
   }
 }

@@ -19,7 +19,8 @@ const MINUTE = 60_000;
 let nextId = 1;
 
 const msg = (over: Partial<RawMessage> = {}): RawMessage => ({
-  id: nextId++,
+  key: `k${nextId}`,
+  tbId: nextId++,
   headerMessageId: `<m${nextId}@example.com>`,
   subject: `Subject ${nextId}`,
   author: "Alex <alex@example.com>",
@@ -39,17 +40,17 @@ const msg = (over: Partial<RawMessage> = {}): RawMessage => ({
   ...over,
 });
 
-const byId = (messages: RawMessage[]): Record<number, RawMessage> =>
-  Object.fromEntries(messages.map((m) => [m.id, m]));
+const byKey = (messages: RawMessage[]): Record<string, RawMessage> =>
+  Object.fromEntries(messages.map((m) => [m.key, m]));
 
 const ME = new Set(["me@example.com"]);
 
 const stream = (messages: RawMessage[], view: StreamView = { type: "inbox" }, ...rest: unknown[]) =>
   deriveStream(
-    byId(messages),
+    byKey(messages),
     ME,
     view,
-    ...(rest as [Record<number, SnoozeRecord>?, boolean?, Record<string, ReminderRecord>?, Record<string, TripRecord>?, Record<string, TripMembershipRecord>?]),
+    ...(rest as [Record<string, SnoozeRecord>?, boolean?, Record<string, ReminderRecord>?, Record<string, TripRecord>?, Record<string, TripMembershipRecord>?]),
   );
 
 const items = (s: { sections: { items: StreamItem[] }[] }): StreamItem[] =>
@@ -169,8 +170,8 @@ describe("snoozed view", () => {
       [soon, later, orphan],
       { type: "snoozed" },
       {
-        [soon.id]: { messageId: soon.id, wakeAt: NOW + MINUTE } as SnoozeRecord,
-        [later.id]: { messageId: later.id, wakeAt: NOW + 10 * MINUTE } as SnoozeRecord,
+        [soon.key]: { messageKey: soon.key, wakeAt: NOW + MINUTE } as SnoozeRecord,
+        [later.key]: { messageKey: later.key, wakeAt: NOW + 10 * MINUTE } as SnoozeRecord,
       },
     );
 

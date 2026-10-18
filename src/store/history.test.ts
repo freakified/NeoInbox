@@ -13,7 +13,8 @@ const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.now();
 
 const row = (id: number, origin: MessageOrigin, date: number): RawMessage => ({
-  id,
+  key: `k${id}`,
+  tbId: id,
   headerMessageId: `<m${id}@x>`,
   subject: `m${id}`,
   author: "a@x.com",
@@ -44,23 +45,23 @@ const open = async (rows: RawMessage[], seed?: (app: Booted) => Promise<void>): 
   return app;
 };
 
-const loadedIds = (app: Booted): Set<number> =>
-  new Set(Object.keys(app.store().messagesById).map(Number));
+const loadedKeys = (app: Booted): Set<string> =>
+  new Set(Object.keys(app.store().messagesByKey));
 
 describe("history paging", () => {
   it("loads everything when Sent and Done fit in one page", async () => {
     const app = await open([row(1, "inbox", NOW - 900 * DAY), ...doneRows(10)]);
-    expect(loadedIds(app).size).toBe(11);
+    expect(loadedKeys(app).size).toBe(11);
     expect(app.store().historyFrom).toBe(0);
   });
 
   it("loads the newest page of Done but every inbox row however old", async () => {
     const extra = 20;
     const app = await open([row(1, "inbox", NOW - 9000 * DAY), ...doneRows(HISTORY_PAGE + extra)]);
-    const ids = loadedIds(app);
-    expect(ids.has(1)).toBe(true);
-    expect(ids.has(1000)).toBe(true);
-    expect(ids.has(1000 + HISTORY_PAGE + extra - 1)).toBe(false);
+    const ids = loadedKeys(app);
+    expect(ids.has(`k${1}`)).toBe(true);
+    expect(ids.has(`k${1000}`)).toBe(true);
+    expect(ids.has(`k${1000 + HISTORY_PAGE + extra - 1}`)).toBe(false);
     expect(app.store().historyFrom).toBe(NOW - (HISTORY_PAGE - 1) * DAY);
   });
 
@@ -76,14 +77,14 @@ describe("history paging", () => {
         addedAt: 0,
       });
     });
-    expect(loadedIds(app).has(oldest.id)).toBe(true);
+    expect(loadedKeys(app).has(oldest.key)).toBe(true);
   });
 
   it("pages in older mail until none is left", async () => {
     const total = HISTORY_PAGE + 20;
     const app = await open(doneRows(total));
     await app.store().loadOlderHistory();
-    expect(loadedIds(app).size).toBe(total);
+    expect(loadedKeys(app).size).toBe(total);
     expect(app.store().historyFrom).toBe(0);
   });
 
@@ -100,7 +101,7 @@ describe("history paging", () => {
       added: [fresh],
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(loadedIds(app).has(old.id)).toBe(false);
-    expect(loadedIds(app).has(fresh.id)).toBe(true);
+    expect(loadedKeys(app).has(old.key)).toBe(false);
+    expect(loadedKeys(app).has(fresh.key)).toBe(true);
   });
 });

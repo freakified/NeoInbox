@@ -1,3 +1,4 @@
+import { collectArchiveFolders } from "../shared/folders";
 import { log } from "../shared/log";
 
 type FolderRef = { id?: string; accountId?: string };
@@ -6,35 +7,13 @@ type HeaderWithFolder = messenger.messages.MessageHeader & {
   headerMessageId?: string;
 };
 
-export const walkFolders = (
-  folders: messenger.folders.MailFolder[],
-  visit: (f: messenger.folders.MailFolder) => void,
-): void => {
-  for (const f of folders) {
-    visit(f);
-    if (f.subFolders) walkFolders(f.subFolders, visit);
-  }
-}
-
+/** The account's archive folders, dated subfolders included, parents first. */
 export const archiveFolderIdsForAccount = async (
   accountId: string,
-): Promise<string[]> => {
-  const accounts = await messenger.accounts.list();
-  const out: string[] = [];
-  for (const acc of accounts) {
-    if (accountId && acc.id !== accountId) continue;
-    walkFolders(acc.folders ?? [], (f) => {
-      if (!f.id) return;
-      if (
-        f.specialUse?.includes("archives") ||
-        (f as unknown as { type?: string }).type === "archives"
-      ) {
-        out.push(f.id);
-      }
-    });
-  }
-  return out;
-}
+): Promise<string[]> =>
+  (await collectArchiveFolders())
+    .filter((f) => !accountId || f.accountId === accountId)
+    .map((f) => f.id);
 
 export interface ResolvedArchive {
   archiveFolderId: string;

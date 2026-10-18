@@ -17,21 +17,26 @@ import {
   textToHtml,
   type ComposeDraft,
 } from "../shared/compose";
+import { liveTbId } from "../shared/liveMessage";
 import { log } from "../shared/log";
+import { db } from "../store/db";
 
-const begin = (draft: ComposeDraft): Promise<messenger.tabs.Tab> => {
+const begin = async (draft: ComposeDraft): Promise<messenger.tabs.Tab> => {
   const details: messenger.compose.ComposeDetails = { to: draft.to, cc: draft.cc };
   if (draft.identityId) details.identityId = draft.identityId;
   if (draft.kind === "new") {
     return messenger.compose.beginNew({ ...details, subject: draft.subject ?? "" });
   }
-  if (draft.messageId === undefined) throw new Error(`${draft.kind} needs a message`);
-  if (draft.kind === "draft") return messenger.compose.beginNew(draft.messageId, details);
+  if (draft.messageKey === undefined) throw new Error(`${draft.kind} needs a message`);
+  const row = await db.messages.get(draft.messageKey);
+  const tbId = row ? await liveTbId(row) : null;
+  if (tbId === null) throw new Error("The message being answered is gone");
+  if (draft.kind === "draft") return messenger.compose.beginNew(tbId, details);
   if (draft.kind === "forward") {
-    return messenger.compose.beginForward(draft.messageId, "forwardInline", details);
+    return messenger.compose.beginForward(tbId, "forwardInline", details);
   }
   return messenger.compose.beginReply(
-    draft.messageId,
+    tbId,
     draft.kind === "reply" ? "replyToSender" : "replyToAll",
     details,
   );

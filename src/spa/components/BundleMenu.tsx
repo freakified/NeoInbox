@@ -142,10 +142,10 @@ export const BundleMenu = ({
       value,
       createdAt: Date.now(),
     };
-    const messageIds = thread.messages.map((m) => m.id);
+    const messageKeys = thread.messages.map((m) => m.key);
     const previousCategory = thread.category;
 
-    applyCategoryLocally(messageIds, target === "personal" ? null : target);
+    applyCategoryLocally(messageKeys, target === "personal" ? null : target);
     setRouteRule(rule);
 
     // A more specific existing rule (e.g. exact sender vs. this domain rule)
@@ -173,7 +173,7 @@ export const BundleMenu = ({
         run: () => {
           if (previous) setRouteRule(previous);
           else deleteRouteRule(rule.id);
-          applyCategoryLocally(messageIds, previousCategory);
+          applyCategoryLocally(messageKeys, previousCategory);
         },
       },
       {

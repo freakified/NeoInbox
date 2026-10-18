@@ -1,4 +1,5 @@
 import type { ComposeDraft } from "./compose";
+import type { MessageKey } from "./messageKey";
 import type {
   CustomBundleRecord,
   Delta,
@@ -24,12 +25,12 @@ export interface TripWrite {
 
 export type ClientMsg =
   | { type: "hello" }
-  | { type: "pin"; messageId: number; pinned: boolean }
-  | { type: "done"; messageId: number }
-  | { type: "snooze"; messageId: number; wakeAt: number }
-  | { type: "unsnooze"; messageId: number }
-  | { type: "trash"; messageId: number }
-  | { type: "move-to-inbox"; messageId: number }
+  | { type: "pin"; messageKey: MessageKey; pinned: boolean }
+  | { type: "done"; messageKey: MessageKey }
+  | { type: "snooze"; messageKey: MessageKey; wakeAt: number }
+  | { type: "unsnooze"; messageKey: MessageKey }
+  | { type: "trash"; messageKey: MessageKey }
+  | { type: "move-to-inbox"; messageKey: MessageKey }
   | { type: "set-route-rule"; rule: RouteRuleRecord }
   | { type: "delete-route-rule"; id: string }
   | { type: "set-custom-bundle"; bundle: CustomBundleRecord }
@@ -40,11 +41,11 @@ export type ClientMsg =
    * from their headers alone — sent and draft mail. Sent by the SPA when a
    * conversation is opened, which is the only time those headers matter.
    */
-  | { type: "hydrate-details"; messageIds: number[] }
+  | { type: "hydrate-details"; messageKeys: MessageKey[] }
   /** Widen the inbox scan window by one step and rescan. */
   | { type: "load-more-inbox" }
   /** Re-run the classify pipeline; all cached inbox messages when no ids given. */
-  | { type: "reclassify"; messageIds?: number[] }
+  | { type: "reclassify"; messageKeys?: MessageKey[] }
   /**
    * Fill a Thunderbird compose window from an inline draft, then send it
    * (`send`) or leave it open for the user to finish.
@@ -56,12 +57,13 @@ export type ClientMsg =
    */
   | { type: "trip-scan"; archive: boolean; rebuild?: boolean }
   | { type: "trip-scan-cancel" }
-  | ({ type: "write-trips" } & TripWrite)
   /**
-   * A cached row's TB id turned out stale: re-key it to the live id, or drop
-   * it when the live id is already cached (see healStaleMessage).
+   * Settings → Archive: cache archived mail from headers alone, back to
+   * `since` (ms; null for everything). Never fetches a body.
    */
-  | { type: "heal-message"; staleId: number; liveId: number };
+  | { type: "archive-import"; since: number | null }
+  | { type: "archive-import-cancel" }
+  | ({ type: "write-trips" } & TripWrite);
 
 /** Progress of the archive trip scan; the last finished one is persisted. */
 export interface TripScanStatus {
@@ -81,6 +83,23 @@ export interface TripScanStatus {
   archiveScannedAt?: number;
 }
 
+/** Progress of the archive import; the last finished one is persisted. */
+export interface ArchiveImportStatus {
+  running: boolean;
+  /** Oldest date imported (ms); null means the whole archive. */
+  since: number | null;
+  /** Archived headers looked at so far. */
+  scanned: number;
+  /** New Done rows written so far. */
+  imported: number;
+  /** Archive folders done / to do this run. */
+  folders: number;
+  totalFolders: number;
+  finishedAt?: number;
+  cancelled?: boolean;
+  error?: string;
+}
+
 export type FailedCommand = "done" | "snooze" | "unsnooze" | "trash" | "move-to-inbox";
 
 export type ServerMsg =
@@ -96,7 +115,7 @@ export type ServerMsg =
   | {
       type: "command-failed";
       command: FailedCommand;
-      messageId: number;
+      messageKey: MessageKey;
       reason: string;
     }
   | { type: "reclassify-done"; scanned: number; moved: number }
@@ -131,4 +150,5 @@ export type ServerMsg =
       error?: string;
     }
   | ({ type: "trip-scan-progress" } & TripScanStatus)
+  | ({ type: "archive-import-progress" } & ArchiveImportStatus)
   | { type: "error"; message: string };

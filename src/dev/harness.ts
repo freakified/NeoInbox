@@ -13,7 +13,7 @@
  *   await neo.deliver("promo")              // new mail lands, fires events
  *   await neo.deliver({ subject: "Hi", author: "Bo <bo@x.example>" })
  *   neo.mail.hang("getFull")                // simulate a stalled IMAP fetch
- *   neo.store().messagesById                // the SPA store's state
+ *   neo.store().messagesByKey                // the SPA store's state
  *   neo.setStore({ tripsById: {...} })      // inject state directly
  *   neo.mail.calls.compose                  // compose windows "opened"
  *   neo.mail.calls.sent                     // inline drafts "sent" (final details)

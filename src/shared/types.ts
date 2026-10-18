@@ -1,3 +1,5 @@
+import type { MessageKey } from "./messageKey";
+
 // No "travel": travel mail is either in a trip (its own layer, see TripRecord)
 // or loose in the inbox, exactly as in Google Inbox. The classifier's travel
 // heuristic survives as a trip-candidacy predicate only — see matchesTravel.
@@ -44,7 +46,14 @@ export interface AttachmentSummary {
 }
 
 export interface RawMessage {
-  id: number;
+  /** Stable identity (account, folder, Message-ID); see messageKey.ts. */
+  key: MessageKey;
+  /**
+   * Thunderbird's numeric id as last seen. Session-scoped and dropped by
+   * moves, so it is only a hint: resolve it with liveTbId before calling any
+   * messenger.messages API.
+   */
+  tbId: number;
   headerMessageId: string;
   subject: string;
   author: string;
@@ -235,21 +244,23 @@ export interface ReservationRecord {
 }
 
 export interface SnoozeRecord {
-  messageId: number;
+  /**
+   * The snoozed inbox row's key. The row keeps it while the message is parked
+   * in the archive, so Snoozed and the wake both find it by this.
+   */
+  messageKey: MessageKey;
   wakeAt: number;
   originFolderId: string;
   originAccountId: string;
-  /** Identifies the message across the archive move (which changes its numeric id). */
-  headerMessageId?: string;
+  headerMessageId: string;
   /**
-   * Where snoozing parked the message. Snoozing archives, so waking has to
-   * find it again — and it used to do that by paging the archive folder, which
-   * on a Gmail account means walking All Mail. Recorded at snooze time instead,
-   * so the wake is a direct lookup. Absent on records written before this, and
-   * on the rare snooze whose destination couldn't be pinned down; both fall
-   * back to a folder-scoped search.
+   * Where snoozing parked the message, so the wake is a direct lookup rather
+   * than paging the archive (on Gmail, All Mail). The id is a hint like
+   * RawMessage.tbId — verified by Message-ID, and useless after a restart —
+   * so the wake falls back to a search of the recorded folder, then of the
+   * account's archive folders.
    */
-  archivedId?: number;
+  archivedTbId?: number;
   archivedFolderId?: string;
 }
 
@@ -283,7 +294,7 @@ export interface FolderCursorRecord {
 
 export interface TranslationRecord {
   id: string;
-  messageId: number;
+  messageKey: MessageKey;
   bodyHash: string;
   provider: string;
   sourceLanguage: string | null;
@@ -297,5 +308,5 @@ export interface TranslationRecord {
 export interface Delta {
   added?: RawMessage[];
   updated?: RawMessage[];
-  removedIds?: number[];
+  removedKeys?: MessageKey[];
 }

@@ -1,5 +1,6 @@
 import type { ComposeDraft } from "../shared/compose";
-import type { FailedCommand, TripScanStatus } from "../shared/messaging";
+import type { MessageKey } from "../shared/messageKey";
+import type { ArchiveImportStatus, FailedCommand, TripScanStatus } from "../shared/messaging";
 import type { ComposerValue } from "../spa/components/ComposerForm";
 import type {
   Category,
@@ -42,7 +43,7 @@ export interface PendingReply {
   requestId: string;
   threadId: string;
   /** Messages already in the thread, so the Sent copy is the one that's new. */
-  knownIds: number[];
+  knownKeys: MessageKey[];
   author: string;
   to: string[];
   cc: string[];
@@ -55,8 +56,8 @@ export interface PendingReply {
 export interface ToastRecord {
   id: string;
   message: string;
-  retry?: { kind: FailedCommand; messageId: number; wakeAt?: number };
-  undo?: { messageIds: number[]; kind: "done" | "trash" };
+  retry?: { kind: FailedCommand; messageKey: MessageKey; wakeAt?: number };
+  undo?: { messageKeys: MessageKey[]; kind: "done" | "trash" };
   actions?: ToastAction[];
 }
 
@@ -73,7 +74,7 @@ export interface BundleSettingsRequest {
 }
 
 export interface MailStore {
-  messagesById: Record<number, RawMessage>;
+  messagesByKey: Record<MessageKey, RawMessage>;
   myEmails: ReadonlySet<string>;
   hydrated: boolean;
   syncProgress: SyncProgress | null;
@@ -86,8 +87,8 @@ export interface MailStore {
   customBundles: CustomBundleRecord[];
   routeRules: RouteRuleRecord[];
   connectionState: ConnectionState;
-  pendingOps: Record<number, PendingOp>;
-  snoozesByMessageId: Record<number, SnoozeRecord>;
+  pendingOps: Record<MessageKey, PendingOp>;
+  snoozesByKey: Record<MessageKey, SnoozeRecord>;
   remindersById: Record<string, ReminderRecord>;
   tripsById: Record<string, TripRecord>;
   tripMembershipByKey: Record<string, TripMembershipRecord>;
@@ -97,8 +98,10 @@ export interface MailStore {
   reclassifying: boolean;
   /** The Settings → Trips scan: running progress, else the last result. */
   tripScan: TripScanStatus | null;
+  /** Settings → Archive: the running import, else the last one. */
+  archiveImport: ArchiveImportStatus | null;
   /**
-   * Every Sent and Done row dated from here on is in messagesById; older ones
+   * Every Sent and Done row dated from here on is in messagesByKey; older ones
    * stay in Dexie until a view asks for them. 0 means all of them are loaded.
    */
   historyFrom: number;
@@ -107,16 +110,16 @@ export interface MailStore {
   init: () => Promise<void>;
   /** Page the next-older Sent and Done mail into memory. */
   loadOlderHistory: () => Promise<void>;
-  pin: (messageId: number, pinned: boolean) => void;
-  doneThread: (messageIds: number[]) => void;
-  snoozeThread: (messageIds: number[], wakeAt: number) => void;
-  unsnoozeThread: (messageIds: number[]) => void;
-  trashThread: (messageIds: number[]) => void;
+  pin: (messageKey: MessageKey, pinned: boolean) => void;
+  doneThread: (messageKeys: MessageKey[]) => void;
+  snoozeThread: (messageKeys: MessageKey[], wakeAt: number) => void;
+  unsnoozeThread: (messageKeys: MessageKey[]) => void;
+  trashThread: (messageKeys: MessageKey[]) => void;
   /** Restore done (archived) messages to their account's inbox. */
-  moveToInboxThread: (messageIds: number[]) => void;
+  moveToInboxThread: (messageKeys: MessageKey[]) => void;
   setRouteRule: (rule: RouteRuleRecord) => void;
   deleteRouteRule: (id: string) => void;
-  applyCategoryLocally: (messageIds: number[], category: Category | null) => void;
+  applyCategoryLocally: (messageKeys: MessageKey[], category: Category | null) => void;
   setCustomBundle: (bundle: CustomBundleRecord) => void;
   deleteCustomBundle: (id: string) => void;
   /** A new reminder, optionally pinned or snoozed from the start. */
@@ -130,13 +133,6 @@ export interface MailStore {
   deleteReminder: (id: string) => void;
   /** Resurface snoozed reminders whose wake time has passed. */
   wakeDueReminders: () => void;
-  /**
-   * A cached row's TB id turned out stale (see resolveLiveMessageId): re-key
-   * the row to the verified live id, or drop it when the live id is already
-   * cached as its own row. Returns false when the row is left as is (snoozed
-   * rows keep their id), in which case the caller should use the live id.
-   */
-  healStaleMessage: (staleId: number, liveId: number) => boolean;
   createTrip: (name: string) => TripRecord;
   renameTrip: (id: string, name: string) => void;
   /**
@@ -146,7 +142,7 @@ export interface MailStore {
   setTripMembership: (keys: string[], tripId: string | null) => void;
   retryBackfill: () => void;
   /** Fetch details for a conversation's headers-only rows as it opens. */
-  hydrateThreadDetails: (messageIds: number[]) => void;
+  hydrateThreadDetails: (messageKeys: MessageKey[]) => void;
   /** Widen the inbox scan window by one step and rescan. */
   loadMoreInbox: () => void;
   retryToast: (toastId: string) => void;
@@ -156,10 +152,13 @@ export interface MailStore {
   openBundleSettings: (request: BundleSettingsRequest) => void;
   closeBundleSettings: () => void;
   /** Re-run bundling rules in the background; whole inbox when no ids given. */
-  reclassify: (messageIds?: number[]) => void;
+  reclassify: (messageKeys?: MessageKey[]) => void;
   /** Find trips (in archived mail too when `archive`); `rebuild` starts over. */
   scanTrips: (options: { archive: boolean; rebuild?: boolean }) => void;
   stopTripScan: () => void;
+  /** Cache archived mail from headers alone, back to `since` (null: all of it). */
+  importArchive: (since: number | null) => void;
+  stopArchiveImport: () => void;
   /**
    * Hand an inline draft to Thunderbird: send it, or open it in a compose
    * window for the user to finish when `send` is false.

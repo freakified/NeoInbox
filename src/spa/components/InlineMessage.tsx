@@ -1,9 +1,8 @@
 import { clsx } from "clsx";
 import { useEffect, useState } from "react";
-import { resolveLiveMessageId } from "../../shared/liveMessage";
+import { liveTbId } from "../../shared/liveMessage";
 import { parseSender } from "../../shared/senders";
 import type { RawMessage } from "../../shared/types";
-import { useMailStore } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate, formatFullDate } from "../lib/dateBucket";
 import { extractPreviewText } from "../lib/srcdoc";
@@ -88,14 +87,11 @@ export const InlineMessage = ({
     void (async () => {
       try {
         // Verify the id before fetching: stale cached ids can belong to a
-        // different message entirely (healing re-runs this with the live id).
-        const liveId = await resolveLiveMessageId(m);
+        // different message entirely.
+        const liveId = await liveTbId(m);
         if (cancelled) return;
         if (liveId === null) {
           setPreview("");
-          return;
-        }
-        if (liveId !== m.id && useMailStore.getState().healStaleMessage(m.id, liveId)) {
           return;
         }
         const part = await messenger.messages.getFull(liveId);
@@ -166,10 +162,7 @@ export const InlineMessage = ({
           </ExpandableRegion>
           {m.attachments && m.attachments.length > 0 && (
             <MessageAttachments
-              attachments={m.attachments.map((a) => ({
-                messageId: m.id,
-                attachment: a,
-              }))}
+              attachments={m.attachments.map((a) => ({ message: m, attachment: a }))}
               compact
             />
           )}

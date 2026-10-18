@@ -12,8 +12,10 @@ import type { RawMessage } from "../shared/types";
 
 let app: Booted;
 
-const row = (over: Partial<RawMessage> = {}): RawMessage => ({
-  id: 1,
+/** A row; `n` picks its identity (key "k<n>"), default 1. */
+const row = ({ n = 1, ...over }: Partial<RawMessage> & { n?: number } = {}): RawMessage => ({
+  key: `k${n}`,
+  tbId: n,
   headerMessageId: "<m1@example.com>",
   subject: "Hello",
   author: "Alex <alex@example.com>",
@@ -60,7 +62,7 @@ describe("hydration", () => {
     await settle();
 
     expect(store().hydrated).toBe(true);
-    expect(store().messagesById[1]?.subject).toBe("Hello");
+    expect(store().messagesByKey["k1"]?.subject).toBe("Hello");
     expect(sent()).toContainEqual({ type: "hello" });
   });
 });
@@ -73,17 +75,17 @@ describe("optimistic done", () => {
   });
 
   it("moves the row out of the inbox immediately and records a pending op", () => {
-    store().doneThread([1]);
+    store().doneThread(["k1"]);
 
     // Flipped rather than deleted, so it stays visible in done/bundle views
     // while the archive round-trip catches up.
-    expect(store().messagesById[1]?.origin).toBe("done");
-    expect(store().pendingOps[1]?.kind).toBe("done");
-    expect(store().toasts.at(-1)?.undo).toEqual({ messageIds: [1], kind: "done" });
+    expect(store().messagesByKey["k1"]?.origin).toBe("done");
+    expect(store().pendingOps["k1"]?.kind).toBe("done");
+    expect(store().toasts.at(-1)?.undo).toEqual({ messageKeys: ["k1"], kind: "done" });
   });
 
   it("restores the original row when the background reports failure", async () => {
-    store().doneThread([1]);
+    store().doneThread(["k1"]);
     vi.useFakeTimers();
     await vi.advanceTimersByTimeAsync(5_001); // let the undo window commit
     vi.useRealTimers();
@@ -91,39 +93,39 @@ describe("optimistic done", () => {
     await fromBackground({
       type: "command-failed",
       command: "done",
-      messageId: 1,
+      messageKey: "k1",
       reason: "No Archives folder configured for this account",
     });
 
     // The rollback is what keeps a failed archive from silently eating a row.
-    expect(store().messagesById[1]?.origin).toBe("inbox");
-    expect(store().pendingOps[1]).toBeUndefined();
+    expect(store().messagesByKey["k1"]?.origin).toBe("inbox");
+    expect(store().pendingOps["k1"]).toBeUndefined();
     expect(store().toasts.at(-1)?.message).toContain("No Archives folder");
     expect(store().toasts.at(-1)?.retry).toEqual({
       kind: "done",
-      messageId: 1,
+      messageKey: "k1",
       wakeAt: undefined,
     });
   });
 
   it("undo puts the row back without ever sending the command", () => {
-    store().doneThread([1]);
+    store().doneThread(["k1"]);
     const toastId = store().toasts.at(-1)!.id;
 
     store().undoToast(toastId);
 
-    expect(store().messagesById[1]?.origin).toBe("inbox");
+    expect(store().messagesByKey["k1"]?.origin).toBe("inbox");
     expect(sent().some((m) => m.type === "done")).toBe(false);
   });
 
   it("sends the command once the undo window closes", async () => {
     vi.useFakeTimers();
-    store().doneThread([1]);
+    store().doneThread(["k1"]);
     expect(sent().some((m) => m.type === "done")).toBe(false);
 
     await vi.advanceTimersByTimeAsync(5_001);
 
-    expect(sent()).toContainEqual({ type: "done", messageId: 1 });
+    expect(sent()).toContainEqual({ type: "done", messageKey: "k1" });
   });
 });
 
@@ -131,7 +133,7 @@ describe("trips and trash", () => {
   beforeEach(async () => {
     await app.db.messages.bulkPut([
       row(),
-      row({ id: 2, headerMessageId: "<m2@example.com>" }),
+      row({ n: 2, headerMessageId: "<m2@example.com>" }),
     ]);
     await store().init();
     await settle();
@@ -141,7 +143,7 @@ describe("trips and trash", () => {
 
   it("deletes the trip once its last mail is trashed for good", async () => {
     vi.useFakeTimers();
-    store().trashThread([1, 2]);
+    store().trashThread(["k1", "k2"]);
     await vi.advanceTimersByTimeAsync(5_001);
 
     expect(Object.keys(store().tripsById)).toEqual([]);
@@ -151,14 +153,14 @@ describe("trips and trash", () => {
 
   it("keeps the trip while any of its mail is left", async () => {
     vi.useFakeTimers();
-    store().trashThread([1]);
+    store().trashThread(["k1"]);
     await vi.advanceTimersByTimeAsync(5_001);
 
     expect(Object.values(store().tripsById).map((t) => t.name)).toEqual(["Trip to Lisbon"]);
   });
 
   it("leaves the trip alone when the trash is undone", () => {
-    store().trashThread([1, 2]);
+    store().trashThread(["k1", "k2"]);
     store().undoToast(store().toasts.at(-1)!.id);
 
     expect(Object.keys(store().tripsById)).toHaveLength(1);
@@ -188,45 +190,45 @@ describe("delta coalescing", () => {
       updates++;
     });
 
-    for (let id = 1; id <= 20; id++) emit({ type: "delta", added: [row({ id })] });
+    for (let id = 1; id <= 20; id++) emit({ type: "delta", added: [row({ n: id })] });
     // Still buffered: a scan's deltas must not each cost a re-thread.
     expect(updates).toBe(0);
     await settle();
     unsubscribe();
 
     expect(updates).toBe(1);
-    expect(Object.keys(store().messagesById)).toHaveLength(20);
+    expect(Object.keys(store().messagesByKey)).toHaveLength(20);
   });
 
   it("nets out an add followed by a removal", async () => {
-    emit({ type: "delta", added: [row({ id: 1 })] });
-    emit({ type: "delta", removedIds: [1] });
+    emit({ type: "delta", added: [row({ n: 1 })] });
+    emit({ type: "delta", removedKeys: ["k1"] });
     await settle();
 
-    expect(store().messagesById[1]).toBeUndefined();
+    expect(store().messagesByKey["k1"]).toBeUndefined();
   });
 
   it("nets out a removal followed by a re-add", async () => {
-    await fromBackground({ type: "delta", added: [row({ id: 1 })] });
+    await fromBackground({ type: "delta", added: [row({ n: 1 })] });
 
-    emit({ type: "delta", removedIds: [1] });
-    emit({ type: "delta", added: [row({ id: 1, read: true })] });
+    emit({ type: "delta", removedKeys: ["k1"] });
+    emit({ type: "delta", added: [row({ n: 1, read: true })] });
     await settle();
 
-    expect(store().messagesById[1]?.read).toBe(true);
+    expect(store().messagesByKey["k1"]?.read).toBe(true);
   });
 
   it("does not let a buffered delta overwrite a click that beats the flush", async () => {
-    await fromBackground({ type: "delta", added: [row({ id: 1 })] });
+    await fromBackground({ type: "delta", added: [row({ n: 1 })] });
 
     // The delta is still in the buffer when the user pins the row. Applying it
     // afterwards would revert the pin on screen until the next delta arrived.
-    emit({ type: "delta", updated: [row({ id: 1, read: true })] });
-    store().pin(1, true);
+    emit({ type: "delta", updated: [row({ n: 1, read: true })] });
+    store().pin("k1", true);
     await settle();
 
-    expect(store().messagesById[1]?.pinned).toBe(true);
-    expect(store().messagesById[1]?.read).toBe(true);
+    expect(store().messagesByKey["k1"]?.pinned).toBe(true);
+    expect(store().messagesByKey["k1"]?.read).toBe(true);
   });
 });
 
@@ -237,38 +239,38 @@ describe("deltas from the background", () => {
   });
 
   it("adds, updates and removes rows", async () => {
-    await fromBackground({ type: "delta", added: [row({ id: 1 })] });
-    expect(store().messagesById[1]).toBeDefined();
+    await fromBackground({ type: "delta", added: [row({ n: 1 })] });
+    expect(store().messagesByKey["k1"]).toBeDefined();
 
-    await fromBackground({ type: "delta", updated: [row({ id: 1, read: true })] });
-    expect(store().messagesById[1]?.read).toBe(true);
+    await fromBackground({ type: "delta", updated: [row({ n: 1, read: true })] });
+    expect(store().messagesByKey["k1"]?.read).toBe(true);
 
-    await fromBackground({ type: "delta", removedIds: [1] });
-    expect(store().messagesById[1]).toBeUndefined();
+    await fromBackground({ type: "delta", removedKeys: ["k1"] });
+    expect(store().messagesByKey["k1"]).toBeUndefined();
   });
 
   it("re-keys a row whose id the background re-resolved", async () => {
-    await fromBackground({ type: "delta", added: [row({ id: 1 })] });
+    await fromBackground({ type: "delta", added: [row({ n: 1 })] });
 
     // What a reclassify does after Thunderbird renumbers a message.
     await fromBackground({
       type: "delta",
-      added: [row({ id: 99 })],
-      removedIds: [1],
+      added: [row({ n: 99 })],
+      removedKeys: ["k1"],
     });
 
-    expect(store().messagesById[1]).toBeUndefined();
-    expect(store().messagesById[99]).toBeDefined();
+    expect(store().messagesByKey["k1"]).toBeUndefined();
+    expect(store().messagesByKey["k99"]).toBeDefined();
   });
 
   it("clears a pending op when the real row lands", async () => {
-    await fromBackground({ type: "delta", added: [row({ id: 1 })] });
-    store().doneThread([1]);
-    expect(store().pendingOps[1]).toBeDefined();
+    await fromBackground({ type: "delta", added: [row({ n: 1 })] });
+    store().doneThread(["k1"]);
+    expect(store().pendingOps["k1"]).toBeDefined();
 
-    await fromBackground({ type: "delta", updated: [row({ id: 1, origin: "done" })] });
+    await fromBackground({ type: "delta", updated: [row({ n: 1, origin: "done" })] });
 
-    expect(store().pendingOps[1]).toBeUndefined();
+    expect(store().pendingOps["k1"]).toBeUndefined();
   });
 });
 
@@ -279,7 +281,7 @@ describe("reconnect", () => {
   });
 
   it("queues commands issued while the port is down and flushes them on reconnect", async () => {
-    await fromBackground({ type: "delta", added: [row({ id: 1 })] });
+    await fromBackground({ type: "delta", added: [row({ n: 1 })] });
 
     // Faked before the disconnect so the reconnect backoff timer is faked too.
     vi.useFakeTimers();
@@ -287,7 +289,7 @@ describe("reconnect", () => {
     before.disconnect();
     expect(store().connectionState).toBe("reconnecting");
 
-    store().pin(1, true);
+    store().pin("k1", true);
     // Nothing can go out yet; dropping it would silently lose a mutation the
     // optimistic UI has already applied on screen.
     expect(before.sent.some((m) => (m as ClientMsg).type === "pin")).toBe(false);
@@ -295,7 +297,7 @@ describe("reconnect", () => {
     await vi.advanceTimersByTimeAsync(600); // reconnect backoff
 
     expect(store().connectionState).toBe("connected");
-    expect(sent()).toContainEqual({ type: "pin", messageId: 1, pinned: true });
+    expect(sent()).toContainEqual({ type: "pin", messageKey: "k1", pinned: true });
   });
 
   it("unsticks the reclassify button when the port dies mid-run", async () => {

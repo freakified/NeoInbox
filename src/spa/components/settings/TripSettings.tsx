@@ -29,11 +29,11 @@ export const TripSettings = () => {
         <h4 className={s.sectionTitle}>Archived mail</h4>
         <p className={s.helpText}>
           NeoInbox looks for trips in mail as it arrives and in your inbox.
-          Your archive probably holds past trips too, but finding them means
-          reading every travel-related message stored there — often thousands.
-          That can take an hour or more, and Thunderbird may feel slower while
-          it runs. You can stop at any time; scanning again continues where it
-          left off.
+          To find past trips, first import your archive (Settings → Archive),
+          then scan it here. The scan reads the full text of each
+          travel-looking archived message — usually a few hundred — and
+          Thunderbird downloads any it doesn&apos;t already have. You can stop at
+          any time; scanning again continues where it left off.
         </p>
         {running ? (
           <div className={s.scanProgress}>

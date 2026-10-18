@@ -8,7 +8,8 @@ import {
 import type { RawMessage } from "../shared/types";
 
 const row = (over: Partial<RawMessage> = {}): RawMessage => ({
-  id: 1,
+  key: "k1",
+  tbId: 1,
   headerMessageId: "<a@example.com>",
   subject: "",
   author: "",

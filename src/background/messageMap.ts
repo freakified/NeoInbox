@@ -1,4 +1,5 @@
 import { sanitizeTags } from "../shared/categories";
+import { messageKeyOf, type MessageKey } from "../shared/messageKey";
 import { parseAddressList } from "../shared/senders";
 import type { MessageOrigin, RawMessage } from "../shared/types";
 
@@ -10,17 +11,30 @@ type HeaderWithFolder = messenger.messages.MessageHeader & {
 const normalizeAddressList = (addresses: readonly string[] | undefined): string[] =>
   (addresses ?? []).flatMap(parseAddressList);
 
+/** The row key a header caches under (see messageKey.ts). */
+export const keyOfHeader = (header: messenger.messages.MessageHeader): MessageKey => {
+  const folder = (header as HeaderWithFolder).folder;
+  return messageKeyOf({
+    accountId: folder?.accountId ?? "",
+    folderId: folder?.id ?? "",
+    headerMessageId: header.headerMessageId ?? "",
+    date: header.date ? new Date(header.date).getTime() : 0,
+    author: header.author ?? "",
+    subject: header.subject ?? "",
+  });
+};
+
 export const headerToRawMessage = (
   header: messenger.messages.MessageHeader,
   origin: MessageOrigin,
 ): RawMessage => {
   const folder = (header as HeaderWithFolder).folder;
-  // Legacy neoinbox-* keys may linger on the server until cleanupLegacyTags
-  // finishes; never let them back into the cache.
+  // Legacy neoinbox-* keys may linger on the server; keep them out of the cache.
   const tags = sanitizeTags(header.tags);
 
   return {
-    id: header.id,
+    key: keyOfHeader(header),
+    tbId: header.id,
     headerMessageId: header.headerMessageId ?? "",
     subject: header.subject ?? "",
     author: header.author ?? "",

@@ -7,7 +7,7 @@ import { useMailStore } from "../../store/mailStore";
  * first, as "Name <email>" strings — the recipient field's suggestions.
  */
 export const useKnownContacts = (limit = 300): string[] => {
-  const messagesById = useMailStore((st) => st.messagesById);
+  const messagesByKey = useMailStore((st) => st.messagesByKey);
   const myEmails = useMailStore((st) => st.myEmails);
   return useMemo(() => {
     const counts = new Map<string, { raw: string; count: number }>();
@@ -23,7 +23,7 @@ export const useKnownContacts = (limit = 300): string[] => {
         counts.set(email, { raw, count: weight });
       }
     };
-    for (const m of Object.values(messagesById)) {
+    for (const m of Object.values(messagesByKey)) {
       if (m.origin === "sent") {
         for (const raw of [...m.recipients, ...m.ccList]) add(raw, 3);
       } else if (m.origin === "inbox" && (m.category === "personal" || m.category === null)) {
@@ -34,5 +34,5 @@ export const useKnownContacts = (limit = 300): string[] => {
       .sort((a, b) => b.count - a.count)
       .slice(0, limit)
       .map((entry) => entry.raw);
-  }, [messagesById, myEmails, limit]);
+  }, [messagesByKey, myEmails, limit]);
 };

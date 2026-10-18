@@ -1,3 +1,4 @@
+import type { MessageKey } from "../shared/messageKey";
 import { send } from "./portClient";
 import type { MailStore, StoreGet, StoreSet } from "./storeTypes";
 import type { TripWrite } from "../shared/messaging";
@@ -28,13 +29,13 @@ const writeTrips = (change: Partial<TripWrite>): void => {
 export const retireTrashedFromTrips = (
   get: StoreGet,
   set: StoreSet,
-  messageIds: number[],
+  messageKeys: MessageKey[],
 ): void => {
   const memberships = { ...get().tripMembershipByKey };
   const tombstones: TripMembershipRecord[] = [];
   const vacated = new Set<string>();
-  for (const id of messageIds) {
-    const message = get().pendingOps[id]?.message;
+  for (const messageKey of messageKeys) {
+    const message = get().pendingOps[messageKey]?.message;
     if (!message) continue;
     const key = pinKeyOf(message);
     const tripId = memberships[key]?.tripId;

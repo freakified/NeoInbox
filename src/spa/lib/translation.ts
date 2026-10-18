@@ -1,3 +1,4 @@
+import { liveTbId } from "../../shared/liveMessage";
 import { db } from "../../store/db";
 import type { RawMessage, TranslationRecord } from "../../shared/types";
 import { extractHtmlBody, extractRawTextBody } from "./srcdoc";
@@ -75,8 +76,8 @@ const hashText = (text: string): string => {
   return `${(h2 >>> 0).toString(16)}${(h1 >>> 0).toString(16)}`;
 };
 
-const translationId = (messageId: number, bodyHash: string): string =>
-  `${messageId}:${getTranslationConfig().provider}:${TARGET_LANGUAGE}:${bodyHash}`;
+const translationId = (messageKey: string, bodyHash: string): string =>
+  `${messageKey}:${getTranslationConfig().provider}:${TARGET_LANGUAGE}:${bodyHash}`;
 
 const isFreshTranslation = (record: TranslationRecord): boolean =>
   Date.now() - record.createdAt < TRANSLATION_CACHE_TTL_MS;
@@ -459,7 +460,9 @@ export const translateMessageToEnglish = async (
   }
   await pruneExpiredTranslations();
 
-  const part = await messenger.messages.getFull(message.id);
+  const tbId = await liveTbId(message);
+  if (tbId === null) throw new Error("This message could not be found.");
+  const part = await messenger.messages.getFull(tbId);
   const html = extractHtmlBody(part);
   const bodyType: "text" | "html" = html ? "html" : "text";
   const raw = bodyType === "html"
@@ -469,7 +472,7 @@ export const translateMessageToEnglish = async (
 
   const rawSubject = normalizeText(message.subject);
   const bodyHash = `${bodyType}:${hashText(`${rawSubject}\n\n${raw}`)}`;
-  const id = translationId(message.id, bodyHash);
+  const id = translationId(message.key, bodyHash);
   const cached = await db.translations.get(id);
   if (cached && isFreshTranslation(cached)) return cached;
   if (cached) await db.translations.delete(id);
@@ -480,7 +483,7 @@ export const translateMessageToEnglish = async (
   ]);
   const record: TranslationRecord = {
     id,
-    messageId: message.id,
+    messageKey: message.key,
     bodyHash,
     provider: getTranslationConfig().provider,
     sourceLanguage: null,

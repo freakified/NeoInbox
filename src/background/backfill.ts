@@ -11,7 +11,7 @@ import {
   classificationOutdated,
 } from "../classifier/version";
 import { applyLocalState } from "./localState";
-import { headerToRawMessage } from "./messageMap";
+import { headerToRawMessage, keyOfHeader } from "./messageMap";
 import { broadcast } from "./port";
 import { beginScan, endScan, wasCachedDuringScan, wasRemovedDuringScan } from "./scanGuard";
 import { db } from "../store/db";
@@ -33,6 +33,7 @@ import {
   type InboxFolder,
 } from "../shared/folders";
 import { log } from "../shared/log";
+import type { MessageKey } from "../shared/messageKey";
 import type { FolderCursorRecord, MessageOrigin, RawMessage } from "../shared/types";
 
 /** Only scan this much sent history; older sent mail already cached is kept. */
@@ -121,7 +122,7 @@ const folderIdOf = (header: messenger.messages.MessageHeader): string => {
 
 type Page = { id?: string | null; messages?: messenger.messages.MessageHeader[] };
 
-async function* iterateFolder(
+export async function* iterateFolder(
   folderId: string,
   fromDate?: number,
 ): AsyncGenerator<messenger.messages.MessageHeader> {
@@ -156,6 +157,8 @@ const isUnchanged = (
   origin: MessageOrigin,
 ): boolean =>
   cached.origin === origin &&
+  // A restart renumbers everything; the row has to learn the new id.
+  cached.tbId === header.id &&
   cached.folderId === folderIdOf(header) &&
   cached.date === (header.date ? new Date(header.date).getTime() : 0) &&
   cached.read === (header.read ?? false) &&
@@ -189,7 +192,7 @@ const ingestHeader = async (
   header: messenger.messages.MessageHeader,
   origin: MessageOrigin,
 ): Promise<{ raw: RawMessage | null; classified: boolean; ranPipeline: boolean }> => {
-  const cached = await db.messages.get(header.id);
+  const cached = await db.messages.get(keyOfHeader(header));
   // A row whose category predates the current rules must not take the
   // unchanged fast path: nothing else in a scan re-runs the pipeline, so it
   // would keep its stale category through any number of rescans.
@@ -240,13 +243,13 @@ const visitFolder = async (
     fromDate = sentCutoff;
   }
 
-  const liveIds = new Set<number>();
+  const liveKeys = new Set<MessageKey>();
   let maxDate = cursor?.maxDate ?? 0;
   let batch: RawMessage[] = [];
 
   const flush = async (): Promise<void> => {
     if (!batch.length) return;
-    const rows = batch.filter((m) => !wasRemovedDuringScan(m.id));
+    const rows = batch.filter((m) => !wasRemovedDuringScan(m.key));
     batch = [];
     if (!rows.length) return;
     await db.messages.bulkPut(rows);
@@ -255,7 +258,7 @@ const visitFolder = async (
 
   const ingestOne = async (header: messenger.messages.MessageHeader): Promise<void> => {
     counters.scanned++;
-    liveIds.add(header.id);
+    liveKeys.add(keyOfHeader(header));
     try {
       const { raw, classified, ranPipeline } = await withTimeout(
         ingestHeader(header, origin),
@@ -328,16 +331,16 @@ const visitFolder = async (
     const stale = cachedRows
       .filter(
         (m) =>
-          !liveIds.has(m.id) &&
+          !liveKeys.has(m.key) &&
           m.origin !== "done" &&
           !m.snoozed &&
-          !wasCachedDuringScan(m.id) &&
+          !wasCachedDuringScan(m.key) &&
           (sentCutoff === 0 || m.date >= sentCutoff),
       )
-      .map((m) => m.id);
+      .map((m) => m.key);
     if (stale.length) {
       await db.messages.bulkDelete(stale);
-      broadcast({ type: "delta", removedIds: stale });
+      broadcast({ type: "delta", removedKeys: stale });
       log.info("backfill", `pruned ${stale.length} stale entries from ${folder.name}`);
     }
   }
@@ -398,7 +401,7 @@ const folderDrifted = async (
 const snoozedCountsByFolder = async (): Promise<Map<string, number>> => {
   const counts = new Map<string, number>();
   for (const snooze of await db.snoozes.toArray()) {
-    const row = await db.messages.get(snooze.messageId);
+    const row = await db.messages.get(snooze.messageKey);
     if (!row?.snoozed) continue;
     counts.set(row.folderId, (counts.get(row.folderId) ?? 0) + 1);
   }
@@ -414,17 +417,17 @@ const pruneUnknownFolders = async (knownFolderIds: readonly string[]): Promise<v
   const cachedFolderIds = (await db.messages.orderBy("folderId").uniqueKeys()) as string[];
   const unknown = cachedFolderIds.filter((id) => id !== "" && !known.has(id));
   if (!unknown.length) return;
-  const stale: number[] = [];
+  const stale: MessageKey[] = [];
   for (const folderId of unknown) {
     const rows = await db.messages.where("folderId").equals(folderId).toArray();
     for (const m of rows) {
-      if (m.origin === "done" || m.snoozed || wasCachedDuringScan(m.id)) continue;
-      stale.push(m.id);
+      if (m.origin === "done" || m.snoozed || wasCachedDuringScan(m.key)) continue;
+      stale.push(m.key);
     }
   }
   if (!stale.length) return;
   await db.messages.bulkDelete(stale);
-  broadcast({ type: "delta", removedIds: stale });
+  broadcast({ type: "delta", removedKeys: stale });
   log.info("backfill", `pruned ${stale.length} entries from unscanned folders`);
 };
 

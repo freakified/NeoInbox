@@ -33,9 +33,9 @@ export const SelectionBar = ({
   const showDeleteActions = useShowDeleteActions();
 
   const messages = threads.flatMap((t) => t.messages);
-  const inboxIds = messages.filter((m) => m.origin === "inbox").map((m) => m.id);
-  const doneIds = messages.filter((m) => m.origin === "done").map((m) => m.id);
-  const snoozedIds = messages.filter((m) => m.snoozed).map((m) => m.id);
+  const inboxIds = messages.filter((m) => m.origin === "inbox").map((m) => m.key);
+  const doneIds = messages.filter((m) => m.origin === "done").map((m) => m.key);
+  const snoozedIds = messages.filter((m) => m.snoozed).map((m) => m.key);
   // Pin acts like the row toggle across the lot: unpin only when every
   // selected thread is already pinned, otherwise pin them all.
   const allPinned = threads.length > 0 && threads.every((t) => t.pinned);
@@ -73,7 +73,7 @@ export const SelectionBar = ({
           aria-label={allPinned ? "Unpin" : "Pin"}
           aria-pressed={allPinned}
           onClick={() => {
-            for (const m of messages) pin(m.id, !allPinned);
+            for (const m of messages) pin(m.key, !allPinned);
           }}
         >
           <Icon name="push_pin" className={allPinned ? s.iconOn : s.icon} />
@@ -123,7 +123,7 @@ export const SelectionBar = ({
             className={s.btn}
             title="Trash"
             aria-label="Trash"
-            onClick={act(() => trashMessages(messages.map((m) => m.id)))}
+            onClick={act(() => trashMessages(messages.map((m) => m.key)))}
           >
             <Icon name="delete" className={s.icon} />
           </button>

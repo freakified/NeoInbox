@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { resolveLiveMessageId } from "../../shared/liveMessage";
+import { liveTbId } from "../../shared/liveMessage";
 import { parseSender } from "../../shared/senders";
 import type { RawMessage } from "../../shared/types";
-import { useMailStore } from "../../store/mailStore";
 import { useIframeAutoHeight } from "../lib/useIframeAutoHeight";
 import {
   buildComposedSrcdoc,
@@ -59,16 +58,11 @@ export const MessageBody = ({
     void (async () => {
       // Never render a body fetched by an unverified id: stale cached ids can
       // belong to a different message entirely.
-      const liveId = await resolveLiveMessageId(m);
+      const liveId = await liveTbId(m);
       if (cancelled) return;
       if (liveId === null) {
         setRawHtml("This message could not be found — it may have been moved or deleted.");
         setIsPlainText(true);
-        return;
-      }
-      // Healing re-keys the row, so this effect re-runs with the live id.
-      // Snoozed rows aren't healed; they read straight from the live id.
-      if (liveId !== m.id && useMailStore.getState().healStaleMessage(m.id, liveId)) {
         return;
       }
       try {
@@ -92,7 +86,7 @@ export const MessageBody = ({
     return () => {
       cancelled = true;
     };
-  }, [m.id]);
+  }, [m.key]);
 
   useEffect(() => {
     setTranslationStatus("idle");
@@ -102,7 +96,7 @@ export const MessageBody = ({
     setTranslatedBodyType("text");
     setShowTranslation(false);
     onTranslatedSubject?.("");
-  }, [m.id]);
+  }, [m.key]);
 
   useEffect(
     () =>

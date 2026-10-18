@@ -33,28 +33,28 @@ export const useThreadActions = (thread: Thread): ThreadActions => {
   const { doneMessages, trashMessages } = useBulkActions();
 
   return useMemo(() => {
-    const inboxMessageIds = thread.messages
+    const inboxMessageKeys = thread.messages
       .filter((m) => m.origin === "inbox")
-      .map((m) => m.id);
-    const doneMessageIds = thread.messages
+      .map((m) => m.key);
+    const doneMessageKeys = thread.messages
       .filter((m) => m.origin === "done")
-      .map((m) => m.id);
-    const snoozedMessageIds = thread.messages.filter((m) => m.snoozed).map((m) => m.id);
+      .map((m) => m.key);
+    const snoozedMessageKeys = thread.messages.filter((m) => m.snoozed).map((m) => m.key);
 
     const snooze = (wakeAt: number) => {
-      snoozeThread(inboxMessageIds, wakeAt);
+      snoozeThread(inboxMessageKeys, wakeAt);
       notify(`Snoozed until ${formatSnoozeToastTime(wakeAt)}`);
     };
 
     return {
-      hasInboxMessages: inboxMessageIds.length > 0,
-      hasDoneMessages: doneMessageIds.length > 0,
-      hasSnoozedMessages: snoozedMessageIds.length > 0,
+      hasInboxMessages: inboxMessageKeys.length > 0,
+      hasDoneMessages: doneMessageKeys.length > 0,
+      hasSnoozedMessages: snoozedMessageKeys.length > 0,
       togglePin: () => {
         const next = !thread.pinned;
-        for (const m of thread.messages) pin(m.id, next);
+        for (const m of thread.messages) pin(m.key, next);
       },
-      done: () => doneMessages(inboxMessageIds),
+      done: () => doneMessages(inboxMessageKeys),
       snooze,
       snoozeDefault: () => {
         const presets = snoozePresets();
@@ -62,12 +62,12 @@ export const useThreadActions = (thread: Thread): ThreadActions => {
         if (tomorrow) snooze(tomorrow.wakeAt);
       },
       unsnooze: () => {
-        unsnoozeThread(snoozedMessageIds);
+        unsnoozeThread(snoozedMessageKeys);
         notify("Moved back to inbox");
       },
-      trash: () => trashMessages(thread.messages.map((m) => m.id)),
+      trash: () => trashMessages(thread.messages.map((m) => m.key)),
       moveToInbox: () => {
-        moveToInboxThread(doneMessageIds);
+        moveToInboxThread(doneMessageKeys);
         notify("Moved back to inbox");
       },
     };

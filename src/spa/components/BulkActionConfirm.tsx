@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import type { MessageKey } from "../../shared/messageKey";
 import { useMailStore } from "../../store/mailStore";
 import s from "./BulkActionConfirm.module.css";
 
@@ -9,12 +10,12 @@ type BulkActionKind = "done" | "trash";
 
 interface PendingBulkAction {
   kind: BulkActionKind;
-  messageIds: number[];
+  messageKeys: MessageKey[];
 }
 
 interface BulkActionContextValue {
-  doneMessages: (messageIds: number[]) => void;
-  trashMessages: (messageIds: number[]) => void;
+  doneMessages: (messageKeys: MessageKey[]) => void;
+  trashMessages: (messageKeys: MessageKey[]) => void;
 }
 
 const BulkActionContext = createContext<BulkActionContextValue | null>(null);
@@ -25,8 +26,8 @@ const actionText = (kind: BulkActionKind): string =>
 const dialogTitle = (kind: BulkActionKind): string =>
   kind === "done" ? "Mark messages as done?" : "Move messages to trash?";
 
-const dialogMessage = ({ kind, messageIds }: PendingBulkAction): string =>
-  `${messageIds.length} messages will be ${actionText(kind)}.`;
+const dialogMessage = ({ kind, messageKeys }: PendingBulkAction): string =>
+  `${messageKeys.length} messages will be ${actionText(kind)}.`;
 
 export const BulkActionProvider = ({ children }: { children: React.ReactNode }) => {
   const doneThread = useMailStore((st) => st.doneThread);
@@ -34,18 +35,18 @@ export const BulkActionProvider = ({ children }: { children: React.ReactNode }) 
   const [pending, setPending] = useState<PendingBulkAction | null>(null);
 
   const runAction = useCallback(
-    ({ kind, messageIds }: PendingBulkAction) => {
-      if (kind === "done") doneThread(messageIds);
-      else trashThread(messageIds);
+    ({ kind, messageKeys }: PendingBulkAction) => {
+      if (kind === "done") doneThread(messageKeys);
+      else trashThread(messageKeys);
     },
     [doneThread, trashThread],
   );
 
   const requestAction = useCallback(
-    (kind: BulkActionKind, messageIds: number[]) => {
-      if (messageIds.length === 0) return;
-      const action = { kind, messageIds };
-      if (messageIds.length >= CONFIRM_THRESHOLD) setPending(action);
+    (kind: BulkActionKind, messageKeys: MessageKey[]) => {
+      if (messageKeys.length === 0) return;
+      const action = { kind, messageKeys };
+      if (messageKeys.length >= CONFIRM_THRESHOLD) setPending(action);
       else runAction(action);
     },
     [runAction],
@@ -53,8 +54,8 @@ export const BulkActionProvider = ({ children }: { children: React.ReactNode }) 
 
   const value = useMemo<BulkActionContextValue>(
     () => ({
-      doneMessages: (messageIds) => requestAction("done", messageIds),
-      trashMessages: (messageIds) => requestAction("trash", messageIds),
+      doneMessages: (messageKeys) => requestAction("done", messageKeys),
+      trashMessages: (messageKeys) => requestAction("trash", messageKeys),
     }),
     [requestAction],
   );

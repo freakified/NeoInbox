@@ -183,7 +183,7 @@ export const App = () => {
     const ids = items.flatMap((item) =>
       threadsOfItem(item)
         .filter((t) => !t.pinned)
-        .flatMap((t) => t.messages.filter((m) => m.origin === "inbox").map((m) => m.id)),
+        .flatMap((t) => t.messages.filter((m) => m.origin === "inbox").map((m) => m.key)),
     );
     doneMessages(ids);
   };
@@ -192,7 +192,7 @@ export const App = () => {
     const ids = items.flatMap((item) =>
       threadsOfItem(item)
         .filter((t) => !t.pinned)
-        .flatMap((t) => t.messages.map((m) => m.id)),
+        .flatMap((t) => t.messages.map((m) => m.key)),
     );
     trashMessages(ids);
   };

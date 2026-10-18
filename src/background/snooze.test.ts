@@ -11,7 +11,7 @@ afterEach(async () => {
 
 const firstThreadSubject = (a: Booted): string | undefined => {
   const st = a.store();
-  const item = a.deriveStream(st.messagesById, new Set()).sections[0]?.items[0];
+  const item = a.deriveStream(st.messagesByKey, new Set()).sections[0]?.items[0];
   return item?.type === "thread" ? item.thread.subject : undefined;
 };
 
@@ -22,13 +22,13 @@ describe("snooze wake", () => {
     await app.backfill.runBackfill();
     await settle();
 
-    const oldest = Object.values(app.store().messagesById).sort((a, b) => a.date - b.date)[0]!;
+    const oldest = Object.values(app.store().messagesByKey).sort((a, b) => a.date - b.date)[0]!;
     const wakeAt = Date.now() - 1_000;
-    app.store().snoozeThread([oldest.id], wakeAt);
+    app.store().snoozeThread([oldest.key], wakeAt);
     await settle();
 
     const { wakeSnoozedMessage } = await import("./snooze");
-    await wakeSnoozedMessage(oldest.id, "alarm");
+    await wakeSnoozedMessage(oldest.key, "alarm");
     await settle();
     expect(firstThreadSubject(app)).toBe(oldest.subject);
 
@@ -38,10 +38,12 @@ describe("snooze wake", () => {
     await app.backfill.runBackfill();
     await settle();
 
-    const woken = Object.values(app.store().messagesById).find(
+    const woken = Object.values(app.store().messagesByKey).find(
       (m) => m.headerMessageId === oldest.headerMessageId,
     )!;
-    expect(woken.id).not.toBe(oldest.id);
+    expect(woken.tbId).not.toBe(oldest.tbId);
+    // Same message back in the same folder: same row, not a second one.
+    expect(woken.key).toBe(oldest.key);
     expect(woken.resurfacedAt).toBe(wakeAt);
     expect(woken.snoozeExpired).toBe(true);
     expect(firstThreadSubject(app)).toBe(oldest.subject);
@@ -53,18 +55,18 @@ describe("snooze wake", () => {
     await app.backfill.runBackfill();
     await settle();
 
-    const oldest = Object.values(app.store().messagesById).sort((a, b) => a.date - b.date)[0]!;
-    app.store().snoozeThread([oldest.id], Date.now() - 1_000);
+    const oldest = Object.values(app.store().messagesByKey).sort((a, b) => a.date - b.date)[0]!;
+    app.store().snoozeThread([oldest.key], Date.now() - 1_000);
     await settle();
     const { wakeSnoozedMessage } = await import("./snooze");
-    await wakeSnoozedMessage(oldest.id, "alarm");
+    await wakeSnoozedMessage(oldest.key, "alarm");
     await settle();
     expect(await app.db.resurfaced.count()).toBe(1);
 
-    const woken = Object.values(app.store().messagesById).find(
+    const woken = Object.values(app.store().messagesByKey).find(
       (m) => m.headerMessageId === oldest.headerMessageId,
     )!;
-    app.store().snoozeThread([woken.id], Date.now() + 60_000);
+    app.store().snoozeThread([woken.key], Date.now() + 60_000);
     await settle();
     expect(await app.db.resurfaced.count()).toBe(0);
   });

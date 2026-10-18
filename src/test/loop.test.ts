@@ -18,12 +18,13 @@ import {
   promoMail,
   shapes,
 } from "./fixtures";
+import type { RawMessage } from "../shared/types";
 import type { StreamItem } from "../store/stream";
 
 /** The inbox as the SPA would render it. */
 const inboxItems = (app: Booted): StreamItem[] =>
   app
-    .deriveStream(app.store().messagesById, app.store().myEmails, { type: "inbox" })
+    .deriveStream(app.store().messagesByKey, app.store().myEmails, { type: "inbox" })
     .sections.flatMap((s) => s.items);
 
 const bundleFor = (app: Booted, category: string): StreamItem | undefined =>
@@ -52,6 +53,12 @@ const open = async (options = shapes.standard()): Promise<Booted> => {
 };
 
 afterEach(() => vi.useRealTimers());
+
+/** The store's row for a fake message, wherever it has moved since. */
+const rowFor = (app: Booted, id: number): RawMessage | undefined =>
+  Object.values(app.store().messagesByKey).find(
+    (m) => m.headerMessageId === `<msg-${id}@example.com>`,
+  );
 
 describe("new mail arriving", () => {
   it("classifies it and lands it in the right bundle on screen", async () => {
@@ -102,7 +109,7 @@ describe("archiving a thread", () => {
     const id = await app.mail.deliver(INBOX, forumMail());
     await settle();
 
-    app.store().doneThread([id]);
+    app.store().doneThread([app.mail.keyOf(id)]);
 
     // Optimistic: gone from the inbox before the archive round-trip.
     expect(inboxItems(app)).toHaveLength(0);
@@ -110,8 +117,11 @@ describe("archiving a thread", () => {
 
     await commitPendingAction(app);
 
-    expect(app.mail.folderOf(id)).toBe(ARCHIVE);
-    expect(app.store().messagesById[id]?.origin).toBe("done");
+    // The move gave it a new id, as Thunderbird does; the row followed it.
+    expect(app.mail.idsIn(INBOX)).toEqual([]);
+    expect(app.mail.idsIn(ARCHIVE)).toHaveLength(1);
+    expect(rowFor(app, id)?.origin).toBe("done");
+    expect(rowFor(app, id)?.folderId).toBe(ARCHIVE);
     expect(inboxItems(app)).toHaveLength(0);
   });
 
@@ -120,10 +130,10 @@ describe("archiving a thread", () => {
     const id = await app.mail.deliver(INBOX, forumMail());
     await settle();
 
-    app.store().doneThread([id]);
+    app.store().doneThread([app.mail.keyOf(id)]);
     await commitPendingAction(app);
 
-    const bundle = app.deriveStream(app.store().messagesById, app.store().myEmails, {
+    const bundle = app.deriveStream(app.store().messagesByKey, app.store().myEmails, {
       type: "bundle",
       category: "forums",
     });
@@ -135,7 +145,7 @@ describe("archiving a thread", () => {
     const id = await app.mail.deliver(INBOX, forumMail());
     await settle();
 
-    app.store().doneThread([id]);
+    app.store().doneThread([app.mail.keyOf(id)]);
     app.store().undoToast(app.store().toasts.at(-1)!.id);
     await settle();
 
@@ -148,13 +158,13 @@ describe("archiving a thread", () => {
     const id = await app.mail.deliver(INBOX, forumMail());
     await settle();
 
-    app.store().doneThread([id]);
+    app.store().doneThread([app.mail.keyOf(id)]);
     await commitPendingAction(app);
 
     // doneMessage retries on a ladder of sleeps before declaring failure, so
     // the rollback lands seconds later rather than on the next turn.
     await waitFor(
-      () => app.store().messagesById[id]?.origin === "inbox",
+      () => rowFor(app, id)?.origin === "inbox",
       "archive failure to roll back",
     );
 
@@ -175,7 +185,7 @@ describe("pinning", () => {
 
     expect(bundleFor(app, "promos")).toBeDefined();
 
-    app.store().pin(a, true);
+    app.store().pin(app.mail.keyOf(a), true);
     await settle();
 
     // One pinned row surfaced, one left in the bundle.
@@ -183,10 +193,10 @@ describe("pinning", () => {
     expect(bundleFor(app, "promos")).toBeDefined();
 
     // A reload rebuilds purely from Dexie; the pin must survive it.
-    app.useMailStore.setState({ messagesById: {}, hydrated: false });
+    app.useMailStore.setState({ messagesByKey: {}, hydrated: false });
     await app.store().init();
     await settle();
-    expect(app.store().messagesById[a]?.pinned).toBe(true);
+    expect(app.store().messagesByKey[app.mail.keyOf(a)]?.pinned).toBe(true);
   });
 });
 
@@ -198,8 +208,8 @@ describe("reclassify from the UI", () => {
 
     // Stand in for a rules change: the cached row holds a category the current
     // rules would not produce, stamped with an older classifier version.
-    await app.db.messages.update(id, { category: "finance", classifierVersion: 0 });
-    app.useMailStore.setState({ messagesById: {}, hydrated: false });
+    await app.db.messages.update(app.mail.keyOf(id), { category: "finance", classifierVersion: 0 });
+    app.useMailStore.setState({ messagesByKey: {}, hydrated: false });
     await app.store().init();
     await settle();
     expect(bundleFor(app, "finance")).toBeDefined();
@@ -225,7 +235,7 @@ describe("reclassify from the UI", () => {
       m.category = null;
       m.classifierVersion = 0;
     });
-    app.useMailStore.setState({ messagesById: {}, hydrated: false });
+    app.useMailStore.setState({ messagesByKey: {}, hydrated: false });
     await app.store().init();
     await settle();
 

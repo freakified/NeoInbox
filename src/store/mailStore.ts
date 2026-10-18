@@ -39,7 +39,7 @@ export type {
 } from "./storeTypes";
 
 export const useMailStore = create<MailStore>((set, get) => ({
-  messagesById: {},
+  messagesByKey: {},
   myEmails: new Set(),
   hydrated: false,
   syncProgress: null,
@@ -49,7 +49,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   routeRules: [],
   connectionState: "connected",
   pendingOps: {},
-  snoozesByMessageId: {},
+  snoozesByKey: {},
   remindersById: {},
   tripsById: {},
   tripMembershipByKey: {},
@@ -60,6 +60,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   bundleSettings: null,
   reclassifying: false,
   tripScan: null,
+  archiveImport: null,
   historyFrom: 0,
   loadingHistory: false,
 
@@ -76,10 +77,10 @@ export const useMailStore = create<MailStore>((set, get) => ({
       ]);
     const { rows, historyFrom } = await loadStartupMessages(tripMemberships);
     const customBundles = rawBundles.sort((a, b) => a.order - b.order);
-    const byId: Record<number, RawMessage> = {};
-    for (const m of rows) byId[m.id] = m;
-    const snoozesByMessageId: Record<number, SnoozeRecord> = {};
-    for (const snooze of snoozes) snoozesByMessageId[snooze.messageId] = snooze;
+    const messagesByKey: Record<string, RawMessage> = {};
+    for (const m of rows) messagesByKey[m.key] = m;
+    const snoozesByKey: Record<string, SnoozeRecord> = {};
+    for (const snooze of snoozes) snoozesByKey[snooze.messageKey] = snooze;
     const remindersById: Record<string, ReminderRecord> = {};
     for (const reminder of reminders) remindersById[reminder.id] = reminder;
     const tripsById: Record<string, TripRecord> = {};
@@ -87,12 +88,12 @@ export const useMailStore = create<MailStore>((set, get) => ({
     const tripMembershipByKey: Record<string, TripMembershipRecord> = {};
     for (const membership of tripMemberships) tripMembershipByKey[membership.key] = membership;
     set({
-      messagesById: byId,
+      messagesByKey,
       historyFrom,
       hydrated: true,
       customBundles,
       routeRules,
-      snoozesByMessageId,
+      snoozesByKey,
       remindersById,
       tripsById,
       tripMembershipByKey,
@@ -115,9 +116,9 @@ export const useMailStore = create<MailStore>((set, get) => ({
     try {
       const { rows, historyFrom } = await loadHistoryPage(from);
       // Rows already in memory are newer than Dexie's copy or the same.
-      const map = { ...get().messagesById };
-      for (const m of rows) map[m.id] ??= m;
-      set({ messagesById: map, historyFrom });
+      const map = { ...get().messagesByKey };
+      for (const m of rows) map[m.key] ??= m;
+      set({ messagesByKey: map, historyFrom });
     } finally {
       set({ loadingHistory: false });
     }
@@ -133,34 +134,34 @@ export const useMailStore = create<MailStore>((set, get) => ({
 // ─── selectors ──────────────────────────────────────────────────────────────
 
 export const useStream = (): Stream => {
-  const messagesById = useMailStore((s) => s.messagesById);
+  const messagesByKey = useMailStore((s) => s.messagesByKey);
   const myEmails = useMailStore((s) => s.myEmails);
   return useMemo(
-    () => deriveStream(messagesById, myEmails),
-    [messagesById, myEmails],
+    () => deriveStream(messagesByKey, myEmails),
+    [messagesByKey, myEmails],
   );
 }
 
 export const useStreamForView = (view: StreamView, pinnedOnly = false): Stream => {
-  const messagesById = useMailStore((s) => s.messagesById);
+  const messagesByKey = useMailStore((s) => s.messagesByKey);
   const myEmails = useMailStore((s) => s.myEmails);
-  const snoozesByMessageId = useMailStore((s) => s.snoozesByMessageId);
+  const snoozesByKey = useMailStore((s) => s.snoozesByKey);
   const remindersById = useMailStore((s) => s.remindersById);
   const tripsById = useMailStore((s) => s.tripsById);
   const tripMembershipByKey = useMailStore((s) => s.tripMembershipByKey);
   return useMemo(
     () =>
       deriveStream(
-        messagesById,
+        messagesByKey,
         myEmails,
         view,
-        snoozesByMessageId,
+        snoozesByKey,
         pinnedOnly,
         remindersById,
         tripsById,
         tripMembershipByKey,
       ),
-    [messagesById, myEmails, view, snoozesByMessageId, pinnedOnly, remindersById, tripsById, tripMembershipByKey],
+    [messagesByKey, myEmails, view, snoozesByKey, pinnedOnly, remindersById, tripsById, tripMembershipByKey],
   );
 }
 

@@ -31,7 +31,7 @@ const PREVIEW_ID = "__move-rule-preview__";
 export const MoveRuleDialog = ({ target, thread, sender, onCancel, onConfirm }: MoveRuleDialogProps) => {
   const routeRules = useRouteRules();
   const customBundles = useCustomBundles();
-  const messages = useMailStore((st) => st.messagesById);
+  const messages = useMailStore((st) => st.messagesByKey);
 
   const initialType: RouteRuleType = sender.domain
     ? suggestRuleType(sender.domain)

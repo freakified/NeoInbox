@@ -1,8 +1,9 @@
+import type { MessageKey } from "../../shared/messageKey";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { clsx } from "clsx";
 import { pickIdentity, replyRecipients, type ComposeKind } from "../../shared/compose";
-import { resolveLiveMessageId } from "../../shared/liveMessage";
+import { liveTbId } from "../../shared/liveMessage";
 import type { RawMessage, Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
@@ -25,7 +26,7 @@ type ReplyKind = Exclude<ComposeKind, "new" | "draft">;
 type ReplyState =
   | { kind: ReplyKind; value: ComposerValue }
   /** Editing a draft saved in Thunderbird, which send or discard then replaces. */
-  | { kind: "draft"; draftId: number; value: ComposerValue };
+  | { kind: "draft"; draftKey: MessageKey; value: ComposerValue };
 
 /**
  * Unsent replies by thread, so closing a conversation (or switching away and
@@ -37,11 +38,11 @@ const unsentReplies = new Map<string, ReplyState>();
  * Drafts just sent from here. Thunderbird deletes them once the send lands;
  * until then they stay hidden instead of reappearing as a card.
  */
-const sentDraftIds = new Set<number>();
+const sentDraftKeys = new Set<MessageKey>();
 
 /** Whether the thread shows this draft as an editable card (see ThreadView). */
 export const isEditableDraft = (draft: RawMessage | undefined): draft is RawMessage =>
-  !!draft && !sentDraftIds.has(draft.id);
+  !!draft && !sentDraftKeys.has(draft.key);
 
 const KINDS: { kind: ReplyKind; label: string; icon: string }[] = [
   { kind: "replyAll", label: "Reply all", icon: "reply_all" },
@@ -136,7 +137,7 @@ const KindMenu = ({
 /** Reply-To lives only in the full headers, which the cached row doesn't keep. */
 const loadReplyTo = async (m: RawMessage): Promise<string | undefined> => {
   try {
-    const liveId = await resolveLiveMessageId(m);
+    const liveId = await liveTbId(m);
     if (liveId === null) return undefined;
     const full = await messenger.messages.getFull(liveId);
     return full.headers?.["reply-to"]?.[0];
@@ -260,7 +261,7 @@ export const InlineReply = ({
   /** What's kept for this thread, minus edits to a draft that has since gone. */
   const stored = (): ReplyState | null => {
     const st = unsentReplies.get(thread.id);
-    if (st?.kind === "draft" && st.draftId !== draft?.id) {
+    if (st?.kind === "draft" && st.draftKey !== draft?.key) {
       unsentReplies.delete(thread.id);
       return null;
     }
@@ -268,11 +269,11 @@ export const InlineReply = ({
   };
 
   const [state, setState] = useState<ReplyState | null>(stored);
-  const replyToRef = useRef<{ id: number; value: string | undefined } | null>(null);
+  const replyToRef = useRef<{ key: MessageKey; value: string | undefined } | null>(null);
 
   useEffect(() => {
     setState(stored());
-  }, [thread.id, draft?.id]);
+  }, [thread.id, draft?.key]);
 
   const update = (next: ReplyState | null) => {
     if (next) unsentReplies.set(thread.id, next);
@@ -287,12 +288,12 @@ export const InlineReply = ({
       return;
     }
     // Show the composer right away; Reply-To (when there is one) lands a beat later.
-    const cached = replyToRef.current?.id === replyTarget.id ? replyToRef.current : null;
+    const cached = replyToRef.current?.key === replyTarget.key ? replyToRef.current : null;
     const source = { ...replyTarget, replyTo: cached?.value };
     update({ kind, value: { ...value, ...replyRecipients(source, kind, myEmails) } });
     if (cached) return;
     const replyTo = await loadReplyTo(replyTarget);
-    replyToRef.current = { id: replyTarget.id, value: replyTo };
+    replyToRef.current = { key: replyTarget.key, value: replyTo };
     if (!replyTo) return;
     const latest = unsentReplies.get(thread.id);
     if (!latest || latest.kind !== kind) return;
@@ -314,13 +315,14 @@ export const InlineReply = ({
       notify("Couldn't open the draft");
       return;
     }
-    update({ kind: "draft", draftId: draft.id, value });
+    update({ kind: "draft", draftKey: draft.key, value });
   };
 
   const submit = async (state: ReplyState, send: boolean, identityId: string | undefined) => {
     const target = state.kind === "draft" ? draft : replyTarget;
-    const liveId = target ? await resolveLiveMessageId(target) : null;
-    if (liveId === null) {
+    // Checked here for a specific message; the background resolves it again.
+    const liveId = target ? await liveTbId(target) : null;
+    if (!target || liveId === null) {
       notify(
         state.kind === "draft"
           ? "Couldn't find the draft in Thunderbird"
@@ -333,7 +335,7 @@ export const InlineReply = ({
     composeMessage(
       {
         kind: state.kind,
-        messageId: liveId,
+        messageKey: target.key,
         identityId,
         to: state.value.to,
         cc: state.value.cc,
@@ -345,7 +347,7 @@ export const InlineReply = ({
         ? undefined
         : {
             threadId: thread.id,
-            knownIds: thread.messages.map((m) => m.id),
+            knownKeys: thread.messages.map((m) => m.key),
             author: identity
               ? identity.name
                 ? `${identity.name} <${identity.email}>`
@@ -356,7 +358,7 @@ export const InlineReply = ({
             ...body,
           },
     );
-    if (state.kind === "draft" && send) sentDraftIds.add(state.draftId);
+    if (state.kind === "draft" && send) sentDraftKeys.add(state.draftKey);
     update(null);
   };
 
@@ -364,7 +366,7 @@ export const InlineReply = ({
   const discardDraft = () => {
     if (!draft) return;
     update(null);
-    trashThread([draft.id]);
+    trashThread([draft.key]);
   };
 
   /** Moves the reply into the floating panel, which hands it back on close. */
@@ -383,7 +385,7 @@ export const InlineReply = ({
       },
       discard: (value) => {
         if (st.kind === "draft") {
-          trashThread([st.draftId]);
+          trashThread([st.draftKey]);
         } else if (!isComposerEmpty(value)) {
           notify("Reply discarded", [{ label: "Undo", run: () => popOut({ ...st, value }) }]);
         }

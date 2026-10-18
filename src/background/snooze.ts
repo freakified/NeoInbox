@@ -1,5 +1,6 @@
 import { db } from "../store/db";
 import { log } from "../shared/log";
+import type { MessageKey } from "../shared/messageKey";
 import type { RawMessage, SnoozeRecord } from "../shared/types";
 import {
   archiveFolderIdsForAccount,
@@ -24,67 +25,55 @@ import { broadcast } from "./port";
 
 const ALARM_PREFIX = "neoinbox-snooze-";
 
-interface SnoozeRecordWithHeader extends SnoozeRecord {
-  headerMessageId: string;
-}
-
-type FolderRef = { id?: string; accountId?: string };
-type HeaderWithFolder = messenger.messages.MessageHeader & {
-  folder?: FolderRef;
-  headerMessageId?: string;
-};
-
 type MessageListLike = { messages?: messenger.messages.MessageHeader[] };
 
-export const snoozeAlarmName = (messageId: number): string =>
-  `${ALARM_PREFIX}${messageId}`;
+export const snoozeAlarmName = (messageKey: MessageKey): string =>
+  `${ALARM_PREFIX}${messageKey}`;
 
-export const snoozeMessage = async (
-  messageId: number,
-  wakeAt: number,
-): Promise<{ removedId: number }> => {
-  const msg = (await messenger.messages.get(messageId)) as HeaderWithFolder;
-  const originFolderId = msg.folder?.id ?? "";
-  const originAccountId = msg.folder?.accountId ?? "";
-  const headerMessageId = msg.headerMessageId ?? "";
+/**
+ * Snoozing archives the message for real, but its inbox row stays cached
+ * under its inbox key, flagged snoozed, so Snoozed can list it and the wake
+ * knows what to put back.
+ */
+export const snoozeMessage = async (messageKey: MessageKey, wakeAt: number): Promise<void> => {
+  const row = await db.messages.get(messageKey);
+  if (!row) throw new Error("Snoozed message is not cached");
 
-  const record: SnoozeRecordWithHeader = {
-    messageId,
+  const record: SnoozeRecord = {
+    messageKey,
     wakeAt,
-    originFolderId,
-    originAccountId,
-    headerMessageId,
+    originFolderId: row.folderId,
+    originAccountId: row.accountId,
+    headerMessageId: row.headerMessageId,
   };
   await db.snoozes.put(record);
   invalidateSnoozeIndex();
-  await clearResurfaced(pinKeyOf({ headerMessageId, id: messageId }));
+  await clearResurfaced(pinKeyOf(row));
 
   try {
-    const archived = await doneMessage(messageId);
+    const archived = await doneMessage(messageKey);
     if (archived) {
-      record.archivedId = archived.id;
+      record.archivedTbId = archived.id;
       record.archivedFolderId = archived.folderId;
       await db.snoozes.put(record);
       invalidateSnoozeIndex();
     }
   } catch (e) {
     log.warn("snooze", "archive failed; rolling back snooze record", {
-      messageId,
+      messageKey,
       e: String(e),
     });
-    await db.snoozes.delete(messageId);
+    await db.snoozes.delete(messageKey);
     invalidateSnoozeIndex();
     throw e;
   }
 
-  await messenger.alarms.create(snoozeAlarmName(messageId), { when: wakeAt });
-
-  return { removedId: messageId };
+  await messenger.alarms.create(snoozeAlarmName(messageKey), { when: wakeAt });
 }
 
 export type WakeReason = "alarm" | "unsnooze" | "reply";
 
-const inFlightWakes = new Set<number>();
+const inFlightWakes = new Set<MessageKey>();
 
 /**
  * Bring a snoozed message back to the inbox: untag, move to its origin
@@ -94,16 +83,14 @@ const inFlightWakes = new Set<number>();
  * order because the new reply already carries the thread.
  */
 export const wakeSnoozedMessage = async (
-  originalId: number,
+  messageKey: MessageKey,
   reason: WakeReason,
 ): Promise<void> => {
-  if (inFlightWakes.has(originalId)) return;
-  inFlightWakes.add(originalId);
+  if (inFlightWakes.has(messageKey)) return;
+  inFlightWakes.add(messageKey);
   try {
-    await messenger.alarms.clear(snoozeAlarmName(originalId));
-    const record = (await db.snoozes.get(originalId)) as
-      | SnoozeRecordWithHeader
-      | undefined;
+    await messenger.alarms.clear(snoozeAlarmName(messageKey));
+    const record = await db.snoozes.get(messageKey);
     if (!record) return;
 
     const restored = await findSnoozedMessage(record);
@@ -126,39 +113,39 @@ export const wakeSnoozedMessage = async (
       }
     }
 
-    await db.snoozes.delete(originalId);
+    await db.snoozes.delete(messageKey);
     invalidateSnoozeIndex();
 
     if (!restoredHeader) {
-      await db.messages.delete(originalId);
-      broadcast({ type: "delta", removedIds: [originalId] });
+      await db.messages.delete(messageKey);
+      broadcast({ type: "delta", removedKeys: [messageKey] });
       return;
     }
 
     const raw = headerToRawMessage(restoredHeader, "inbox");
-    const body = await loadMessageBody(restoredHeader.id);
+    const body = await loadMessageBody(raw.tbId);
     applyClassification(raw, await classifyMessage(restoredHeader, body));
     if (reason === "alarm") await setResurfaced(pinKeyOf(raw), record.wakeAt, true);
     else if (reason === "unsnooze") await setResurfaced(pinKeyOf(raw), Date.now(), false);
     await applyLocalState(raw);
     await applyMessageDetails(raw, undefined, body);
-    if (originalId !== raw.id) {
-      await db.messages.delete(originalId);
-      broadcast({ type: "delta", removedIds: [originalId] });
+    // Back in its origin folder, the message normally gets its old key
+    // back and the put below simply replaces the snoozed row.
+    if (messageKey !== raw.key) {
+      await db.messages.delete(messageKey);
+      broadcast({ type: "delta", removedKeys: [messageKey] });
     }
     await removeCachedSnoozedCopies(raw);
     await db.messages.put(raw);
     broadcast({ type: "delta", added: [raw] });
   } finally {
-    inFlightWakes.delete(originalId);
+    inFlightWakes.delete(messageKey);
   }
 }
 
 export const handleSnoozeAlarm = async (alarmName: string): Promise<void> => {
   if (!alarmName.startsWith(ALARM_PREFIX)) return;
-  const originalId = parseInt(alarmName.slice(ALARM_PREFIX.length), 10);
-  if (isNaN(originalId)) return;
-  await wakeSnoozedMessage(originalId, "alarm");
+  await wakeSnoozedMessage(alarmName.slice(ALARM_PREFIX.length), "alarm");
 }
 
 const normalizeMid = (id: string | undefined): string =>
@@ -176,7 +163,7 @@ const messageIdChain = (m: RawMessage): string[] =>
 export const wakeSnoozesForNewMail = async (
   added: readonly RawMessage[],
 ): Promise<void> => {
-  const records = (await db.snoozes.toArray()) as SnoozeRecordWithHeader[];
+  const records = await db.snoozes.toArray();
   if (!records.length) return;
 
   const newIdsByAccount = new Map<string, Set<string>>();
@@ -191,36 +178,30 @@ export const wakeSnoozesForNewMail = async (
   for (const record of records) {
     const newIds = newIdsByAccount.get(record.originAccountId);
     if (!newIds) continue;
-    const cached = await db.messages.get(record.messageId);
+    const cached = await db.messages.get(record.messageKey);
     const recordIds = cached
       ? messageIdChain(cached)
       : [normalizeMid(record.headerMessageId)];
     if (!recordIds.some((id) => id && newIds.has(id))) continue;
     try {
-      await wakeSnoozedMessage(record.messageId, "reply");
+      await wakeSnoozedMessage(record.messageKey, "reply");
     } catch (e) {
       log.warn("snooze", "wake on reply failed", {
-        messageId: record.messageId,
+        messageKey: record.messageKey,
         e: String(e),
       });
     }
   }
 }
 
-const removeCachedSnoozedCopies = async (
-  raw: { id: number; headerMessageId: string },
-): Promise<void> => {
+const removeCachedSnoozedCopies = async (raw: RawMessage): Promise<void> => {
   if (!raw.headerMessageId) return;
-  const staleIds = (await db.messages.toArray())
-    .filter((m) =>
-      m.id !== raw.id &&
-      m.headerMessageId === raw.headerMessageId &&
-      m.snoozed
-    )
-    .map((m) => m.id);
-  if (!staleIds.length) return;
-  await db.messages.bulkDelete(staleIds);
-  broadcast({ type: "delta", removedIds: staleIds });
+  const staleKeys = (await db.messages.where("headerMessageId").equals(raw.headerMessageId).toArray())
+    .filter((m) => m.key !== raw.key && m.snoozed)
+    .map((m) => m.key);
+  if (!staleKeys.length) return;
+  await db.messages.bulkDelete(staleKeys);
+  broadcast({ type: "delta", removedKeys: staleKeys });
 }
 
 /**
@@ -228,23 +209,22 @@ const removeCachedSnoozedCopies = async (
  *
  * Snoozing records where it parked the message, so the common path is a single
  * `messages.get` on a known id, verified by Message-ID in case Thunderbird
- * remapped it. Only records written before that existed — or a snooze whose
- * destination couldn't be pinned down — fall back to searching, and even then
- * it's a folder-scoped query per archive folder, never an enumeration.
+ * remapped it (any restart does). Otherwise it searches — the recorded folder
+ * first, then each archive folder — by folder-scoped query, never enumeration.
  */
 const findSnoozedMessage = async (
-  record: SnoozeRecordWithHeader,
+  record: SnoozeRecord,
 ): Promise<messenger.messages.MessageHeader | undefined> => {
   const { headerMessageId } = record;
   if (!headerMessageId) return undefined;
 
-  if (record.archivedId !== undefined) {
+  if (record.archivedTbId !== undefined) {
     try {
-      const header = await messenger.messages.get(record.archivedId);
+      const header = await messenger.messages.get(record.archivedTbId);
       if (header.headerMessageId === headerMessageId) return header;
       log.debug("snooze", "recorded archive id points elsewhere; searching", {
-        messageId: record.messageId,
-        archivedId: record.archivedId,
+        messageKey: record.messageKey,
+        archivedTbId: record.archivedTbId,
       });
     } catch {
       /* id no longer resolves; fall through to the search */

@@ -1,15 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { createPortal } from "react-dom";
+import { liveTbId } from "../../shared/liveMessage";
 import { log } from "../../shared/log";
 import type { AttachmentSummary, RawMessage } from "../../shared/types";
 import { Icon } from "./Icon";
 import s from "./MessageAttachments.module.css";
 
 export interface AttachmentRef {
-  messageId: number;
+  message: RawMessage;
   attachment: AttachmentSummary;
 }
+
+/** The attachment's bytes, fetched through the message's verified live id. */
+const attachmentFile = async (ref: AttachmentRef): Promise<File> => {
+  const tbId = await liveTbId(ref.message);
+  if (tbId === null) throw new Error("The message is gone");
+  return messenger.messages.getAttachmentFile(tbId, ref.attachment.partName);
+};
 
 export const collectAttachments = (
   messages: readonly RawMessage[],
@@ -19,10 +27,10 @@ export const collectAttachments = (
   const newestFirst = [...messages].sort((a, b) => b.date - a.date);
   for (const m of newestFirst) {
     for (const a of m.attachments ?? []) {
-      const key = `${m.id}:${a.partName}`;
+      const key = `${m.key}:${a.partName}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      refs.push({ messageId: m.id, attachment: a });
+      refs.push({ message: m, attachment: a });
     }
   }
   return refs;
@@ -76,7 +84,7 @@ const colorForType = (contentType: string): string => {
 };
 
 const attachmentKey = (ref: AttachmentRef): string =>
-  `${ref.messageId}:${ref.attachment.partName}`;
+  `${ref.message.key}:${ref.attachment.partName}`;
 
 const isImageAttachment = (ref: AttachmentRef): boolean =>
   ref.attachment.contentType.toLowerCase().startsWith("image/");
@@ -160,8 +168,7 @@ export const MessageAttachments = ({
       const key = attachmentKey(ref);
       if (objectUrls[key]) continue;
 
-      void messenger.messages
-        .getAttachmentFile(ref.messageId, ref.attachment.partName)
+      void attachmentFile(ref)
         .then((file) => {
           if (cancelled) return;
           const url = URL.createObjectURL(file);
@@ -191,10 +198,7 @@ export const MessageAttachments = ({
     if (existing) return existing;
 
     try {
-      const file = await messenger.messages.getAttachmentFile(
-        ref.messageId,
-        ref.attachment.partName,
-      );
+      const file = await attachmentFile(ref);
       const loadedWhileFetching = urlsRef.current[key];
       if (loadedWhileFetching) return loadedWhileFetching;
 
@@ -261,10 +265,7 @@ export const MessageAttachments = ({
     setBusy(key);
     let url: string | null = null;
     try {
-      const file = await messenger.messages.getAttachmentFile(
-        ref.messageId,
-        a.partName,
-      );
+      const file = await attachmentFile(ref);
       url = URL.createObjectURL(file);
       window.open(url, "_blank");
     } catch (e) {

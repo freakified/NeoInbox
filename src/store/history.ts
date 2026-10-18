@@ -54,18 +54,17 @@ export const loadHistoryPage = async (
 export const loadTripMembers = async (
   memberships: readonly TripMembershipRecord[],
 ): Promise<RawMessage[]> => {
-  const headerIds: string[] = [];
-  const ids: number[] = [];
-  for (const m of memberships) {
-    if (!m.tripId) continue;
-    if (m.key.startsWith("msgid:")) ids.push(Number(m.key.slice("msgid:".length)));
-    else headerIds.push(m.key);
-  }
-  const [byHeader, byId] = await Promise.all([
-    headerIds.length ? db.messages.where("headerMessageId").anyOf(headerIds).toArray() : [],
-    ids.length ? db.messages.bulkGet(ids) : ([] as (RawMessage | undefined)[]),
+  // Membership keys are pinKeyOf: a Message-ID, or a row key for the odd
+  // message without one. Look them up both ways.
+  const keys = memberships.filter((m) => m.tripId).map((m) => m.key);
+  if (!keys.length) return [];
+  const [byHeader, byKey] = await Promise.all([
+    db.messages.where("headerMessageId").anyOf(keys).toArray(),
+    db.messages.bulkGet(keys),
   ]);
-  return [...byHeader, ...byId.filter((m): m is RawMessage => !!m)];
+  const rows = new Map<string, RawMessage>();
+  for (const m of [...byHeader, ...byKey]) if (m) rows.set(m.key, m);
+  return [...rows.values()];
 };
 
 /** Everything the SPA starts with: see the comment on HISTORY_PAGE. */

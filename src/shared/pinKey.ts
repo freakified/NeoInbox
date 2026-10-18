@@ -1,7 +1,7 @@
 /**
- * Stable identity for NeoInbox-local per-message state. The Message-ID
- * header survives folder moves and Thunderbird's id renumbering; messages
- * without one fall back to the numeric id.
+ * Stable identity for NeoInbox-local per-message state (pins, resurfacing,
+ * trip membership): the Message-ID header, which survives folder moves where
+ * the row key does not. Messages without one fall back to the row key.
  */
-export const pinKeyOf = (m: { headerMessageId: string; id: number }): string =>
-  m.headerMessageId || `msgid:${m.id}`;
+export const pinKeyOf = (m: { headerMessageId: string; key: string }): string =>
+  m.headerMessageId || m.key;

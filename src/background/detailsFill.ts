@@ -12,8 +12,37 @@ import {
 import { broadcast } from "./port";
 import { BATCH_FLUSH, DETAILS_FILL_LIMIT, withTimeout } from "./scanQueue";
 import { db } from "../store/db";
+import { liveTbId } from "../shared/liveMessage";
 import { log } from "../shared/log";
+import type { MessageKey } from "../shared/messageKey";
 import type { RawMessage } from "../shared/types";
+
+/** Fetches a row's details from its live copy and writes them back. */
+const hydrateRow = async (row: RawMessage, label: string): Promise<RawMessage | null> => {
+  const tbId = await liveTbId(row);
+  if (tbId === null) return null;
+  const details = await withTimeout(
+    // Only inbox rows keep an attachment list (see the write below), so
+    // everything else skips that call rather than fetching and dropping it.
+    extractMessageDetails(tbId, { attachments: row.origin === "inbox" }),
+    `${label} ${row.key}`,
+  );
+  return db.transaction("rw", db.messages, async () => {
+    const fresh = await db.messages.get(row.key);
+    if (!fresh) return null;
+    const next: RawMessage = {
+      ...fresh,
+      tbId,
+      attachments: fresh.origin === "inbox" ? details.attachments : [],
+      references: details.references,
+      inReplyTo: details.inReplyTo,
+      snippet: details.snippet,
+      detailsVersion: MESSAGE_DETAILS_VERSION,
+    };
+    await db.messages.put(next);
+    return next;
+  });
+};
 
 let fillingDetails = false;
 
@@ -43,33 +72,14 @@ export const fillMissingDetails = async (limit = DETAILS_FILL_LIMIT): Promise<vo
     };
     for (const msg of pending) {
       try {
-        const details = await withTimeout(
-          // Only inbox rows keep an attachment list (see the write below), so
-          // everything else skips that call rather than fetching and dropping it.
-          extractMessageDetails(msg.id, { attachments: msg.origin === "inbox" }),
-          `details for message ${msg.id}`,
-        );
-        const row = await db.transaction("rw", db.messages, async () => {
-          const fresh = await db.messages.get(msg.id);
-          if (!fresh) return null;
-          const next: RawMessage = {
-            ...fresh,
-            attachments: fresh.origin === "inbox" ? details.attachments : [],
-            references: details.references,
-            inReplyTo: details.inReplyTo,
-            snippet: details.snippet,
-            detailsVersion: MESSAGE_DETAILS_VERSION,
-          };
-          await db.messages.put(next);
-          return next;
-        });
+        const row = await hydrateRow(msg, "details for");
         if (row) {
           updated.push(row);
           if (updated.length >= BATCH_FLUSH) flushUpdated();
         }
       } catch (e) {
         log.debug("backfill", "details hydration skipped a message", {
-          id: msg.id,
+          key: msg.key,
           e: String(e),
         });
       }
@@ -87,34 +97,17 @@ export const fillMissingDetails = async (limit = DETAILS_FILL_LIMIT): Promise<vo
  * headers alone, and the SPA calls this for the messages in a conversation as
  * it opens. Rows already hydrated cost nothing, so the SPA can call it freely.
  */
-export const hydrateDetails = async (messageIds: readonly number[]): Promise<void> => {
+export const hydrateDetails = async (messageKeys: readonly MessageKey[]): Promise<void> => {
   const updated: RawMessage[] = [];
-  for (const id of messageIds) {
-    const cached = await db.messages.get(id);
+  for (const key of messageKeys) {
+    const cached = await db.messages.get(key);
     if (!cached) continue;
     if ((cached.detailsVersion ?? 0) >= MESSAGE_DETAILS_VERSION) continue;
     try {
-      const details = await withTimeout(
-        extractMessageDetails(id, { attachments: cached.origin === "inbox" }),
-        `on-demand details for message ${id}`,
-      );
-      const row = await db.transaction("rw", db.messages, async () => {
-        const fresh = await db.messages.get(id);
-        if (!fresh) return null;
-        const next: RawMessage = {
-          ...fresh,
-          attachments: fresh.origin === "inbox" ? details.attachments : [],
-          references: details.references,
-          inReplyTo: details.inReplyTo,
-          snippet: details.snippet,
-          detailsVersion: MESSAGE_DETAILS_VERSION,
-        };
-        await db.messages.put(next);
-        return next;
-      });
+      const row = await hydrateRow(cached, "on-demand details for");
       if (row) updated.push(row);
     } catch (e) {
-      log.debug("backfill", "on-demand details fetch failed", { id, e: String(e) });
+      log.debug("backfill", "on-demand details fetch failed", { key, e: String(e) });
     }
   }
   if (updated.length) broadcast({ type: "delta", updated });

@@ -11,9 +11,9 @@ import {
   doneMessage,
   getLiveHeader,
   loadMessageBody,
+  opTbId,
   pinMessage,
   trashMessage,
-  verifiedOpId,
 } from "./ingest";
 import type { ArchivedCopy } from "./archiveFolders";
 import { applyClassification, carryClassification } from "../classifier/version";
@@ -24,9 +24,11 @@ import { hydrateDetails } from "./detailsFill";
 import { getLastProgress, serialized } from "./scanQueue";
 import { scanActive } from "./scanGuard";
 import { runCompose } from "./compose";
+import { cancelArchiveImport, getArchiveImportStatus, runArchiveImport } from "./archiveImport";
 import { cancelTripScan, getTripScanStatus, runTripScan, writeTrips } from "./extract";
 import { pushMyEmails } from "./sync";
 import { applyLocalState, clearResurfaced } from "./localState";
+import { messageKeyOf, type MessageKey } from "../shared/messageKey";
 import { pinKeyOf } from "../shared/pinKey";
 import { broadcast } from "./port";
 import { invalidateRouteRules } from "../classifier/routeRules";
@@ -44,16 +46,13 @@ import type { RawMessage, RouteRuleRecord } from "../shared/types";
 const reclassifyMessages = async (cached: RawMessage[]): Promise<{ scanned: number; moved: number }> => {
   const updated: RawMessage[] = [];
   const readded: RawMessage[] = [];
-  const removedIds: number[] = [];
+  const removedKeys: MessageKey[] = [];
   let moved = 0;
   for (const cmsg of cached) {
     try {
-      // Cached ids go stale when Thunderbird remaps them (moves, compaction, a
-      // rebuilt folder database). Resolve by Message-ID rather than letting the
-      // row fail with "Message not found" and silently keep its old category.
       const header = await getLiveHeader(cmsg);
       if (!header) {
-        log.debug("reclassify", "message no longer resolvable; skipped", { id: cmsg.id });
+        log.debug("reclassify", "message no longer resolvable; skipped", { key: cmsg.key });
         continue;
       }
       const raw = headerToRawMessage(header, "inbox");
@@ -61,23 +60,24 @@ const reclassifyMessages = async (cached: RawMessage[]): Promise<{ scanned: numb
       applyClassification(raw, await classifyMessage(header, body));
       await applyLocalState(raw);
       await applyMessageDetails(raw, cmsg, body);
-      if (raw.id === cmsg.id) {
+      // The live copy can sit in another folder than the row said.
+      if (raw.key === cmsg.key) {
         updated.push(raw);
       } else {
-        await db.messages.delete(cmsg.id);
-        removedIds.push(cmsg.id);
+        await db.messages.delete(cmsg.key);
+        removedKeys.push(cmsg.key);
         readded.push(raw);
       }
       await db.messages.put(raw);
       if ((raw.category ?? null) !== (cmsg.category ?? null)) moved++;
     } catch (e) {
-      log.warn("reclassify", "failed", { id: cmsg.id, e });
+      log.warn("reclassify", "failed", { key: cmsg.key, e });
     }
   }
-  // One combined delta: re-keyed rows must land before the old id is dropped
+  // One combined delta: re-keyed rows must land before the old key is dropped
   // or the row would blink out of the stream in between.
-  if (updated.length || readded.length || removedIds.length) {
-    broadcast({ type: "delta", updated, added: readded, removedIds });
+  if (updated.length || readded.length || removedKeys.length) {
+    broadcast({ type: "delta", updated, added: readded, removedKeys });
   }
   return { scanned: cached.length, moved };
 }
@@ -119,6 +119,8 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
       if (last) broadcast(last);
       const tripScan = await getTripScanStatus();
       if (tripScan) broadcast({ type: "trip-scan-progress", ...tripScan });
+      const archiveImport = await getArchiveImportStatus();
+      if (archiveImport) broadcast({ type: "archive-import-progress", ...archiveImport });
       return;
     }
     case "trip-scan": {
@@ -129,12 +131,20 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
       cancelTripScan();
       return;
     }
+    case "archive-import": {
+      void runArchiveImport(msg.since);
+      return;
+    }
+    case "archive-import-cancel": {
+      cancelArchiveImport();
+      return;
+    }
     case "retry-backfill": {
       void runBackfill().catch((e) => log.warn("backfill", "retry failed", e));
       return;
     }
     case "hydrate-details": {
-      await hydrateDetails(msg.messageIds);
+      await hydrateDetails(msg.messageKeys);
       return;
     }
     case "load-more-inbox": {
@@ -145,33 +155,31 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
     }
     case "pin": {
       try {
-        await pinMessage(msg.messageId, msg.pinned);
+        await pinMessage(msg.messageKey, msg.pinned);
       } catch (e) {
         // Fall through to the echo below: it rebroadcasts the message's real
         // state, which reverts the UI's optimistic pin instead of stranding it.
-        log.warn("command", "pin failed", { id: msg.messageId, e: String(e) });
+        log.warn("command", "pin failed", { key: msg.messageKey, e: String(e) });
       }
-      const header = await messenger.messages.get(msg.messageId);
-      const cached = await db.messages.get(msg.messageId);
-      const raw = headerToRawMessage(header, cached?.origin ?? "inbox");
-      carryClassification(raw, cached);
-      await applyLocalState(raw);
-      await applyMessageDetails(raw, cached);
+      // Pins are local state, so the cached row is all there is to refresh.
+      const cached = await db.messages.get(msg.messageKey);
+      if (!cached) return;
+      const raw = await applyLocalState({ ...cached });
       await db.messages.put(raw);
       broadcast({ type: "delta", updated: [raw] });
       return;
     }
     case "done": {
-      const cached = await db.messages.get(msg.messageId);
+      const cached = await db.messages.get(msg.messageKey);
       let archived: ArchivedCopy | null = null;
       try {
-        archived = await doneMessage(msg.messageId);
+        archived = await doneMessage(msg.messageKey);
       } catch (e) {
-        log.warn("command", "done failed", { id: msg.messageId, e: String(e) });
+        log.warn("command", "done failed", { key: msg.messageKey, e: String(e) });
         broadcast({
           type: "command-failed",
           command: "done",
-          messageId: msg.messageId,
+          messageKey: msg.messageKey,
           reason: String((e as Error)?.message ?? e),
         });
         return;
@@ -182,42 +190,34 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
       // out of the archive folder.
       if (cached) {
         await clearResurfaced(pinKeyOf(cached));
-        const row: RawMessage = {
-          ...cached,
-          origin: "done",
-          ...(archived ? { id: archived.id, folderId: archived.folderId } : {}),
-        };
+        const row: RawMessage = { ...cached, origin: "done" };
+        if (archived) {
+          row.tbId = archived.id;
+          row.folderId = archived.folderId;
+          row.key = messageKeyOf(row);
+        }
         await applyLocalState(row);
-        if (archived && archived.id !== cached.id) {
-          await db.messages.delete(cached.id);
+        if (row.key !== cached.key) {
+          await db.messages.delete(cached.key);
           await db.messages.put(row);
-          broadcast({ type: "delta", removedIds: [cached.id], added: [row] });
+          broadcast({ type: "delta", removedKeys: [cached.key], added: [row] });
         } else {
           await db.messages.put(row);
           broadcast({ type: "delta", updated: [row] });
         }
-        return;
       }
-      await db.messages.delete(msg.messageId);
-      broadcast({ type: "delta", removedIds: [msg.messageId] });
       return;
     }
     case "move-to-inbox": {
-      const cached = await db.messages.get(msg.messageId);
+      const cached = await db.messages.get(msg.messageKey);
       let movedHeader: messenger.messages.MessageHeader | undefined;
-      let opId = msg.messageId;
+      let opId: number | null = null;
       try {
-        // Done rows are the most stale-prone ids in the cache; never move an
+        // Done rows hold the oldest ids in the cache; never move an
         // unverified one (it could be a different message entirely).
-        const verified = await verifiedOpId(msg.messageId);
-        if (verified === null) throw new Error("Message no longer exists");
-        opId = verified;
-        const accountId =
-          cached?.accountId ??
-          ((await messenger.messages.get(opId)) as messenger.messages.MessageHeader & {
-            folder?: { accountId?: string };
-          }).folder?.accountId ??
-          "";
+        opId = cached ? await opTbId(msg.messageKey) : null;
+        if (!cached || opId === null) throw new Error("Message no longer exists");
+        const accountId = cached.accountId;
         const target = (await collectInboxFolders()).find((f) => f.accountId === accountId);
         if (!target) throw new Error("No inbox folder found for this account");
         const moved = (await messenger.messages.move(
@@ -226,11 +226,11 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
         )) as { messages?: messenger.messages.MessageHeader[] } | undefined;
         movedHeader = moved?.messages?.[0];
       } catch (e) {
-        log.warn("command", "move-to-inbox failed", { id: msg.messageId, e: String(e) });
+        log.warn("command", "move-to-inbox failed", { key: msg.messageKey, e: String(e) });
         broadcast({
           type: "command-failed",
           command: "move-to-inbox",
-          messageId: msg.messageId,
+          messageKey: msg.messageKey,
           reason: String((e as Error)?.message ?? e),
         });
         return;
@@ -241,72 +241,65 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
         carryClassification(raw, cached);
         await applyLocalState(raw);
         await applyMessageDetails(raw, cached);
-        if (raw.id !== msg.messageId) {
-          await db.messages.delete(msg.messageId);
-          broadcast({ type: "delta", removedIds: [msg.messageId] });
+        if (raw.key !== msg.messageKey) {
+          await db.messages.delete(msg.messageKey);
+          broadcast({ type: "delta", removedKeys: [msg.messageKey] });
         }
         await db.messages.put(raw);
         broadcast({ type: "delta", added: [raw] });
       } catch {
-        /* The move may have assigned a new message id; onMoved/backfill will cache it. */
+        /* The moved copy isn't readable yet; onMoved/backfill will cache it. */
       }
       return;
     }
     case "trash": {
       try {
-        await trashMessage(msg.messageId);
+        await trashMessage(msg.messageKey);
       } catch (e) {
-        log.warn("command", "trash failed", { id: msg.messageId, e: String(e) });
+        log.warn("command", "trash failed", { key: msg.messageKey, e: String(e) });
         broadcast({
           type: "command-failed",
           command: "trash",
-          messageId: msg.messageId,
+          messageKey: msg.messageKey,
           reason: String((e as Error)?.message ?? e),
         });
         return;
       }
-      await db.messages.delete(msg.messageId);
-      broadcast({ type: "delta", removedIds: [msg.messageId] });
+      await db.messages.delete(msg.messageKey);
+      broadcast({ type: "delta", removedKeys: [msg.messageKey] });
       return;
     }
     case "snooze": {
-      let removedId: number;
-      const cached = await db.messages.get(msg.messageId);
+      const cached = await db.messages.get(msg.messageKey);
       try {
-        ({ removedId } = await snoozeMessage(msg.messageId, msg.wakeAt));
+        await snoozeMessage(msg.messageKey, msg.wakeAt);
       } catch (e) {
-        log.warn("command", "snooze failed", { id: msg.messageId, e: String(e) });
+        log.warn("command", "snooze failed", { key: msg.messageKey, e: String(e) });
         broadcast({
           type: "command-failed",
           command: "snooze",
-          messageId: msg.messageId,
+          messageKey: msg.messageKey,
           reason: String((e as Error)?.message ?? e),
         });
         return;
       }
+      // snoozeMessage refuses uncached rows, so this always has one.
       if (cached) {
-        const raw = {
-          ...cached,
-          snoozed: true,
-          origin: "inbox" as const,
-        };
+        const raw = { ...cached, snoozed: true, origin: "inbox" as const };
         await db.messages.put(raw);
         broadcast({ type: "delta", updated: [raw] });
-      } else {
-        await db.messages.delete(removedId);
-        broadcast({ type: "delta", removedIds: [removedId] });
       }
       return;
     }
     case "unsnooze": {
       try {
-        await wakeSnoozedMessage(msg.messageId, "unsnooze");
+        await wakeSnoozedMessage(msg.messageKey, "unsnooze");
       } catch (e) {
-        log.warn("command", "unsnooze failed", { id: msg.messageId, e: String(e) });
+        log.warn("command", "unsnooze failed", { key: msg.messageKey, e: String(e) });
         broadcast({
           type: "command-failed",
           command: "unsnooze",
-          messageId: msg.messageId,
+          messageKey: msg.messageKey,
           reason: String((e as Error)?.message ?? e),
         });
       }
@@ -353,9 +346,9 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
     }
     case "reclassify": {
       invalidateRouteRules();
-      const wanted = msg.messageIds ? new Set(msg.messageIds) : null;
+      const wanted = msg.messageKeys ? new Set(msg.messageKeys) : null;
       const cached = (await db.messages.toArray()).filter(
-        (m) => m.origin === "inbox" && (!wanted || wanted.has(m.id)),
+        (m) => m.origin === "inbox" && (!wanted || wanted.has(m.key)),
       );
       const result = await reclassifyMessages(cached);
       broadcast({ type: "reclassify-done", ...result });
@@ -375,19 +368,6 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
     case "write-trips": {
       const { type: _type, ...change } = msg;
       await writeTrips(change);
-      return;
-    }
-    case "heal-message": {
-      // The SPA has already re-keyed its own copy; this mirrors it in the
-      // cache. A snoozed row is keyed by its snooze record, so it stays put.
-      await db.transaction("rw", db.messages, async () => {
-        const stale = await db.messages.get(msg.staleId);
-        if (!stale || stale.snoozed) return;
-        await db.messages.delete(msg.staleId);
-        if (!(await db.messages.get(msg.liveId))) {
-          await db.messages.put({ ...stale, id: msg.liveId });
-        }
-      });
       return;
     }
   }

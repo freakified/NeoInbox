@@ -97,16 +97,16 @@ const reminderDateForView = (
 };
 
 export const deriveStream = (
-  messagesById: Record<number, RawMessage>,
+  messagesByKey: Record<string, RawMessage>,
   myEmails: ReadonlySet<string>,
   view: StreamView = { type: "inbox" },
-  snoozesByMessageId: Record<number, SnoozeRecord> = {},
+  snoozesByKey: Record<string, SnoozeRecord> = {},
   pinnedOnly = false,
   remindersById: Record<string, ReminderRecord> = {},
   tripsById: Record<string, TripRecord> = {},
   tripMembershipByKey: Record<string, TripMembershipRecord> = {},
 ): Stream => {
-  const allMessages = Object.values(messagesById);
+  const allMessages = Object.values(messagesByKey);
   const anchorOrigins: ReadonlySet<MessageOrigin> = new Set(
     view.type === "sent"
       ? ["sent"]
@@ -150,7 +150,7 @@ export const deriveStream = (
     threads = threads
       .map((thread) => {
         const dueAt = thread.messages
-          .map((m) => snoozesByMessageId[m.id]?.wakeAt)
+          .map((m) => snoozesByKey[m.key]?.wakeAt)
           .filter((wakeAt): wakeAt is number => typeof wakeAt === "number")
           .sort((a, b) => a - b)[0];
         return dueAt ? { ...thread, latestDate: dueAt, snoozeDueAt: dueAt } : thread;

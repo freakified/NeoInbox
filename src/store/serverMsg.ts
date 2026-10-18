@@ -17,14 +17,14 @@ const loadMissingTripMembers = async (
   get: StoreGet,
   memberships: readonly TripMembershipRecord[],
 ): Promise<void> => {
-  const loaded = new Set(Object.values(get().messagesById).map(pinKeyOf));
+  const loaded = new Set(Object.values(get().messagesByKey).map(pinKeyOf));
   const missing = memberships.filter((m) => m.tripId && !loaded.has(m.key));
   if (!missing.length) return;
   const rows = await loadTripMembers(missing);
   if (!rows.length) return;
-  const map = { ...get().messagesById };
-  for (const m of rows) map[m.id] ??= m;
-  set({ messagesById: map });
+  const map = { ...get().messagesByKey };
+  for (const m of rows) map[m.key] ??= m;
+  set({ messagesByKey: map });
 };
 
 export const applyServerMsg = (
@@ -60,25 +60,25 @@ export const applyServerMsg = (
       // still buffered for that message rather than be overwritten by it.
       flushDelta(set, get);
       const pending = { ...get().pendingOps };
-      const op = pending[msg.messageId];
-      const map = { ...get().messagesById };
+      const op = pending[msg.messageKey];
+      const map = { ...get().messagesByKey };
       if (op) {
-        map[msg.messageId] = op.message;
-        delete pending[msg.messageId];
+        map[msg.messageKey] = op.message;
+        delete pending[msg.messageKey];
       }
       const wakeAt = op?.kind === "snooze" ? op.wakeAt : undefined;
-      const snoozesByMessageId = { ...get().snoozesByMessageId };
-      if (msg.command === "snooze") delete snoozesByMessageId[msg.messageId];
+      const snoozesByKey = { ...get().snoozesByKey };
+      if (msg.command === "snooze") delete snoozesByKey[msg.messageKey];
       if (msg.command === "unsnooze" && op?.kind === "unsnooze" && op.snooze) {
-        snoozesByMessageId[msg.messageId] = op.snooze;
+        snoozesByKey[msg.messageKey] = op.snooze;
       }
       const toast: ToastRecord = {
         id: nextToastId(),
         message: `${failureLabel(msg.command)} — ${msg.reason}`,
-        retry: { kind: msg.command, messageId: msg.messageId, wakeAt },
+        retry: { kind: msg.command, messageKey: msg.messageKey, wakeAt },
       };
       const toasts = [...get().toasts, toast].slice(-TOAST_LIMIT);
-      set({ messagesById: map, pendingOps: pending, snoozesByMessageId, toasts });
+      set({ messagesByKey: map, pendingOps: pending, snoozesByKey, toasts });
       log.warn("store", "command failed", msg);
       return;
     }
@@ -132,6 +132,23 @@ export const applyServerMsg = (
           : status.cancelled
             ? `Stopped looking for trips after ${status.processed.toLocaleString()} messages`
             : `Trip scan done — ${(status.trips ?? 0).toLocaleString()} ${status.trips === 1 ? "trip" : "trips"}`;
+        set({ toasts: [...get().toasts, { id: nextToastId(), message }].slice(-TOAST_LIMIT) });
+      }
+      return;
+    }
+    case "archive-import-progress": {
+      const { type: _type, ...status } = msg;
+      const wasRunning = get().archiveImport?.running;
+      set({ archiveImport: status });
+      if (wasRunning && !status.running) {
+        const count = `${status.imported.toLocaleString()} ${status.imported === 1 ? "message" : "messages"}`;
+        const message = status.error
+          ? "Couldn't finish importing archived mail"
+          : status.cancelled
+            ? `Stopped importing archived mail after ${count}`
+            : status.imported === 0
+              ? "Nothing new to import from your archive"
+              : `Imported ${count} from your archive`;
         set({ toasts: [...get().toasts, { id: nextToastId(), message }].slice(-TOAST_LIMIT) });
       }
       return;

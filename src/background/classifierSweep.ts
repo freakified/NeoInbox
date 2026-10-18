@@ -138,13 +138,12 @@ export const runClassifierVersionSweep = async (): Promise<{
       let resolveBudget = VERSION_SWEEP_RESOLVE_BUDGET;
       let deferred = 0;
       let retired = 0;
-      const removedIds: number[] = [];
       for (const msg of chunk) {
         scanned++;
         try {
           const header = await withTimeout(
             liveHeaderWithinBudget(msg, () => resolveBudget > 0 && resolveBudget-- > 0),
-            `version sweep message ${msg.id}`,
+            `version sweep message ${msg.key}`,
           );
           if (header === OVER_BUDGET) {
             // Left outdated on purpose: it comes back on a later pass rather
@@ -160,34 +159,30 @@ export const runClassifierVersionSweep = async (): Promise<{
           const result = header
             ? await classifyMessage(header)
             : { category: msg.category, incomplete: msg.classifiedIncomplete ?? false };
-          const liveId = header?.id ?? msg.id;
           const row = await db.transaction("rw", db.messages, async () => {
-            const fresh = await db.messages.get(msg.id);
+            const fresh = await db.messages.get(msg.key);
             if (!fresh) return null;
-            const next: RawMessage = { ...fresh, id: liveId };
+            // Keep the id the search found, so it is spent once rather than
+            // again on every later touch of this row this session.
+            const next: RawMessage = { ...fresh, tbId: header?.id ?? fresh.tbId };
             applyClassification(next, result);
-            // Re-key when the id had drifted, so the search that found it is
-            // spent once rather than again on every later touch of this row.
-            if (liveId !== msg.id) await db.messages.delete(msg.id);
             await db.messages.put(next);
             return next;
           });
           if (row) {
             retired++;
-            if (row.id !== msg.id) removedIds.push(msg.id);
             if ((row.category ?? null) !== (msg.category ?? null)) moved++;
             updated.push(row);
             if (updated.length >= BATCH_FLUSH) flushUpdated();
           }
         } catch (e) {
           log.debug("backfill", "version sweep skipped a message", {
-            id: msg.id,
+            key: msg.key,
             e: String(e),
           });
         }
       }
       flushUpdated();
-      if (removedIds.length) broadcast({ type: "delta", removedIds });
       if (deferred) {
         log.info(
           "backfill",
@@ -285,7 +280,7 @@ export const retryIncompleteClassifications = async (limit = DETAILS_FILL_LIMIT)
       try {
         const header = await withTimeout(
           getLiveHeader(msg),
-          `retry classify message ${msg.id}`,
+          `retry classify message ${msg.key}`,
         );
         if (!header) {
           stillIncomplete++;
@@ -297,10 +292,11 @@ export const retryIncompleteClassifications = async (limit = DETAILS_FILL_LIMIT)
           continue;
         }
         const row = await db.transaction("rw", db.messages, async () => {
-          const fresh = await db.messages.get(msg.id);
+          const fresh = await db.messages.get(msg.key);
           if (!fresh) return null;
           const next: RawMessage = {
             ...fresh,
+            tbId: header.id,
             category,
             classifiedIncomplete: false,
             classifierVersion: CLASSIFIER_VERSION,
@@ -315,7 +311,7 @@ export const retryIncompleteClassifications = async (limit = DETAILS_FILL_LIMIT)
       } catch (e) {
         stillIncomplete++;
         log.debug("backfill", "classification retry skipped a message", {
-          id: msg.id,
+          key: msg.key,
           e: String(e),
         });
       }
@@ -344,7 +340,7 @@ export const reclassifyAll = (): Promise<{ scanned: number; updated: number }> =
 
       const flush = async (): Promise<void> => {
         if (!batch.length) return;
-        const rows = batch.filter((m) => !wasRemovedDuringScan(m.id));
+        const rows = batch.filter((m) => !wasRemovedDuringScan(m.key));
         batch = [];
         if (!rows.length) return;
         await db.messages.bulkPut(rows);
@@ -357,7 +353,7 @@ export const reclassifyAll = (): Promise<{ scanned: number; updated: number }> =
         try {
           const header = await withTimeout(
             getLiveHeader(cachedMsg),
-            `reclassify message ${cachedMsg.id}`,
+            `reclassify message ${cachedMsg.key}`,
           );
           if (!header) continue;
           const body = await loadMessageBody(header.id);
@@ -367,11 +363,17 @@ export const reclassifyAll = (): Promise<{ scanned: number; updated: number }> =
           applyClassification(raw, result);
           await applyLocalState(raw);
           await applyMessageDetails(raw, cachedMsg, body);
+          // The live copy sits in another folder than the row said: that
+          // row is the new copy's now.
+          if (raw.key !== cachedMsg.key) {
+            await db.messages.delete(cachedMsg.key);
+            broadcast({ type: "delta", removedKeys: [cachedMsg.key] });
+          }
           batch.push(raw);
           if (batch.length >= BATCH_FLUSH) await flush();
         } catch (e) {
           log.warn("reclassify", "skipping message after per-message failure", {
-            id: cachedMsg.id,
+            key: cachedMsg.key,
             e: String(e),
           });
         }

@@ -1,11 +1,12 @@
 import { classify } from "../classifier/pipeline";
 import type { ClassificationResult } from "../classifier/version";
 import { extractFeatures } from "../classifier/features";
-import { resolveLiveMessageId } from "../shared/liveMessage";
+import { liveTbId } from "../shared/liveMessage";
 import { log } from "../shared/log";
 import { pinKeyOf } from "../shared/pinKey";
 import { scanCidRefs } from "../spa/lib/srcdoc";
 import { db } from "../store/db";
+import type { MessageKey } from "../shared/messageKey";
 import type { AttachmentSummary, RawMessage } from "../shared/types";
 import {
   type ArchivedCopy,
@@ -40,22 +41,14 @@ const isMessageNotFound = (e: unknown): boolean =>
   String((e as Error)?.message ?? e).includes("Message not found");
 
 /**
- * Destructive ops must never run on an unverified id: a cached row's numeric
- * id can go stale (archived rows are never rescanned) and end up referring to
- * an unrelated message, which the op would then archive/trash/move instead.
- * Returns the id verified to be the cached row's message, or null when the
- * message no longer exists. A stale cache row is dropped here; follow-up
- * flows re-cache the message under its live id.
+ * The Thunderbird id to act on for a cached row, verified by Message-ID
+ * (liveTbId), or null when the row is unknown or its message is gone.
+ * Destructive ops must never run on the row's unverified hint: a stale one
+ * names an unrelated message, which the op would archive/trash instead.
  */
-export const verifiedOpId = async (id: number): Promise<number | null> => {
-  const cached = await db.messages.get(id);
-  if (!cached?.headerMessageId) return id;
-  const liveId = await resolveLiveMessageId(cached);
-  if (liveId !== null && liveId !== id) {
-    log.warn("live-message", "stale id on destructive op; re-resolved", { id, liveId });
-    await db.messages.delete(id);
-  }
-  return liveId;
+export const opTbId = async (key: MessageKey): Promise<number | null> => {
+  const row = await db.messages.get(key);
+  return row ? liveTbId(row) : null;
 };
 
 const sleep = (ms: number): Promise<void> =>
@@ -161,12 +154,12 @@ export const classifyMessage = async (
 export const getLiveHeader = async (
   row: RawMessage,
 ): Promise<messenger.messages.MessageHeader | null> => {
-  const liveId = await resolveLiveMessageId(row);
+  const liveId = await liveTbId(row);
   if (liveId === null) return null;
   try {
     return await messenger.messages.get(liveId);
   } catch (e) {
-    log.debug("ingest", "live header fetch failed", { id: row.id, liveId, e: String(e) });
+    log.debug("ingest", "live header fetch failed", { key: row.key, liveId, e: String(e) });
     return null;
   }
 }
@@ -188,7 +181,7 @@ export const liveHeaderWithinBudget = async (
   allow: () => boolean,
 ): Promise<messenger.messages.MessageHeader | null | typeof OVER_BUDGET> => {
   try {
-    const header = await messenger.messages.get(row.id);
+    const header = await messenger.messages.get(row.tbId);
     if (!row.headerMessageId || header.headerMessageId === row.headerMessageId) {
       return header;
     }
@@ -199,12 +192,10 @@ export const liveHeaderWithinBudget = async (
   return getLiveHeader(row);
 }
 
-export const pinMessage = async (id: number, pinned: boolean): Promise<void> => {
-  const cached = await db.messages.get(id);
-  const headerMessageId = cached?.headerMessageId
-    ?? (await messenger.messages.get(id)).headerMessageId
-    ?? "";
-  await setPinned(pinKeyOf({ headerMessageId, id }), pinned);
+export const pinMessage = async (key: MessageKey, pinned: boolean): Promise<void> => {
+  const cached = await db.messages.get(key);
+  if (!cached) return;
+  await setPinned(pinKeyOf(cached), pinned);
 }
 
 /**
@@ -215,13 +206,12 @@ export const pinMessage = async (id: number, pinned: boolean): Promise<void> => 
  * Null means the destination couldn't be pinned down (or the message was
  * already gone), which is not an error — the archive itself still happened.
  */
-export const doneMessage = async (id: number): Promise<ArchivedCopy | null> => {
-  const opId = await verifiedOpId(id);
-  if (opId === null) {
-    log.info("archive", "message no longer exists; treating archive as settled", { id });
+export const doneMessage = async (key: MessageKey): Promise<ArchivedCopy | null> => {
+  const id = await opTbId(key);
+  if (id === null) {
+    log.info("archive", "message no longer exists; treating archive as settled", { key });
     return null;
   }
-  id = opId;
   let sourceFolderId = "";
   let headerMessageId = "";
   let accountId = "";
@@ -302,13 +292,12 @@ export const doneMessage = async (id: number): Promise<ArchivedCopy | null> => {
   return { id: movedId, folderId: resolved.archiveFolderId };
 }
 
-export const trashMessage = async (id: number): Promise<void> => {
-  const opId = await verifiedOpId(id);
-  if (opId === null) {
-    log.info("trash", "message no longer exists; treating trash as settled", { id });
+export const trashMessage = async (key: MessageKey): Promise<void> => {
+  const id = await opTbId(key);
+  if (id === null) {
+    log.info("trash", "message no longer exists; treating trash as settled", { key });
     return;
   }
-  id = opId;
   let sourceFolderId = "";
   let headerMessageId = "";
   try {
@@ -497,7 +486,7 @@ export const applyMessageDetails = async (
     return;
   }
 
-  const details = await extractMessageDetails(raw.id, { body });
+  const details = await extractMessageDetails(raw.tbId, { body });
   raw.attachments = details.attachments;
   raw.references = details.references;
   raw.inReplyTo = details.inReplyTo;
@@ -527,7 +516,7 @@ export const applyMessageDetailsForOrigin = async (
     return;
   }
 
-  const details = await extractMessageDetails(raw.id, { body, attachments: false });
+  const details = await extractMessageDetails(raw.tbId, { body, attachments: false });
   raw.attachments = [];
   raw.references = details.references;
   raw.inReplyTo = details.inReplyTo;

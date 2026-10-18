@@ -8,6 +8,7 @@
  * user to finish. Thunderbird keeps owning identities, signatures, quoting,
  * encryption, the Sent copy, and the outbox.
  */
+import type { MessageKey } from "./messageKey";
 import { parseSender } from "./senders";
 
 /** "draft" reopens a draft saved in Thunderbird, with the user's edits on it. */
@@ -16,7 +17,7 @@ export type ComposeKind = "reply" | "replyAll" | "forward" | "new" | "draft";
 export interface ComposeDraft {
   kind: ComposeKind;
   /** The message being replied to, forwarded, or (for "draft") edited; absent for new mail. */
-  messageId?: number;
+  messageKey?: MessageKey;
   /** Send-from identity; Thunderbird picks one when absent. */
   identityId?: string;
   to: string[];

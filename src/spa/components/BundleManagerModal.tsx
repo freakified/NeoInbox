@@ -20,6 +20,7 @@ import {
   hasDraftRule,
 } from "./settings/bundleForm";
 import { GeneralSettings } from "./settings/GeneralSettings";
+import { ArchiveSettings } from "./settings/ArchiveSettings";
 import { TripSettings } from "./settings/TripSettings";
 import { TranslationSettings } from "./settings/TranslationSettings";
 import { RemoteImagesSettings } from "./settings/RemoteImagesSettings";
@@ -259,6 +260,14 @@ export const BundleManagerModal = ({
             </button>
             <button
               type="button"
+              className={clsx(s.bundleNavItem, paneKey(selected) === "archive" && s.bundleNavItemActive)}
+              onClick={() => choose({ kind: "archive" })}
+            >
+              <Icon name="archive" className={s.navIcon} />
+              <span className={s.navName}>Archive</span>
+            </button>
+            <button
+              type="button"
               className={clsx(s.bundleNavItem, paneKey(selected) === "trips" && s.bundleNavItemActive)}
               onClick={() => choose({ kind: "trips" })}
             >
@@ -330,6 +339,8 @@ export const BundleManagerModal = ({
           <main className={s.content}>
             {selected.kind === "general" ? (
               <GeneralSettings />
+            ) : selected.kind === "archive" ? (
+              <ArchiveSettings />
             ) : selected.kind === "trips" ? (
               <TripSettings />
             ) : selected.kind === "remoteImages" ? (

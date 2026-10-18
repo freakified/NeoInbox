@@ -5,7 +5,7 @@ import type { RawMessage, Thread, TripMembershipRecord } from "./types";
 const NOW = Date.UTC(2026, 2, 1);
 
 const message = (headerMessageId: string): RawMessage =>
-  ({ id: 1, headerMessageId }) as RawMessage;
+  ({ key: "k1", tbId: 1, headerMessageId }) as RawMessage;
 
 const thread = (...ids: string[]): Thread =>
   ({ messages: ids.map(message) }) as Thread;

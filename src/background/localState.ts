@@ -7,11 +7,11 @@ import type { RawMessage, ResurfacedRecord } from "../shared/types";
  * extension's IndexedDB so the real mailbox is never touched: no Thunderbird
  * tags, no IMAP keywords, nothing another client can see. Lookups key off
  * the Message-ID header so state follows a message across the archive move
- * that snoozing performs (which changes its numeric id).
+ * that snoozing performs (which changes its folder, and so its row key).
  */
 
 interface SnoozeIndex {
-  messageIds: Set<number>;
+  messageKeys: Set<string>;
   headerIds: Set<string>;
 }
 
@@ -28,10 +28,8 @@ const loadSnoozeIndex = async (): Promise<SnoozeIndex> => {
   if (!snoozeIndex) {
     const records = await db.snoozes.toArray();
     snoozeIndex = {
-      messageIds: new Set(records.map((r) => r.messageId)),
-      headerIds: new Set(
-        records.map((r) => r.headerMessageId ?? "").filter(Boolean),
-      ),
+      messageKeys: new Set(records.map((r) => r.messageKey)),
+      headerIds: new Set(records.map((r) => r.headerMessageId).filter(Boolean)),
     };
   }
   return snoozeIndex;
@@ -77,11 +75,12 @@ export const setPinned = async (key: string, pinned: boolean): Promise<void> => 
   }
 };
 
+/** A row (by key) or a bare header (by Message-ID) belonging to a snooze. */
 export const isSnoozedHeader = async (
-  header: { id: number; headerMessageId?: string },
+  header: { key?: string; headerMessageId?: string },
 ): Promise<boolean> => {
   const index = await loadSnoozeIndex();
-  if (index.messageIds.has(header.id)) return true;
+  if (header.key !== undefined && index.messageKeys.has(header.key)) return true;
   return !!header.headerMessageId && index.headerIds.has(header.headerMessageId);
 };
 

@@ -73,14 +73,14 @@ export const BundleSliceRow = ({
   const handleDoneAll = (e: React.MouseEvent) => {
     e.stopPropagation();
     const ids = threads.flatMap((t) =>
-      t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
+      t.messages.filter((m) => m.origin === "inbox").map((m) => m.key),
     );
     doneMessages(ids);
   };
 
   const handleTrashAll = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const ids = threads.flatMap((t) => t.messages.map((m) => m.id));
+    const ids = threads.flatMap((t) => t.messages.map((m) => m.key));
     trashMessages(ids);
   };
 

@@ -12,16 +12,17 @@ import {
   classificationOutdated,
 } from "../classifier/version";
 import { applyLocalState, isSnoozedHeader } from "./localState";
-import { headerToRawMessage } from "./messageMap";
+import { headerToRawMessage, keyOfHeader } from "./messageMap";
 import { broadcast } from "./port";
 import { wakeSnoozesForNewMail } from "./snooze";
 import { db } from "../store/db";
 import { sanitizeTags } from "../shared/categories";
 import { collectArchiveFolders, collectDraftFolders, collectInboxFolders, collectSentFolders } from "../shared/folders";
 import { log } from "../shared/log";
+import type { MessageKey } from "../shared/messageKey";
 import type { MessageOrigin, RawMessage } from "../shared/types";
 
-type MessageList = { id?: string; messages: { id: number }[] };
+type MessageList = { id?: string; messages: messenger.messages.MessageHeader[] };
 
 type OnUpdatedApi = {
   addListener: (
@@ -44,8 +45,28 @@ type OnMovedApi = {
 
 const sendingDraftByTabId = new Map<number, number>();
 
-const idsFromList = (list: MessageList | undefined): number[] =>
-  (list?.messages ?? []).map((m) => m.id);
+/**
+ * The cached rows an event's headers refer to. Event headers carry their
+ * folder and Message-ID, so the key comes straight from the header; never
+ * from the numeric id alone, which may match a row cached in another session.
+ */
+const cachedKeysOf = async (list: MessageList | undefined): Promise<MessageKey[]> => {
+  const keys: MessageKey[] = [];
+  for (const header of list?.messages ?? []) {
+    const key = await cachedKeyOf(header);
+    if (key) keys.push(key);
+  }
+  return keys;
+};
+
+const cachedKeyOf = async (header: messenger.messages.MessageHeader): Promise<MessageKey | null> => {
+  if (folderIdOf(header)) return keyOfHeader(header);
+  // A header without its folder: only a row with this Message-ID *and* this
+  // id is safe to match.
+  if (!header.headerMessageId) return null;
+  const rows = await db.messages.where("headerMessageId").equals(header.headerMessageId).toArray();
+  return rows.find((r) => r.tbId === header.id)?.key ?? null;
+};
 
 const tabIdOf = (tab: messenger.tabs.Tab): number | undefined => tab.id;
 
@@ -82,7 +103,7 @@ const cacheOne = async (
     applyClassification(raw, await classifyMessage(fresh, body));
   }
   await applyLocalState(raw);
-  const cached = await db.messages.get(fresh.id);
+  const cached = await db.messages.get(raw.key);
   await applyMessageDetailsForOrigin(raw, cached, body);
   return raw;
 };
@@ -145,46 +166,49 @@ const isArchiveFolderId = async (folderId: string): Promise<boolean> => {
  * pulling a body per message.
  */
 const reKeyArchivedRow = async (
-  originalId: number,
+  originalKey: MessageKey,
   moved: messenger.messages.MessageHeader,
 ): Promise<RawMessage | null> => {
-  const cached = await db.messages.get(originalId);
+  const cached = await db.messages.get(originalKey);
   if (!cached) return null;
   const next: RawMessage = {
     ...cached,
-    id: moved.id,
+    key: keyOfHeader(moved),
+    tbId: moved.id,
     folderId: folderIdOf(moved),
     origin: "done",
     read: moved.read ?? cached.read,
     tags: sanitizeTags(moved.tags),
   };
   await applyLocalState(next);
-  if (moved.id !== originalId) await db.messages.delete(originalId);
+  if (next.key !== originalKey) await db.messages.delete(originalKey);
   await db.messages.put(next);
   return next;
 };
 
+/** `draftId` comes from this session's onBeforeSend, so it is live. */
 const removeSentDraft = async (draftId: number): Promise<void> => {
-  const cached = await db.messages.get(draftId);
+  let header: messenger.messages.MessageHeader;
+  try {
+    header = await messenger.messages.get(draftId);
+  } catch (e) {
+    log.debug("sync", "sent draft was already gone", { draftId, e: String(e) });
+    return;
+  }
+  const key = keyOfHeader(header);
+  const cached = await db.messages.get(key);
   if (cached && cached.origin !== "draft") return;
+  if (!cached && (await originForFolder(folderIdOf(header))) !== "draft") return;
 
   try {
-    const header = await messenger.messages.get(draftId);
-    if (!cached) {
-      const origin = await originForFolder(folderIdOf(header));
-      if (origin !== "draft") return;
-    }
     await messenger.messages.delete([draftId], true);
   } catch (e) {
-    log.debug("sync", "sent draft was already gone or could not be deleted", {
-      draftId,
-      e: String(e),
-    });
+    log.debug("sync", "sent draft could not be deleted", { draftId, e: String(e) });
   }
 
-  if (await db.messages.get(draftId)) {
-    await db.messages.delete(draftId);
-    broadcast({ type: "delta", removedIds: [draftId] });
+  if (cached) {
+    await db.messages.delete(key);
+    broadcast({ type: "delta", removedKeys: [key] });
   }
 };
 
@@ -277,7 +301,7 @@ export const wireSyncEngine = (): void => {
     onUpdated.addListener(async (header) => {
       try {
         const fresh = await messenger.messages.get(header.id);
-        const cached = await db.messages.get(header.id);
+        const cached = await db.messages.get(keyOfHeader(fresh));
         const folderId = folderIdOf(fresh);
         // A flag change on archived mail: refresh what the event already told
         // us and stop. Anything else here would classify it, and a mailbox-wide
@@ -338,17 +362,15 @@ export const wireSyncEngine = (): void => {
   if (onDeleted) {
     onDeleted.addListener(async (messages) => {
       try {
-        const ids = idsFromList(messages);
-        if (!ids.length) return;
-        const removedIds = [];
-        for (const id of ids) {
-          if (await db.snoozes.get(id)) continue;
-          removedIds.push(id);
+        const removedKeys = [];
+        for (const key of await cachedKeysOf(messages)) {
+          if (await db.snoozes.get(key)) continue;
+          removedKeys.push(key);
         }
-        if (!removedIds.length) return;
-        await db.messages.bulkDelete(removedIds);
-        broadcast({ type: "delta", removedIds });
-        log.debug("sync", `onDeleted removed ${removedIds.length}`);
+        if (!removedKeys.length) return;
+        await db.messages.bulkDelete(removedKeys);
+        broadcast({ type: "delta", removedKeys });
+        log.debug("sync", `onDeleted removed ${removedKeys.length}`);
       } catch (e) {
         log.warn("sync", "onDeleted failed", e);
       }
@@ -361,30 +383,33 @@ export const wireSyncEngine = (): void => {
   if (onMoved) {
     onMoved.addListener(async (originalMessages, movedMessages) => {
       try {
-        const ids = idsFromList(originalMessages);
-        if (!ids.length) return;
+        const originals = originalMessages.messages ?? [];
+        if (!originals.length) return;
+        const originalKeys: MessageKey[] = [];
         const byOrigin = new Map<MessageOrigin, messenger.messages.MessageHeader[]>();
-        const snoozedOriginalIds = new Set<number>();
+        const snoozedOriginalKeys = new Set<MessageKey>();
         /** Rows re-keyed into the archive; already written, just need announcing. */
         const archived: RawMessage[] = [];
         for (let idx = 0; idx < (movedMessages.messages ?? []).length; idx++) {
           const moved = movedMessages.messages[idx]!;
-          const originalId = originalMessages.messages[idx]?.id;
-          const isKnownSnooze = originalId !== undefined && !!(await db.snoozes.get(originalId));
-          if (isKnownSnooze) {
-            snoozedOriginalIds.add(originalId);
+          const original = originals[idx];
+          const originalKey = original ? await cachedKeyOf(original) : null;
+          if (originalKey) originalKeys.push(originalKey);
+          // The snoozed row stays under its inbox key while the message is parked.
+          if (originalKey && (await db.snoozes.get(originalKey))) {
+            snoozedOriginalKeys.add(originalKey);
             continue;
           }
           const fresh = await messenger.messages.get(moved.id);
           if (await isSnoozedHeader(fresh)) {
-            if (originalId !== undefined) snoozedOriginalIds.add(originalId);
+            if (originalKey) snoozedOriginalKeys.add(originalKey);
             continue;
           }
           // Into the archive: re-key our own row if we have one, and ignore
           // the message entirely if we don't. Never a body fetch either way.
           if (await isArchiveFolderId(folderIdOf(fresh))) {
-            if (originalId === undefined) continue;
-            const reKeyed = await reKeyArchivedRow(originalId, fresh);
+            if (!originalKey) continue;
+            const reKeyed = await reKeyArchivedRow(originalKey, fresh);
             if (reKeyed) archived.push(reKeyed);
             continue;
           }
@@ -401,15 +426,15 @@ export const wireSyncEngine = (): void => {
         for (const [origin, headers] of byOrigin) {
           added.push(...await cacheMessages(headers, origin));
         }
-        const addedIds = new Set(added.map((m) => m.id));
-        const removedIds = ids.filter(
-          (id) => !snoozedOriginalIds.has(id) && !addedIds.has(id),
+        const addedKeys = new Set(added.map((m) => m.key));
+        const removedKeys = originalKeys.filter(
+          (key) => !snoozedOriginalKeys.has(key) && !addedKeys.has(key),
         );
-        if (removedIds.length) await db.messages.bulkDelete(removedIds);
-        if (removedIds.length || added.length) {
-          broadcast({ type: "delta", removedIds, added });
+        if (removedKeys.length) await db.messages.bulkDelete(removedKeys);
+        if (removedKeys.length || added.length) {
+          broadcast({ type: "delta", removedKeys, added });
         }
-        log.debug("sync", `onMoved removed ${removedIds.length}, cached ${added.length} moved messages`);
+        log.debug("sync", `onMoved removed ${removedKeys.length}, cached ${added.length} moved messages`);
       } catch (e) {
         log.warn("sync", "onMoved failed", e);
       }

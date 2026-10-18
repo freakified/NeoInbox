@@ -33,10 +33,10 @@ export const commitUndoToast = (
   }
   const toast = get().toasts.find((t) => t.id === toastId);
   if (toast?.undo) {
-    for (const id of toast.undo.messageIds) {
-      send({ type: toast.undo.kind, messageId: id });
+    for (const messageKey of toast.undo.messageKeys) {
+      send({ type: toast.undo.kind, messageKey });
     }
-    if (toast.undo.kind === "trash") retireTrashedFromTrips(get, set, toast.undo.messageIds);
+    if (toast.undo.kind === "trash") retireTrashedFromTrips(get, set, toast.undo.messageKeys);
   }
   set({ toasts: get().toasts.filter((t) => t.id !== toastId) });
 };
@@ -61,13 +61,13 @@ export const toastsSlice = (
     const toast = get().toasts.find((t) => t.id === toastId);
     if (!toast?.retry) return;
     set({ toasts: get().toasts.filter((t) => t.id !== toastId) });
-    const { kind, messageId, wakeAt } = toast.retry;
-    if (kind === "done") get().doneThread([messageId]);
-    else if (kind === "trash") get().trashThread([messageId]);
-    else if (kind === "unsnooze") get().unsnoozeThread([messageId]);
-    else if (kind === "move-to-inbox") get().moveToInboxThread([messageId]);
+    const { kind, messageKey, wakeAt } = toast.retry;
+    if (kind === "done") get().doneThread([messageKey]);
+    else if (kind === "trash") get().trashThread([messageKey]);
+    else if (kind === "unsnooze") get().unsnoozeThread([messageKey]);
+    else if (kind === "move-to-inbox") get().moveToInboxThread([messageKey]);
     else if (kind === "snooze" && wakeAt !== undefined) {
-      get().snoozeThread([messageId], wakeAt);
+      get().snoozeThread([messageKey], wakeAt);
     }
   },
   undoToast: (toastId) => {
@@ -80,15 +80,15 @@ export const toastsSlice = (
     const toast = get().toasts.find((t) => t.id === toastId);
     if (toast?.undo) {
       const pending = { ...get().pendingOps };
-      const map = { ...get().messagesById };
-      for (const id of toast.undo.messageIds) {
-        const op = pending[id];
+      const map = { ...get().messagesByKey };
+      for (const key of toast.undo.messageKeys) {
+        const op = pending[key];
         if (op) {
-          map[id] = op.message;
-          delete pending[id];
+          map[key] = op.message;
+          delete pending[key];
         }
       }
-      set({ messagesById: map, pendingOps: pending });
+      set({ messagesByKey: map, pendingOps: pending });
     }
     set({ toasts: get().toasts.filter((t) => t.id !== toastId) });
   },

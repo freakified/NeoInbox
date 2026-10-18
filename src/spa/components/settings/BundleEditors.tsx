@@ -102,7 +102,7 @@ export const ThreadRouteSummary = ({
   // settles once a reclassify lands.
   const liveCategory = useMailStore((st) => {
     for (const m of thread.messages) {
-      const live = st.messagesById[m.id];
+      const live = st.messagesByKey[m.key];
       if (live) return live.category;
     }
     return thread.category;
@@ -139,7 +139,7 @@ export const ThreadRouteSummary = ({
           type="button"
           className={s.threadSummaryAction}
           disabled={reclassifying}
-          onClick={() => reclassify(thread.messages.map((m) => m.id))}
+          onClick={() => reclassify(thread.messages.map((m) => m.key))}
         >
           {reclassifying ? "Applying…" : "Apply now"}
         </button>

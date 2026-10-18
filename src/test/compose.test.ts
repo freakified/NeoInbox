@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { ComposeDraft } from "../shared/compose";
 import { settle, waitFor } from "./fakeMessenger";
 import { boot, type Booted } from "./boot";
-import { INBOX, personalMail, shapes } from "./fixtures";
+import { DRAFTS, INBOX, personalMail, shapes } from "./fixtures";
 
 const open = async (): Promise<Booted> => {
   const app = await boot(shapes.standard());
@@ -26,7 +26,7 @@ describe("inline compose", () => {
     app.store().composeMessage(
       {
         kind: "replyAll",
-        messageId: id,
+        messageKey: app.mail.keyOf(id),
         to: ["Alex <alex@example.com>"],
         cc: [],
         text: "Sounds good\nsee you",
@@ -52,10 +52,12 @@ describe("inline compose", () => {
 
   it("sends an edited draft in place of what it said before, keeping the quote", async () => {
     const app = await open();
+    const draftId = app.mail.insert(DRAFTS, personalMail());
+    await app.backfill.runBackfill();
     app.store().composeMessage(
       {
         kind: "draft",
-        messageId: 42,
+        messageKey: app.mail.keyOf(draftId),
         identityId: "id2",
         to: ["Ann <ann@example.com>"],
         cc: [],
@@ -68,7 +70,7 @@ describe("inline compose", () => {
 
     expect(app.mail.calls.compose.at(-1)).toMatchObject({
       kind: "new",
-      args: [42, { to: ["Ann <ann@example.com>"], cc: [], identityId: "id2" }],
+      args: [draftId, { to: ["Ann <ann@example.com>"], cc: [], identityId: "id2" }],
     });
     expect(app.mail.calls.sent[0]!.body).toBe(
       '<html><body><div><b>New</b> text</div><br><div class="moz-cite-prefix">On Mon, Ann wrote:</div><blockquote type="cite">quoted</blockquote></body></html>',
@@ -122,16 +124,16 @@ describe("inline compose", () => {
   });
 
   describe("pending replies", () => {
-    const reply = (messageId: number): ComposeDraft => ({
+    const reply = (messageKey: string): ComposeDraft => ({
       kind: "reply",
-      messageId,
+      messageKey,
       to: ["Alex <alex@example.com>"],
       cc: [],
       text: "On my way",
     });
     const pending = {
       threadId: "t1",
-      knownIds: [],
+      knownKeys: [],
       author: "Me <me@example.com>",
       to: ["Alex <alex@example.com>"],
       cc: [],
@@ -143,7 +145,7 @@ describe("inline compose", () => {
       const id = await app.mail.deliver(INBOX, personalMail());
       await settle();
 
-      app.store().composeMessage(reply(id), true, pending);
+      app.store().composeMessage(reply(app.mail.keyOf(id)), true, pending);
       expect(app.store().pendingReplies).toMatchObject([{ text: "On my way", status: "sending" }]);
       await waitFor(() => toastMessages(app).includes("Message sent"));
       await settle();
@@ -152,7 +154,7 @@ describe("inline compose", () => {
       expect(sent?.status).toBe("sent");
       // Thunderbird filed the Sent copy, which is what replaces the preview.
       expect(
-        Object.values(app.store().messagesById).some(
+        Object.values(app.store().messagesByKey).some(
           (m) => m.origin === "sent" && m.recipients.includes("Alex <alex@example.com>"),
         ),
       ).toBe(true);
@@ -166,7 +168,7 @@ describe("inline compose", () => {
       await settle();
       app.mail.failNextSend = "SMTP refused";
 
-      app.store().composeMessage(reply(id), true, pending);
+      app.store().composeMessage(reply(app.mail.keyOf(id)), true, pending);
       await waitFor(() => toastMessages(app).some((m) => m.startsWith("Couldn't send")));
       expect(app.store().pendingReplies).toEqual([]);
     });
@@ -176,7 +178,7 @@ describe("inline compose", () => {
       const id = await app.mail.deliver(INBOX, personalMail());
       await settle();
 
-      app.store().composeMessage(reply(id), false, pending);
+      app.store().composeMessage(reply(app.mail.keyOf(id)), false, pending);
       expect(app.store().pendingReplies).toEqual([]);
     });
   });

@@ -19,28 +19,34 @@ import {
 } from "../test/fixtures";
 import { CLASSIFIER_VERSION } from "../classifier/version";
 import { settle, type FakeMessengerOptions } from "../test/fakeMessenger";
+import { messageKeyOf } from "../shared/messageKey";
 import type { RawMessage } from "../shared/types";
 
-const cachedRow = (over: Partial<RawMessage> = {}): RawMessage => ({
-  id: 1,
-  headerMessageId: "<msg-1@example.com>",
-  subject: "",
-  author: "",
-  recipients: [],
-  ccList: [],
-  bccList: [],
-  date: 0,
-  size: 1024,
-  read: false,
-  folderId: INBOX,
-  accountId: "a",
-  tags: [],
-  category: null,
-  pinned: false,
-  snoozed: false,
-  origin: "inbox",
-  ...over,
-});
+/** A cached row for fake message `id`, keyed as a scan would key it. */
+const cachedRow = ({ id = 1, ...over }: Partial<RawMessage> & { id?: number } = {}): RawMessage => {
+  const row: RawMessage = {
+    key: "",
+    tbId: id,
+    headerMessageId: `<msg-${id}@example.com>`,
+    subject: "",
+    author: "",
+    recipients: [],
+    ccList: [],
+    bccList: [],
+    date: 0,
+    size: 1024,
+    read: false,
+    folderId: INBOX,
+    accountId: "a",
+    tags: [],
+    category: null,
+    pinned: false,
+    snoozed: false,
+    origin: "inbox",
+    ...over,
+  };
+  return { ...row, key: messageKeyOf(row) };
+};
 
 /** Marks every cached row as classified under older rules. */
 const markOutdated = (app: Booted) =>
@@ -149,12 +155,12 @@ describe("classification without a downloaded body", () => {
   it("repairs the category once the body becomes available", async () => {
     const app = await open(shapes.standard([headerOnlyPromoMail({ id: 1, bodyUnavailable: true })]));
     await app.backfill.runBackfill();
-    expect((await app.db.messages.get(1))!.category).toBeNull();
+    expect((await app.db.messages.get(app.mail.keyOf(1)))!.category).toBeNull();
 
     app.mail.insert(INBOX, headerOnlyPromoMail({ id: 1 })); // IMAP catches up
     await app.backfill.retryIncompleteClassifications();
 
-    const row = await app.db.messages.get(1);
+    const row = await app.db.messages.get(app.mail.keyOf(1));
     expect(row!.category).toBe("promos");
     expect(row!.classifiedIncomplete).toBe(false);
   });
@@ -167,7 +173,7 @@ describe("classification without a downloaded body", () => {
 
     await app.backfill.retryIncompleteClassifications();
 
-    expect((await app.db.messages.get(1))!.category).toBe("promos");
+    expect((await app.db.messages.get(app.mail.keyOf(1)))!.category).toBe("promos");
   });
 
   it("leaves the row flagged while the body is still missing", async () => {
@@ -176,7 +182,7 @@ describe("classification without a downloaded body", () => {
 
     await app.backfill.retryIncompleteClassifications();
 
-    const row = await app.db.messages.get(1);
+    const row = await app.db.messages.get(app.mail.keyOf(1));
     expect(row!.classifiedIncomplete).toBe(true);
     expect(row!.category).toBeNull();
   });
@@ -309,7 +315,7 @@ describe("classifier version sweep across chunk boundaries", { timeout: 20_000 }
   it("sorts inbox rows ahead of archived ones so the visible inbox lands first", async () => {
     const app = await bigBacklog();
     await app.db.messages.toCollection().modify((m) => {
-      if (m.id % 2 === 0) m.origin = "done";
+      if (m.tbId % 2 === 0) m.origin = "done";
     });
 
     await app.backfill.runClassifierVersionSweep();
@@ -348,18 +354,18 @@ describe("version sweep when Thunderbird has renumbered the cache", () => {
     expect(pass.remaining).toBe(15);
   });
 
-  it("re-keys resolved rows so the search is never paid twice", async () => {
+  it("keeps the ids it resolved so the search is never paid twice", async () => {
     const app = await remapped(40);
 
     await app.backfill.runClassifierVersionSweep();
 
-    // Rows that resolved now sit under their live ids; nothing still points at
-    // an id Thunderbird no longer has.
+    // Rows that resolved now carry their live ids; none still points at an id
+    // Thunderbird no longer has.
     const rows = await app.db.messages.toArray();
     const live = new Set(app.mail.idsIn(INBOX));
     const stamped = rows.filter((m) => m.classifierVersion === CLASSIFIER_VERSION);
     expect(stamped).toHaveLength(25);
-    expect(stamped.every((m) => live.has(m.id))).toBe(true);
+    expect(stamped.every((m) => live.has(m.tbId))).toBe(true);
   });
 
   it("drains across passes without re-searching what it already fixed", async () => {
@@ -386,7 +392,7 @@ describe("version sweep when Thunderbird has renumbered the cache", () => {
     app.mail.remapIds();
     await app.db.messages.toCollection().modify((m) => {
       m.classifierVersion = 0;
-      m.headerMessageId = `<vanished-${m.id}@nowhere.example>`;
+      m.headerMessageId = `<vanished-${m.tbId}@nowhere.example>`;
     });
 
     const pass = await app.backfill.runClassifierVersionSweep();
@@ -403,7 +409,7 @@ describe("version sweep when Thunderbird has renumbered the cache", () => {
     app.mail.remapIds();
     await app.db.messages.toCollection().modify((m) => {
       m.classifierVersion = 0;
-      m.headerMessageId = `<vanished-${m.id}@nowhere.example>`;
+      m.headerMessageId = `<vanished-${m.tbId}@nowhere.example>`;
     });
 
     await app.backfill.runClassifierVersionSweep();
@@ -493,13 +499,13 @@ describe("per-message fetch cost of a scan", () => {
     await app.backfill.runBackfill();
     await settle();
 
-    const sentId = app.mail.idsIn(SENT)[0]!;
-    expect((await app.db.messages.get(sentId))?.references).toEqual([]);
+    const sentKey = app.mail.keyOf(app.mail.idsIn(SENT)[0]!);
+    expect((await app.db.messages.get(sentKey))?.references).toEqual([]);
 
-    await app.backfill.hydrateDetails([sentId]);
+    await app.backfill.hydrateDetails([sentKey]);
     await settle();
 
-    expect((await app.db.messages.get(sentId))?.references).toEqual([
+    expect((await app.db.messages.get(sentKey))?.references).toEqual([
       "root@example.com",
     ]);
   });
@@ -546,13 +552,13 @@ describe("drift detection", () => {
     const [first] = await app.db.messages.toArray();
     await app.db.messages.put({ ...first!, snoozed: true });
     await app.db.snoozes.put({
-      messageId: first!.id,
+      messageKey: first!.key,
       headerMessageId: first!.headerMessageId,
       wakeAt: Date.now() + 86_400_000,
       originFolderId: INBOX,
       originAccountId: "a",
     });
-    app.mail.remove(first!.id);
+    app.mail.remove(first!.tbId);
     app.mail.calls.list = 0;
 
     await app.backfill.runIncrementalSync();
@@ -565,32 +571,33 @@ describe("pruning rows from folders that lost their role", () => {
   it("drops rows stranded in an unscanned folder", async () => {
     const app = await open(shapes.standard(many(2, promoMail)));
     await app.backfill.runBackfill();
-    await app.db.messages.put(cachedRow({ id: 9001, folderId: "a-folder-we-no-longer-scan" }));
+    const stranded = cachedRow({ id: 9001, folderId: "a-folder-we-no-longer-scan" });
+    await app.db.messages.put(stranded);
 
     await app.backfill.runBackfill();
 
-    expect(await app.db.messages.get(9001)).toBeUndefined();
+    expect(await app.db.messages.get(stranded.key)).toBeUndefined();
   });
 
   it("keeps archived rows, which live outside the scanned folders by design", async () => {
     const app = await open(shapes.standard(many(2, promoMail)));
     await app.backfill.runBackfill();
-    await app.db.messages.put(cachedRow({ id: 9002, folderId: ARCHIVE, origin: "done" }));
+    const stranded = cachedRow({ id: 9002, folderId: ARCHIVE, origin: "done" });
+    await app.db.messages.put(stranded);
 
     await app.backfill.runBackfill();
 
-    expect(await app.db.messages.get(9002)).toBeDefined();
+    expect(await app.db.messages.get(stranded.key)).toBeDefined();
   });
 
   it("keeps snoozed rows, which are archived but still ours", async () => {
     const app = await open(shapes.standard(many(2, promoMail)));
     await app.backfill.runBackfill();
-    await app.db.messages.put(
-      cachedRow({ id: 9003, folderId: ARCHIVE, origin: "inbox", snoozed: true }),
-    );
+    const stranded = cachedRow({ id: 9003, folderId: ARCHIVE, origin: "inbox", snoozed: true });
+    await app.db.messages.put(stranded);
 
     await app.backfill.runBackfill();
 
-    expect(await app.db.messages.get(9003)).toBeDefined();
+    expect(await app.db.messages.get(stranded.key)).toBeDefined();
   });
 });

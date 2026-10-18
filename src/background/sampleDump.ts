@@ -15,7 +15,7 @@
 import { collectBodies, isTripCandidate, type Part } from "./extract";
 import { withTimeout } from "./scanQueue";
 import type { MailSample } from "../classifier/samples";
-import { resolveLiveMessageId } from "../shared/liveMessage";
+import { liveTbId } from "../shared/liveMessage";
 import { pinKeyOf } from "../shared/pinKey";
 import { parseSender } from "../shared/senders";
 import type { RawMessage } from "../shared/types";
@@ -72,7 +72,7 @@ export const installSampleDump = (): void => {
       if (done >= max) break;
       done++;
       try {
-        const liveId = await withTimeout(resolveLiveMessageId(m), `resolve ${m.id}`);
+        const liveId = await withTimeout(liveTbId(m), `resolve ${m.key}`);
         if (liveId === null) throw new Error("message no longer exists");
         const full = await withTimeout(messenger.messages.getFull(liveId), `getFull ${liveId}`);
         const textParts: string[] = [];
@@ -100,7 +100,7 @@ export const installSampleDump = (): void => {
         if (created) report.created++;
       } catch (e) {
         report.failed++;
-        console.warn("[sample-dump] skipped", m.id, m.subject, String(e));
+        console.warn("[sample-dump] skipped", m.key, m.subject, String(e));
       }
       if (done % 50 === 0) console.log(`[sample-dump] ${done}/${Math.min(byKey.size, max)}…`);
     }

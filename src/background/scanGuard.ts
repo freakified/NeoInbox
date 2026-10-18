@@ -1,3 +1,4 @@
+import type { MessageKey } from "../shared/messageKey";
 import { db } from "../store/db";
 
 /**
@@ -10,16 +11,16 @@ import { db } from "../store/db";
  * is active and are cleared when the last scan ends.
  */
 let activeScans = 0;
-const removedDuringScan = new Set<number>();
-const cachedDuringScan = new Set<number>();
+const removedDuringScan = new Set<MessageKey>();
+const cachedDuringScan = new Set<MessageKey>();
 
-db.messages.hook("creating", (primKey: number) => {
+db.messages.hook("creating", (primKey: MessageKey) => {
   if (activeScans) cachedDuringScan.add(primKey);
 });
-db.messages.hook("updating", (_mods: object, primKey: number) => {
+db.messages.hook("updating", (_mods: object, primKey: MessageKey) => {
   if (activeScans) cachedDuringScan.add(primKey);
 });
-db.messages.hook("deleting", (primKey: number) => {
+db.messages.hook("deleting", (primKey: MessageKey) => {
   if (activeScans) removedDuringScan.add(primKey);
 });
 
@@ -41,6 +42,6 @@ export const endScan = (): void => {
 
 export const scanActive = (): boolean => activeScans > 0;
 
-export const wasRemovedDuringScan = (id: number): boolean => removedDuringScan.has(id);
+export const wasRemovedDuringScan = (key: MessageKey): boolean => removedDuringScan.has(key);
 
-export const wasCachedDuringScan = (id: number): boolean => cachedDuringScan.has(id);
+export const wasCachedDuringScan = (key: MessageKey): boolean => cachedDuringScan.has(key);

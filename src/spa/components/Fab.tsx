@@ -22,11 +22,11 @@ const addressEmail = (raw: string): string => {
 
 /** The people you email most, measured over locally cached sent mail. */
 const useTopContacts = (limit: number): FabContact[] => {
-  const messagesById = useMailStore((st) => st.messagesById);
+  const messagesByKey = useMailStore((st) => st.messagesByKey);
   const myEmails = useMailStore((st) => st.myEmails);
   return useMemo(() => {
     const counts = new Map<string, { contact: FabContact; count: number }>();
-    for (const m of Object.values(messagesById)) {
+    for (const m of Object.values(messagesByKey)) {
       if (m.origin !== "sent") continue;
       for (const raw of m.recipients) {
         const email = addressEmail(raw);
@@ -40,7 +40,7 @@ const useTopContacts = (limit: number): FabContact[] => {
       .sort((a, b) => b.count - a.count)
       .slice(0, limit)
       .map((entry) => entry.contact);
-  }, [messagesById, myEmails, limit]);
+  }, [messagesByKey, myEmails, limit]);
 };
 
 const itemVariants = {

@@ -51,6 +51,10 @@ afterEach(async () => {
   app = undefined;
 });
 
+/** Cached rows for a fake message, by the Message-ID the fake gave it. */
+const rowsFor = (app: Booted, id: number): Promise<number> =>
+  app.db.messages.where("headerMessageId").equals(`<msg-${id}@example.com>`).count();
+
 describe("folders NeoInbox is allowed to read", () => {
   it("never enumerates the archive during a full scan", async () => {
     app = await open(shapes.withArchive(many(6, promoMail), many(40, personalMail)));
@@ -85,7 +89,7 @@ describe("folders NeoInbox is allowed to read", () => {
     await app.mail.moveTo([strayId], ARCHIVE);
     await settle();
 
-    expect(await app.db.messages.get(strayId)).toBeUndefined();
+    expect(await rowsFor(app, strayId)).toBe(0);
     expect(app.mail.calls.getFull.length).toBe(before);
   });
 
@@ -98,7 +102,7 @@ describe("folders NeoInbox is allowed to read", () => {
     const strayId = await app.mail.deliver(ARCHIVE, personalMail());
     await settle();
 
-    expect(await app.db.messages.get(strayId)).toBeUndefined();
+    expect(await rowsFor(app, strayId)).toBe(0);
     expect(app.mail.calls.getFull.length).toBe(before);
   });
 });
@@ -110,7 +114,7 @@ describe("Done still archives for real", () => {
     await settle();
 
     const target = app.mail.idsIn(INBOX)[0]!;
-    app.store().doneThread([target]);
+    app.store().doneThread([app.mail.keyOf(target)]);
     await commitUndo(app);
 
     // The mail really left the inbox — this is a server-side move, not a flag.
@@ -132,13 +136,13 @@ describe("snooze without searching the archive", () => {
     await app.backfill.runBackfill();
     await settle();
 
-    const target = app.mail.idsIn(INBOX)[0]!;
+    const target = app.mail.keyOf(app.mail.idsIn(INBOX)[0]!);
     app.store().snoozeThread([target], Date.now() + 60_000);
     await settle();
 
     const record = await app.db.snoozes.get(target);
     expect(record?.archivedFolderId).toBe(ARCHIVE);
-    expect(record?.archivedId).toBeDefined();
+    expect(record?.archivedTbId).toBeDefined();
 
     app.mail.calls.enumeratedFolders.length = 0;
     app.store().unsnoozeThread([target]);
@@ -167,7 +171,7 @@ describe("the inbox scan window", () => {
     // The newest five specifically, not an arbitrary five. `many` dates each
     // message a minute after the last, so the highest ids are the newest.
     const newestIds = app.mail.idsIn(INBOX).slice(-5);
-    expect(cached.map((m) => m.id).sort((a, b) => a - b)).toEqual(newestIds);
+    expect(cached.map((m) => m.tbId).sort((a, b) => a - b)).toEqual(newestIds);
   });
 
   it("reports how many older messages are waiting", async () => {
@@ -209,6 +213,6 @@ describe("the inbox scan window", () => {
     await app.backfill.runIncrementalSync();
     await settle();
 
-    expect(await app.db.messages.get(fresh)).toBeDefined();
+    expect(await app.db.messages.get(app.mail.keyOf(fresh))).toBeDefined();
   });
 });

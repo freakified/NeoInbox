@@ -1,3 +1,4 @@
+import type { MessageKey } from "./messageKey";
 import type { MessageOrigin, RawMessage, Thread } from "./types";
 
 export function normalizeSubject(subject: string): string {
@@ -106,13 +107,13 @@ const messageSortDate = (msg: RawMessage): number =>
 
 const stableThreadId = (
   msgs: readonly RawMessage[],
-  messageNodes: ReadonlyMap<number, string>,
+  messageNodes: ReadonlyMap<MessageKey, string>,
   anchorOrigins: ReadonlySet<MessageOrigin>,
 ): string => {
   const anchors = msgs.filter((m) => anchorOrigins.has(m.origin));
   const candidates = anchors.length ? anchors : msgs;
-  const [first] = [...candidates].sort((a, b) => a.date - b.date || a.id - b.id);
-  return first ? messageNodes.get(first.id) ?? String(first.id) : "";
+  const [first] = [...candidates].sort((a, b) => a.date - b.date || a.key.localeCompare(b.key));
+  return first ? messageNodes.get(first.key) ?? first.key : "";
 }
 
 export function buildThreads(
@@ -122,15 +123,15 @@ export function buildThreads(
 ): Thread[] {
   const separator = "\0";
   const ids = new DisjointSet();
-  const messageNodes = new Map<number, string>();
+  const messageNodes = new Map<MessageKey, string>();
   const anchorNodesBySubjectParticipant = new Map<string, FallbackAnchor[]>();
 
   for (const m of messages) {
     const selfId = cleanMessageId(m.headerMessageId);
     const selfNode = selfId
       ? `${m.accountId}${separator}msg${separator}${selfId}`
-      : `${m.accountId}${separator}local${separator}${m.id}`;
-    messageNodes.set(m.id, selfNode);
+      : `${m.accountId}${separator}local${separator}${m.key}`;
+    messageNodes.set(m.key, selfNode);
     ids.add(selfNode);
 
     const relatedIds = [...(m.references ?? []), ...(m.inReplyTo ?? [])]
@@ -157,7 +158,7 @@ export function buildThreads(
     if (m.origin !== "sent" && m.origin !== "draft") continue;
     const subject = normalizeSubject(m.subject);
     if (!subject) continue;
-    const selfNode = messageNodes.get(m.id);
+    const selfNode = messageNodes.get(m.key);
     if (!selfNode) continue;
     const candidates = new Map<string, FallbackAnchor>();
     for (const email of participantEmails(m, myEmails)) {
@@ -179,7 +180,7 @@ export function buildThreads(
 
   const byKey = new Map<string, RawMessage[]>();
   for (const m of messages) {
-    const node = messageNodes.get(m.id) ?? `${m.accountId}${separator}local${separator}${m.id}`;
+    const node = messageNodes.get(m.key) ?? `${m.accountId}${separator}local${separator}${m.key}`;
     const key = ids.find(node);
     const arr = byKey.get(key) ?? [];
     arr.push(m);

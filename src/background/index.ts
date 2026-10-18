@@ -3,7 +3,6 @@ import { runBackfill, runIncrementalSync, runStartupSync } from "./backfill";
 import { retryIncompleteClassifications, startClassifierVersionSweep } from "./classifierSweep";
 import { handleCommand } from "./commands";
 import { wireSyncEngine } from "./sync";
-import { cleanupLegacyTags } from "./legacyTags";
 import { onCommand, startPortServer } from "./port";
 import { installTripExtract, scheduleTripExtraction } from "./extract";
 import { installTripScan } from "./tripScan";
@@ -32,9 +31,9 @@ const restoreSnoozeAlarms = async (): Promise<void> => {
   const snoozes = await db.snoozes.toArray();
   for (const snooze of snoozes) {
     if (snooze.wakeAt <= now) {
-      await wakeSnoozedMessage(snooze.messageId, "alarm");
+      await wakeSnoozedMessage(snooze.messageKey, "alarm");
     } else {
-      await messenger.alarms.create(snoozeAlarmName(snooze.messageId), {
+      await messenger.alarms.create(snoozeAlarmName(snooze.messageKey), {
         when: snooze.wakeAt,
       });
     }
@@ -120,7 +119,6 @@ installTripScan();
 installTripExtract();
 installClassifyDump();
 installSampleDump();
-void cleanupLegacyTags().catch((e) => log.warn("legacy-tags", "cleanup failed", e));
 // Carries a classifier rules change to mail that is already cached. Runs in
 // chunks behind whatever scan onInstalled/onStartup kicked off, and no-ops
 // entirely when the stored version already matches.

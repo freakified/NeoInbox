@@ -32,7 +32,7 @@ import { findConfirmationCodes, findDates } from "../classifier/extractors/text"
 import { buildExtractorInput } from "../classifier/samples";
 import { withTimeout } from "./scanQueue";
 import { broadcast } from "./port";
-import { resolveLiveMessageId } from "../shared/liveMessage";
+import { liveTbId } from "../shared/liveMessage";
 import { log } from "../shared/log";
 import { pinKeyOf } from "../shared/pinKey";
 import { parseSender } from "../shared/senders";
@@ -176,7 +176,7 @@ const sweepReservations = async (options: SweepOptions = {}): Promise<number> =>
     try {
       // Done rows can carry stale numeric ids; never parse a body that might
       // belong to a different message.
-      const liveId = await withTimeout(resolveLiveMessageId(m), `resolve ${m.id}`);
+      const liveId = await withTimeout(liveTbId(m), `resolve ${m.key}`);
       if (liveId === null) {
         await db.reservations.put(record);
         continue;
@@ -208,7 +208,7 @@ const sweepReservations = async (options: SweepOptions = {}): Promise<number> =>
           report.none++;
           if (report.misses.length < MISS_LIMIT) {
             report.misses.push({
-              id: m.id,
+              id: liveId,
               domain,
               subject: m.subject,
               date: new Date(m.date).toISOString().slice(0, 10),
@@ -223,7 +223,7 @@ const sweepReservations = async (options: SweepOptions = {}): Promise<number> =>
       }
     } catch (e) {
       if (report) report.fetchFailed++;
-      log.debug("trip-extract", "sweep skipped a message", { id: m.id, e: String(e) });
+      log.debug("trip-extract", "sweep skipped a message", { key: m.key, e: String(e) });
       continue; // no record: body may sync later, retry next sweep
     }
     await db.reservations.put(record);

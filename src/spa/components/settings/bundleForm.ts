@@ -10,6 +10,7 @@ export interface DraftRule {
 export type SelectedBundle = { kind: "builtin"; id: BuiltinCategory } | { kind: "custom"; id: string } | { kind: "new" };
 export type SelectedPane =
   | { kind: "general" }
+  | { kind: "archive" }
   | { kind: "trips" }
   | { kind: "remoteImages" }
   | { kind: "translation" }
@@ -151,6 +152,7 @@ export const bundleKey = (selected: SelectedBundle): string =>
 
 export const paneKey = (selected: SelectedPane): string =>
   selected.kind === "general" ||
+  selected.kind === "archive" ||
   selected.kind === "trips" ||
   selected.kind === "remoteImages" ||
   selected.kind === "translation"

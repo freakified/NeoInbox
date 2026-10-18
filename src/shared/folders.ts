@@ -54,7 +54,7 @@ const loadRoles = async (): Promise<FolderRoles> => {
   const accounts = await messenger.accounts.list();
   const roles: FolderRoles = { inbox: [], sent: [], drafts: [], archives: [] };
   for (const acc of accounts) {
-    walk(acc.folders ?? [], (f) => {
+    walk(acc.folders ?? [], (f, underArchive) => {
       if (!f.id) return;
       const entry: InboxFolder = {
         id: f.id,
@@ -64,7 +64,7 @@ const loadRoles = async (): Promise<FolderRoles> => {
       if (isInbox(f)) roles.inbox.push(entry);
       if (isSent(f)) roles.sent.push(entry);
       if (isDraft(f)) roles.drafts.push(entry);
-      if (isArchive(f)) roles.archives.push(entry);
+      if (underArchive || isArchive(f)) roles.archives.push(entry);
     });
   }
   return roles;
@@ -94,12 +94,18 @@ const isArchive = (f: messenger.folders.MailFolder): boolean => {
   return false;
 }
 
+/**
+ * Visits every folder, telling `visit` whether it sits inside an archive
+ * folder: Thunderbird's archive settings file mail into dated subfolders
+ * (`Archives/2026`) that don't carry the `archives` flag themselves.
+ */
 const walk = (
   folders: messenger.folders.MailFolder[],
-  visit: (f: messenger.folders.MailFolder) => void,
+  visit: (f: messenger.folders.MailFolder, underArchive: boolean) => void,
+  underArchive = false,
 ): void => {
   for (const f of folders) {
-    visit(f);
-    if (f.subFolders) walk(f.subFolders, visit);
+    visit(f, underArchive);
+    if (f.subFolders) walk(f.subFolders, visit, underArchive || isArchive(f));
   }
 };

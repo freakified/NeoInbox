@@ -29,13 +29,13 @@ export const ThreadView = ({
   const hydrateThreadDetails = useMailStore((st) => st.hydrateThreadDetails);
   const allPendingReplies = useMailStore((st) => st.pendingReplies);
   const settlePendingReply = useMailStore((st) => st.settlePendingReply);
-  const inboxMessageIds = useMemo(
-    () => t.messages.filter((m) => m.origin === "inbox").map((m) => m.id),
+  const inboxMessageKeys = useMemo(
+    () => t.messages.filter((m) => m.origin === "inbox").map((m) => m.key),
     [t],
   );
-  const hasInboxMessages = inboxMessageIds.length > 0;
-  const snoozedMessageIds = useMemo(
-    () => t.messages.filter((m) => m.snoozed).map((m) => m.id),
+  const hasInboxMessages = inboxMessageKeys.length > 0;
+  const snoozedMessageKeys = useMemo(
+    () => t.messages.filter((m) => m.snoozed).map((m) => m.key),
     [t],
   );
 
@@ -65,20 +65,20 @@ export const ThreadView = ({
   // sent message the thread didn't have when the reply went out.
   const { pendingReplies, arrived } = useMemo(() => {
     const pendingReplies: PendingReply[] = [];
-    const arrived: { reply: PendingReply; messageId: number }[] = [];
+    const arrived: { reply: PendingReply; messageKey: string }[] = [];
     for (const r of allPendingReplies) {
       if (r.threadId !== t.id) continue;
-      const known = new Set(r.knownIds);
-      const landed = t.messages.find((m) => m.origin === "sent" && !known.has(m.id));
-      if (landed) arrived.push({ reply: r, messageId: landed.id });
+      const known = new Set(r.knownKeys);
+      const landed = t.messages.find((m) => m.origin === "sent" && !known.has(m.key));
+      if (landed) arrived.push({ reply: r, messageKey: landed.key });
       else pendingReplies.push(r);
     }
     return { pendingReplies, arrived };
   }, [allPendingReplies, t]);
   // The Sent copy shows the reply's text until its own body loads, so the
   // handoff doesn't flash "Loading…".
-  const handoffs = useRef(new Map<number, PendingReply>());
-  for (const { reply, messageId } of arrived) handoffs.current.set(messageId, reply);
+  const handoffs = useRef(new Map<string, PendingReply>());
+  for (const { reply, messageKey } of arrived) handoffs.current.set(messageKey, reply);
   useEffect(() => {
     for (const { reply } of arrived) settlePendingReply(reply.requestId);
   }, [arrived, settlePendingReply]);
@@ -86,9 +86,9 @@ export const ThreadView = ({
   // it would once the reply lands.
   const latestOpen = pendingReplies.length === 0;
 
-  const [openIds, setOpenIds] = useState<Set<number>>(() => new Set());
+  const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
   const [showMiddle, setShowMiddle] = useState(false);
-  const [translationRequests, setTranslationRequests] = useState<Record<number, number>>({});
+  const [translationRequests, setTranslationRequests] = useState<Record<string, number>>({});
   const [translatedSubject, setTranslatedSubject] = useState("");
 
   useEffect(() => {
@@ -98,39 +98,39 @@ export const ThreadView = ({
   // Sent and draft rows arrive with headers only; opening the conversation is
   // what pays for their details, so nothing downloads a year of Sent behind
   // your back. Threading already works without them — this sharpens it.
-  const threadMessageIds = useMemo(() => t.messages.map((m) => m.id), [t]);
+  const threadMessageKeys = useMemo(() => t.messages.map((m) => m.key), [t]);
   useEffect(() => {
-    hydrateThreadDetails(threadMessageIds);
-  }, [hydrateThreadDetails, threadMessageIds]);
+    hydrateThreadDetails(threadMessageKeys);
+  }, [hydrateThreadDetails, threadMessageKeys]);
 
   if (!latestInbox || !latestMessage) return null;
 
-  const toggleMsg = (id: number) =>
-    setOpenIds((prev) => {
+  const toggleMsg = (key: string) =>
+    setOpenKeys((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
 
   const onTogglePin = () => {
     const next = !t.pinned;
-    for (const m of t.messages) pin(m.id, next);
+    for (const m of t.messages) pin(m.key, next);
   };
-  const onDone = () => doneMessages(inboxMessageIds);
+  const onDone = () => doneMessages(inboxMessageKeys);
   const onSnooze = (wakeAt: number) => {
-    snoozeThread(inboxMessageIds, wakeAt);
+    snoozeThread(inboxMessageKeys, wakeAt);
     notify(`Snoozed until ${formatSnoozeToastTime(wakeAt)}`);
   };
   const onUnsnooze = () => {
-    unsnoozeThread(snoozedMessageIds);
+    unsnoozeThread(snoozedMessageKeys);
     notify("Moved back to inbox");
   };
-  const onTrash = () => trashMessages(t.messages.map((m) => m.id));
+  const onTrash = () => trashMessages(t.messages.map((m) => m.key));
   const translateLatest = () => {
     setTranslationRequests((prev) => ({
       ...prev,
-      [latestMessage.id]: (prev[latestMessage.id] ?? 0) + 1,
+      [latestMessage.key]: (prev[latestMessage.key] ?? 0) + 1,
     }));
   };
   const shouldCollapseMiddleMessages = messages.length > MIDDLE_COLLAPSE_THREAD_THRESHOLD;
@@ -154,7 +154,7 @@ export const ThreadView = ({
             />
           </button>
           {hasInboxMessages && <SnoozeMenu onChoose={onSnooze} />}
-          {snoozedMessageIds.length > 0 && (
+          {snoozedMessageKeys.length > 0 && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -197,37 +197,37 @@ export const ThreadView = ({
         {!shouldCollapseMiddleMessages ? (
           messages.map((m) => (
             <InlineMessage
-              key={m.id}
+              key={m.key}
               message={m}
-              isOpen={(m.id === latestMessage.id && latestOpen) || openIds.has(m.id)}
-              canToggle={m.id !== latestMessage.id || !latestOpen}
-              placeholder={handoffs.current.get(m.id)}
-              onToggle={() => toggleMsg(m.id)}
-              translationRequest={translationRequests[m.id] ?? 0}
-              onTranslatedSubject={m.id === latestMessage.id ? setTranslatedSubject : undefined}
+              isOpen={(m.key === latestMessage.key && latestOpen) || openKeys.has(m.key)}
+              canToggle={m.key !== latestMessage.key || !latestOpen}
+              placeholder={handoffs.current.get(m.key)}
+              onToggle={() => toggleMsg(m.key)}
+              translationRequest={translationRequests[m.key] ?? 0}
+              onTranslatedSubject={m.key === latestMessage.key ? setTranslatedSubject : undefined}
             />
           ))
         ) : (
           <>
             <InlineMessage
-              key={messages[0]!.id}
+              key={messages[0]!.key}
               message={messages[0]!}
-              isOpen={openIds.has(messages[0]!.id)}
-              onToggle={() => toggleMsg(messages[0]!.id)}
-              translationRequest={translationRequests[messages[0]!.id] ?? 0}
+              isOpen={openKeys.has(messages[0]!.key)}
+              onToggle={() => toggleMsg(messages[0]!.key)}
+              translationRequest={translationRequests[messages[0]!.key] ?? 0}
               onTranslatedSubject={
-                messages[0]!.id === latestMessage.id ? setTranslatedSubject : undefined
+                messages[0]!.key === latestMessage.key ? setTranslatedSubject : undefined
               }
             />
             {showMiddle ? (
               messages.slice(1, -1).map((m) => (
                 <InlineMessage
-                  key={m.id}
+                  key={m.key}
                   message={m}
-                  isOpen={openIds.has(m.id)}
-                  onToggle={() => toggleMsg(m.id)}
-                  translationRequest={translationRequests[m.id] ?? 0}
-                  onTranslatedSubject={m.id === latestMessage.id ? setTranslatedSubject : undefined}
+                  isOpen={openKeys.has(m.key)}
+                  onToggle={() => toggleMsg(m.key)}
+                  translationRequest={translationRequests[m.key] ?? 0}
+                  onTranslatedSubject={m.key === latestMessage.key ? setTranslatedSubject : undefined}
                 />
               ))
             ) : (
@@ -245,13 +245,13 @@ export const ThreadView = ({
               </button>
             )}
             <InlineMessage
-              key={latestMessage.id}
+              key={latestMessage.key}
               message={latestMessage}
-              isOpen={latestOpen || openIds.has(latestMessage.id)}
+              isOpen={latestOpen || openKeys.has(latestMessage.key)}
               canToggle={!latestOpen}
-              onToggle={() => toggleMsg(latestMessage.id)}
-              placeholder={handoffs.current.get(latestMessage.id)}
-              translationRequest={translationRequests[latestMessage.id] ?? 0}
+              onToggle={() => toggleMsg(latestMessage.key)}
+              placeholder={handoffs.current.get(latestMessage.key)}
+              translationRequest={translationRequests[latestMessage.key] ?? 0}
               onTranslatedSubject={setTranslatedSubject}
             />
           </>

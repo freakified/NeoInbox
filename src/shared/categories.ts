@@ -61,17 +61,15 @@ export const CATEGORIES: Record<BuiltinCategory, CategoryMeta> = {
 };
 
 /**
- * Legacy Thunderbird tag keys. Older NeoInbox versions stored pin/snooze
- * state as real message tags; that state now lives only in the extension's
- * own database. These keys remain so the one-time cleanup can find and strip
- * them from the user's mailbox — never write them again.
+ * Legacy Thunderbird tag keys. Early NeoInbox builds stored pin/snooze state
+ * as real message tags, and a mailbox they touched may still carry them;
+ * sanitizeTags keeps them out of the UI. Never write them again.
  */
 export const LEGACY_PINNED_KEY = "neoinbox-pinned";
 export const LEGACY_SNOOZED_KEY = "neoinbox-snoozed";
 /**
  * The Travel bundle is gone (trips replaced it), so its key no longer comes
- * from CATEGORIES — but mailboxes tagged by older versions still carry it,
- * and dropping it from this set would strand those tags forever.
+ * from CATEGORIES — but mailboxes tagged by older versions still carry it.
  */
 export const LEGACY_TRAVEL_KEY = "neoinbox-travel";
 
