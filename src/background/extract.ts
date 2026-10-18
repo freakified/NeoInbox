@@ -24,6 +24,7 @@
  * Full details stay at globalThis.neoTripExtractLast — per-domain hit rates
  * and text snippets of the misses, for tuning the per-sender parsers.
  */
+import Dexie from "dexie";
 import { EXTRACTOR_VERSION, hasSenderExtractor, runExtractors } from "../classifier/extractors";
 import { extractFeatures } from "../classifier/features";
 import { matchesTravel } from "../classifier/rules/travel";
@@ -31,6 +32,12 @@ import { findLegs, findFlights } from "../classifier/extractors/flights";
 import { findConfirmationCodes, findDates } from "../classifier/extractors/text";
 import { buildExtractorInput } from "../classifier/samples";
 import { withTimeout } from "./scanQueue";
+import {
+  archiveCovers,
+  cancelArchiveImport,
+  getArchiveImportStatus,
+  runArchiveImport,
+} from "./archiveImport";
 import { broadcast } from "./port";
 import { liveTbId } from "../shared/liveMessage";
 import { log } from "../shared/log";
@@ -51,6 +58,12 @@ const CANDIDATE_SUBJECT_RE =
   /\b(flight|itinerary|booking|reservation|check[- ]?in|confirmation|boarding|e[- ]?ticket|hotel|rental|amtrak)\b/i;
 
 const SWEEP_LIMIT = 800;
+/**
+ * Give up on a body after this many failed fetches. A failure used to leave
+ * no record, so the message was retried on every sweep forever — harmless for
+ * a handful of inbox rows, not for hundreds of archived ones.
+ */
+const MAX_FETCH_FAILURES = 5;
 /** Automatic sweeps breathe between body fetches so startup stays smooth. */
 const SWEEP_PACE_MS = 50;
 
@@ -121,6 +134,11 @@ interface SweepOptions {
   onProgress?: (processed: number, total: number) => void;
   /** Polled between messages; true stops the sweep (records so far are kept). */
   shouldStop?: () => boolean;
+  /**
+   * Recluster after this many new records, so a long sweep shows trips as it
+   * finds them rather than all at the end.
+   */
+  reclusterEvery?: number;
 }
 
 let sweeping = false;
@@ -133,18 +151,30 @@ const sweepReservations = async (options: SweepOptions = {}): Promise<number> =>
     (await db.reservations.toArray()).map((r) => [r.key, r] as const),
   );
   // Inbox and archive copies of one message share a pinKey; scan the newest.
+  // Loaded by origin: an imported archive can be tens of thousands of Done
+  // rows that an inbox-only sweep has no reason to read.
   const byKey = new Map<string, RawMessage>();
-  for (const m of await db.messages.toArray()) {
-    if (!isTripCandidate(m, includeDone)) continue;
-    const key = pinKeyOf(m);
-    const prev = byKey.get(key);
-    if (!prev || m.date > prev.date) byKey.set(key, m);
+  for (const origin of includeDone ? (["inbox", "done"] as const) : (["inbox"] as const)) {
+    const rows = await db.messages
+      .where("[origin+date]")
+      .between([origin, Dexie.minKey], [origin, Dexie.maxKey])
+      .toArray();
+    for (const m of rows) {
+      if (!isTripCandidate(m, includeDone)) continue;
+      const key = pinKeyOf(m);
+      const prev = byKey.get(key);
+      if (!prev || m.date > prev.date) byKey.set(key, m);
+    }
   }
 
-  const todo = [...byKey].filter(([key]) => {
-    const prior = existing.get(key);
-    return !prior || prior.extractorVersion < EXTRACTOR_VERSION;
-  });
+  // Newest first, so the trips a long sweep turns up early are recent ones.
+  const todo = [...byKey]
+    .filter(([key]) => {
+      const prior = existing.get(key);
+      if (!prior || prior.extractorVersion < EXTRACTOR_VERSION) return true;
+      return prior.fetchFailures !== undefined && prior.fetchFailures < MAX_FETCH_FAILURES;
+    })
+    .sort(([, a], [, b]) => b.date - a.date);
   const total = Math.min(todo.length, max);
   options.onProgress?.(0, total);
 
@@ -224,10 +254,18 @@ const sweepReservations = async (options: SweepOptions = {}): Promise<number> =>
     } catch (e) {
       if (report) report.fetchFailed++;
       log.debug("trip-extract", "sweep skipped a message", { key: m.key, e: String(e) });
-      continue; // no record: body may sync later, retry next sweep
+      // The body may sync later: a placeholder brings it back next sweep,
+      // until it has failed too often to be worth another try.
+      // A record from an older extractor still beats a placeholder.
+      const prior = existing.get(key);
+      if (prior && prior.fetchFailures === undefined) continue;
+      const failures = (prior?.extractorVersion === EXTRACTOR_VERSION ? prior.fetchFailures ?? 0 : 0) + 1;
+      await db.reservations.put({ ...record, fetchFailures: failures });
+      continue;
     }
     await db.reservations.put(record);
     wrote++;
+    if (options.reclusterEvery && wrote % options.reclusterEvery === 0) await recluster();
     // Interactive harness runs skip the pacing; background sweeps spread the
     // body fetches out instead of spiking CPU right at startup.
     if (!report) await sleep(SWEEP_PACE_MS);
@@ -451,8 +489,12 @@ let scanStatus: TripScanStatus | null = null;
 let stopRequested = false;
 
 const publish = async (status: TripScanStatus): Promise<void> => {
-  const archiveScannedAt = (await getLastArchiveScan())?.finishedAt;
-  scanStatus = { ...status, archiveScannedAt };
+  const last = await getLastArchiveScan();
+  scanStatus = {
+    ...status,
+    archiveScannedAt: last?.finishedAt,
+    scannedBackTo: status.scannedBackTo === undefined ? last?.scannedBackTo : status.scannedBackTo,
+  };
   broadcast({ type: "trip-scan-progress", ...scanStatus });
 };
 
@@ -471,6 +513,22 @@ export const getTripScanStatus = async (): Promise<TripScanStatus | null> => {
 
 export const cancelTripScan = (): void => {
   stopRequested = true;
+  // Stop means the whole run, including the import it may be waiting on.
+  if (scanStatus?.phase === "import") cancelArchiveImport();
+};
+
+/**
+ * Import the archive back to `since` unless finished imports already reach
+ * that far. Waits out an import someone else started first. False when the
+ * import was stopped or failed, so the scan should not go on.
+ */
+const ensureArchiveImported = async (since: number | null): Promise<boolean> => {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (await archiveCovers(since)) return true;
+    const result = await runArchiveImport(since);
+    if (stopRequested || result.cancelled || result.error) return false;
+  }
+  return archiveCovers(since);
 };
 
 /**
@@ -480,16 +538,44 @@ export const cancelTripScan = (): void => {
  * or interrupted scan picks up where it left off. `rebuild` first deletes
  * the auto-built trips and re-reads everything (manual edits survive).
  */
-export const runTripScan = async ({ archive, rebuild = false }: { archive: boolean; rebuild?: boolean }): Promise<void> => {
-  if (scanStatus?.running) return;
+export const runTripScan = async ({
+  archive,
+  rebuild = false,
+  importSince,
+}: {
+  archive: boolean;
+  rebuild?: boolean;
+  /** Import the archive back this far first (ms; null for everything). */
+  importSince?: number | null;
+}): Promise<TripScanStatus | null> => {
+  if (scanStatus?.running) return null;
   stopRequested = false;
-  await publish({ running: true, archive, rebuild, processed: 0, total: 0 });
+  let processed = 0;
+  let total = 0;
+  if (archive && importSince !== undefined) {
+    await publish({ running: true, archive, rebuild, processed, total, phase: "import" });
+    if (!(await ensureArchiveImported(importSince))) {
+      const stopped: TripScanStatus = {
+        running: false,
+        archive,
+        rebuild,
+        processed,
+        total,
+        finishedAt: Date.now(),
+        cancelled: stopRequested || undefined,
+        error: stopRequested ? undefined : "Couldn't import archived mail",
+      };
+      await publish(stopped);
+      return stopped;
+    }
+  }
+  await publish({ running: true, archive, rebuild, processed, total, phase: "read" });
   // An automatic inbox sweep may hold the lock; it's short, so wait it out.
   while (sweeping) await sleep(500);
   sweeping = true;
   let last = 0;
-  let processed = 0;
-  let total = 0;
+  // What this scan can see: archived mail is only as old as the import went.
+  const scannedBackTo = archive ? (await getArchiveImportStatus())?.coveredSince : undefined;
   try {
     if (rebuild) await resetTrips("auto");
     await sweepReservations({
@@ -497,12 +583,13 @@ export const runTripScan = async ({ archive, rebuild = false }: { archive: boole
       max: Infinity,
       includeDone: archive,
       shouldStop: () => stopRequested,
+      reclusterEvery: 50,
       onProgress: (done, all) => {
         processed = done;
         total = all;
         if (Date.now() - last < PROGRESS_EVERY_MS && done < all) return;
         last = Date.now();
-        void publish({ running: true, archive, rebuild, processed, total });
+        void publish({ running: true, archive, rebuild, processed, total, phase: "read" });
       },
     });
     await recluster();
@@ -516,11 +603,20 @@ export const runTripScan = async ({ archive, rebuild = false }: { archive: boole
       finishedAt: Date.now(),
       cancelled: stopRequested || undefined,
     };
+    // A stopped scan didn't read everything; it keeps the last full one's reach.
+    if (archive) {
+      finished.scannedBackTo = stopRequested
+        ? (await getLastArchiveScan())?.scannedBackTo
+        : scannedBackTo;
+    }
     if (archive) await messenger.storage.local.set({ [ARCHIVE_SCAN_KEY]: finished });
     await publish(finished);
+    return finished;
   } catch (e) {
     log.warn("trip-extract", "trip scan failed", e);
-    await publish({ running: false, archive, rebuild, processed, total, error: String(e) });
+    const failed: TripScanStatus = { running: false, archive, rebuild, processed, total, error: String(e) };
+    await publish(failed);
+    return failed;
   } finally {
     sweeping = false;
   }

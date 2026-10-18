@@ -17,6 +17,7 @@ import { BundleSliceRow } from "./components/BundleSliceRow";
 import { BundleManagerModal } from "./components/BundleManagerModal";
 import { useBulkActions } from "./components/BulkActionConfirm";
 import { EmptyState, InboxZero } from "./components/EmptyState";
+import { DoneArchiveFooter, PastTripsFooter } from "./components/ArchiveFooter";
 import { Fab } from "./components/Fab";
 import { Icon } from "./components/Icon";
 import { ReminderRow } from "./components/ReminderRow";
@@ -379,6 +380,14 @@ export const App = () => {
     historyFrom > 0 &&
     (activeView.type === "done" || activeView.type === "sent" || activeView.type === "bundle");
 
+  // Done and Trips end by offering mail that's still only in the archive.
+  const archiveFooter =
+    activeView.type === "done" && !canLoadOlderHistory ? (
+      <DoneArchiveFooter />
+    ) : activeView.type === "trips" && !canLoadOlderMail ? (
+      <PastTripsFooter />
+    ) : null;
+
   return (
     <div
       className={`${s.root} ${drawerOpen ? s.drawerOpen : ""}`}
@@ -403,6 +412,7 @@ export const App = () => {
           initialCategory={bundleSettings.category}
           startNewBundle={bundleSettings.startNewBundle}
           highlightRuleId={bundleSettings.highlightRuleId}
+          initialPane={bundleSettings.pane}
         />
       )}
 
@@ -613,7 +623,7 @@ export const App = () => {
         )}
 
         {hydrated && stream.threadCount === 0 && !syncing && (
-          emptyState ? <EmptyState {...emptyState} /> : <InboxZero />
+          emptyState ? <EmptyState {...emptyState}>{archiveFooter}</EmptyState> : <InboxZero />
         )}
 
         {visibleStream.sections.map((group) => {
@@ -794,6 +804,8 @@ export const App = () => {
             </button>
           </div>
         )}
+        {/* Past the last cached row: offer what's still only in the archive. */}
+        {hydrated && !hasMoreItems && stream.threadCount > 0 && archiveFooter}
         </main>
       </div>
       <Fab />

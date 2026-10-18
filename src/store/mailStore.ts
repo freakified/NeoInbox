@@ -124,6 +124,17 @@ export const useMailStore = create<MailStore>((set, get) => ({
     }
   },
 
+  reloadHistory: async () => {
+    const { rows, historyFrom } = await loadHistoryPage();
+    // Keep the "everything from historyFrom on is loaded" promise: the fresh
+    // page only vouches for its own span, which may now end later than what
+    // was loaded before (an import adds rows inside the old span too).
+    const current = get().historyFrom;
+    const map = { ...get().messagesByKey };
+    for (const m of rows) map[m.key] ??= m;
+    set({ messagesByKey: map, historyFrom: historyFrom === 0 ? 0 : Math.max(current, historyFrom) });
+  },
+
   ...mailSlice(set, get),
   ...remindersSlice(set, get),
   ...tripsSlice(set, get),

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Icon } from "./Icon";
 import s from "./EmptyState.module.css";
 
@@ -10,16 +11,20 @@ export const EmptyState = ({
   color,
   title,
   hint,
+  children,
 }: {
   icon: string;
   color?: string;
   title: string;
   hint?: string;
+  /** Shown under the text, e.g. an offer to bring in older mail. */
+  children?: ReactNode;
 }) => (
   <div className={s.root}>
     <Icon name={icon} className={s.icon} style={color ? { color } : undefined} />
     <p className={s.title}>{title}</p>
     {hint && <p className={s.hint}>{hint}</p>}
+    {children && <div className={s.extra}>{children}</div>}
   </div>
 );
 

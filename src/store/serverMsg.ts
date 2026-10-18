@@ -130,7 +130,7 @@ export const applyServerMsg = (
         const message = status.error
           ? "Couldn't finish looking for trips"
           : status.cancelled
-            ? `Stopped looking for trips after ${status.processed.toLocaleString()} messages`
+            ? `Stopped looking for trips after ${status.processed.toLocaleString()} ${status.processed === 1 ? "message" : "messages"}`
             : `Trip scan done — ${(status.trips ?? 0).toLocaleString()} ${status.trips === 1 ? "trip" : "trips"}`;
         set({ toasts: [...get().toasts, { id: nextToastId(), message }].slice(-TOAST_LIMIT) });
       }
@@ -140,6 +140,8 @@ export const applyServerMsg = (
       const { type: _type, ...status } = msg;
       const wasRunning = get().archiveImport?.running;
       set({ archiveImport: status });
+      // Imported rows were written without deltas; show them all at once.
+      if (wasRunning && !status.running) void get().reloadHistory();
       if (wasRunning && !status.running) {
         const count = `${status.imported.toLocaleString()} ${status.imported === 1 ? "message" : "messages"}`;
         const message = status.error

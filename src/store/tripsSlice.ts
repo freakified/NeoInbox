@@ -161,11 +161,12 @@ export const tripsSlice = (
       },
     ]);
   },
-  scanTrips: ({ archive, rebuild }) => {
+  scanTrips: ({ archive, rebuild, importSince }) => {
     if (get().tripScan?.running) return;
     // Optimistic, so the button flips at once; the background confirms.
-    set({ tripScan: { ...get().tripScan, running: true, archive, rebuild, processed: 0, total: 0 } });
-    send({ type: "trip-scan", archive, rebuild });
+    const phase = importSince === undefined ? "read" : "import";
+    set({ tripScan: { ...get().tripScan, running: true, archive, rebuild, processed: 0, total: 0, phase } });
+    send({ type: "trip-scan", archive, rebuild, importSince });
   },
   stopTripScan: () => send({ type: "trip-scan-cancel" }),
 });

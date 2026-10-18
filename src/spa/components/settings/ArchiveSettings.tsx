@@ -1,26 +1,18 @@
 import { useState } from "react";
 import { useMailStore } from "../../../store/mailStore";
+import {
+  ARCHIVE_RANGES as RANGES,
+  DEFAULT_ARCHIVE_YEARS,
+  formatDay,
+  sinceOf,
+} from "../../lib/archiveRanges";
 import s from "../BundleManagerModal.module.css";
-
-const YEAR = 365 * 24 * 60 * 60 * 1000;
-
-/** How far back to import; null is the whole archive. */
-const RANGES: { label: string; years: number | null }[] = [
-  { label: "Last year", years: 1 },
-  { label: "Last 2 years", years: 2 },
-  { label: "Last 5 years", years: 5 },
-  { label: "Everything", years: null },
-];
-const DEFAULT_YEARS = 2;
-
-const formatDay = (ms: number): string =>
-  new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 
 export const ArchiveImportSection = () => {
   const status = useMailStore((st) => st.archiveImport);
   const importArchive = useMailStore((st) => st.importArchive);
   const stopArchiveImport = useMailStore((st) => st.stopArchiveImport);
-  const [years, setYears] = useState<number | null>(DEFAULT_YEARS);
+  const [years, setYears] = useState<number | null>(DEFAULT_ARCHIVE_YEARS);
   const running = status?.running ?? false;
   const pct =
     status && status.totalFolders > 0 ? Math.round((100 * status.folders) / status.totalFolders) : 0;
@@ -75,7 +67,7 @@ export const ArchiveImportSection = () => {
           <button
             type="button"
             className={s.primaryBtn}
-            onClick={() => importArchive(years === null ? null : Date.now() - years * YEAR)}
+            onClick={() => importArchive(sinceOf(years))}
           >
             {status?.cancelled ? "Continue importing" : "Import archived mail"}
           </button>

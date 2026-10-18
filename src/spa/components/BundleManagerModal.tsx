@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CATEGORIES, getCategoryMeta } from "../../shared/categories";
 import { findRouteRule, matchingRouteRules, normalizeRuleValue } from "../../shared/routeRules";
@@ -32,8 +32,10 @@ export const BundleManagerModal = ({
   initialCategory,
   startNewBundle,
   highlightRuleId,
+  initialPane,
 }: {
   onClose: () => void;
+  initialPane?: "general" | "advanced" | "trips";
   thread?: Thread;
   initialCategory?: Category | null;
   startNewBundle?: boolean;
@@ -86,8 +88,11 @@ export const BundleManagerModal = ({
     return { kind: "builtin", id: thread ? "personal" : "updates" };
   };
 
-  const selectedAtOpen: SelectedPane =
-    thread || initialCategory || startNewBundle ? initialSelected() : { kind: "general" };
+  const selectedAtOpen: SelectedPane = initialPane
+    ? { kind: initialPane }
+    : thread || initialCategory || startNewBundle
+      ? initialSelected()
+      : { kind: "general" };
   const initialForm = (): BundleFormState => {
     if (selectedAtOpen.kind === "custom") {
       const bundle = customBundles.find((b) => b.id === selectedAtOpen.id);
@@ -231,6 +236,21 @@ export const BundleManagerModal = ({
 
   const exclusionCount = routeRules.filter((r) => r.target === "personal").length;
 
+  // Escape closes Settings, but only while it's the topmost dialog: one
+  // stacked over it (a rule prompt) gets the key instead.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const dialogs = document.querySelectorAll('[role="dialog"]:not([aria-hidden="true"])');
+      if (dialogs[dialogs.length - 1] !== dialogRef.current) return;
+      e.preventDefault();
+      onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   const modal = (
     <div
       className={s.overlay}
@@ -239,7 +259,13 @@ export const BundleManagerModal = ({
         onClose();
       }}
     >
-      <div className={s.dialog} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        className={s.dialog}
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className={s.head}>
           <h2 className={s.title}>Settings</h2>
           <button type="button" className={s.closeBtn} onClick={onClose} aria-label="Close">

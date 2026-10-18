@@ -217,7 +217,15 @@ export const mailSlice = (
     if (get().archiveImport?.running) return;
     // Optimistic, so the button can't be pressed twice before progress lands.
     set({
-      archiveImport: { running: true, since, scanned: 0, imported: 0, folders: 0, totalFolders: 0 },
+      archiveImport: {
+        ...get().archiveImport,
+        running: true,
+        since,
+        scanned: 0,
+        imported: 0,
+        folders: 0,
+        totalFolders: 0,
+      },
     });
     send({ type: "archive-import", since });
   },

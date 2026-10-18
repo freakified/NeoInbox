@@ -24,7 +24,8 @@ import { hydrateDetails } from "./detailsFill";
 import { getLastProgress, serialized } from "./scanQueue";
 import { scanActive } from "./scanGuard";
 import { runCompose } from "./compose";
-import { cancelArchiveImport, getArchiveImportStatus, runArchiveImport } from "./archiveImport";
+import { cancelArchiveImport, getArchiveImportStatus } from "./archiveImport";
+import { startArchiveImport, startArchiveTripScan } from "./archiveJob";
 import { cancelTripScan, getTripScanStatus, runTripScan, writeTrips } from "./extract";
 import { pushMyEmails } from "./sync";
 import { applyLocalState, clearResurfaced } from "./localState";
@@ -124,7 +125,10 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
       return;
     }
     case "trip-scan": {
-      void runTripScan({ archive: msg.archive, rebuild: msg.rebuild });
+      const run = msg.archive
+        ? startArchiveTripScan({ rebuild: msg.rebuild, importSince: msg.importSince })
+        : runTripScan({ archive: false, rebuild: msg.rebuild });
+      void run.catch((e) => log.warn("trip-extract", "trip scan failed", e));
       return;
     }
     case "trip-scan-cancel": {
@@ -132,7 +136,7 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
       return;
     }
     case "archive-import": {
-      void runArchiveImport(msg.since);
+      void startArchiveImport(msg.since).catch((e) => log.warn("archive-import", "failed", e));
       return;
     }
     case "archive-import-cancel": {

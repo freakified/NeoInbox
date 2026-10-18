@@ -67,6 +67,8 @@ export interface ToastRecord {
  * row has unmounted; `thread` is a snapshot for seeding rules from it.
  */
 export interface BundleSettingsRequest {
+  /** Open on one of the non-bundle panes instead. */
+  pane?: "general" | "advanced" | "trips";
   category?: Category | null;
   thread?: Thread;
   highlightRuleId?: string;
@@ -110,6 +112,8 @@ export interface MailStore {
   init: () => Promise<void>;
   /** Page the next-older Sent and Done mail into memory. */
   loadOlderHistory: () => Promise<void>;
+  /** Re-read the newest Sent/Done page, e.g. after an archive import. */
+  reloadHistory: () => Promise<void>;
   pin: (messageKey: MessageKey, pinned: boolean) => void;
   doneThread: (messageKeys: MessageKey[]) => void;
   snoozeThread: (messageKeys: MessageKey[], wakeAt: number) => void;
@@ -154,7 +158,8 @@ export interface MailStore {
   /** Re-run bundling rules in the background; whole inbox when no ids given. */
   reclassify: (messageKeys?: MessageKey[]) => void;
   /** Find trips (in archived mail too when `archive`); `rebuild` starts over. */
-  scanTrips: (options: { archive: boolean; rebuild?: boolean }) => void;
+  /** `importSince` imports the archive back that far first (null: everything). */
+  scanTrips: (options: { archive: boolean; rebuild?: boolean; importSince?: number | null }) => void;
   stopTripScan: () => void;
   /** Cache archived mail from headers alone, back to `since` (null: all of it). */
   importArchive: (since: number | null) => void;

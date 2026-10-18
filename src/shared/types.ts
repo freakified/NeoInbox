@@ -241,6 +241,12 @@ export interface ReservationRecord {
    */
   confirmationCodes: string[];
   scannedAt: number;
+  /**
+   * Body fetches that failed so far (offline, or IMAP hasn't synced it). Set
+   * only on a placeholder "none" record; sweeps retry until it reaches
+   * MAX_FETCH_FAILURES, then leave the message alone.
+   */
+  fetchFailures?: number;
 }
 
 export interface SnoozeRecord {

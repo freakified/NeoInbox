@@ -10,6 +10,9 @@
  * them; a body is fetched only when the user opens the conversation, or runs
  * the trip scan over archived mail (which says so).
  *
+ * Rows are not broadcast as they land; the SPA reloads Done when the
+ * import's final progress message arrives.
+ *
  * Listing headers is a read of Thunderbird's local index, so even a large
  * archive is minutes, not hours. Re-running skips rows already cached, which
  * is what makes a stopped import resumable.
@@ -37,7 +40,14 @@ const LAST_IMPORT_KEY = "neoinbox-archive-import";
 const BATCH = 200;
 const PROGRESS_EVERY_MS = 750;
 
+/**
+ * A later import's start date may drift from an earlier one's by however long
+ * passed between them; "last 2 years" asked a week apart is the same range.
+ */
+const COVERAGE_SLACK_MS = 30 * 24 * 60 * 60 * 1000;
+
 let status: ArchiveImportStatus | null = null;
+let running: Promise<ArchiveImportStatus> | null = null;
 let stopRequested = false;
 let lastPublished = 0;
 
@@ -57,6 +67,18 @@ export const getArchiveImportStatus = async (): Promise<ArchiveImportStatus | nu
 
 export const cancelArchiveImport = (): void => {
   stopRequested = true;
+};
+
+/** The older of two coverage dates; null (everything) beats any date. */
+const widest = (a: number | null | undefined, b: number | null): number | null =>
+  a === null || b === null ? null : a === undefined ? b : Math.min(a, b);
+
+/** Whether finished imports already reach back to `since` (null: everything). */
+export const archiveCovers = async (since: number | null): Promise<boolean> => {
+  const covered = (await getArchiveImportStatus())?.coveredSince;
+  if (covered === undefined) return false;
+  if (covered === null) return true;
+  return since !== null && covered <= since + COVERAGE_SLACK_MS;
 };
 
 /**
@@ -95,9 +117,21 @@ const importedRow = async (header: messenger.messages.MessageHeader): Promise<Ra
   return applyLocalState(raw);
 };
 
-export const runArchiveImport = async (since: number | null): Promise<void> => {
-  if (status?.running) return;
+/**
+ * Import back to `since`. While an import is already running this returns
+ * that one instead of starting another; callers that need a particular range
+ * check archiveCovers() once it settles.
+ */
+export const runArchiveImport = (since: number | null): Promise<ArchiveImportStatus> => {
+  running ??= importArchive(since).finally(() => {
+    running = null;
+  });
+  return running;
+};
+
+const importArchive = async (since: number | null): Promise<ArchiveImportStatus> => {
   stopRequested = false;
+  const coveredSince = (await getArchiveImportStatus())?.coveredSince;
   let current: ArchiveImportStatus = {
     running: true,
     since,
@@ -105,6 +139,7 @@ export const runArchiveImport = async (since: number | null): Promise<void> => {
     imported: 0,
     folders: 0,
     totalFolders: 0,
+    coveredSince,
   };
   publish(current, true);
 
@@ -113,8 +148,9 @@ export const runArchiveImport = async (since: number | null): Promise<void> => {
     if (!batch.length) return;
     const rows = batch;
     batch = [];
+    // Written quietly: a view filling with old mail mid-import looks like
+    // something going wrong. Open tabs reload Done once the import ends.
     await db.messages.bulkPut(rows);
-    broadcast({ type: "delta", added: rows });
   };
 
   try {
@@ -149,6 +185,7 @@ export const runArchiveImport = async (since: number | null): Promise<void> => {
       running: false,
       finishedAt: Date.now(),
       cancelled: stopRequested || undefined,
+      coveredSince: stopRequested ? coveredSince : widest(coveredSince, since),
     };
     await messenger.storage.local.set({ [LAST_IMPORT_KEY]: current });
     log.info("archive-import", `imported ${current.imported} of ${current.scanned} archived messages`);
@@ -159,4 +196,5 @@ export const runArchiveImport = async (since: number | null): Promise<void> => {
   } finally {
     publish(current, true);
   }
+  return current;
 };

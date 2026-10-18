@@ -59,6 +59,33 @@ describe("importing archived mail", () => {
     expect(app.store().archiveImport).toMatchObject({ running: false, imported: 2 });
   });
 
+  it("shows imported mail all at once when the import ends, not row by row", async () => {
+    app = await open(shapes.withArchive([], [personalMail({ subject: "Old conversation" })]));
+    const doneInStore = () =>
+      Object.values(app!.store().messagesByKey).filter((m) => m.origin === "done");
+    const reloadHistory = app.store().reloadHistory;
+    // With the end-of-import reload switched off, nothing may arrive at all.
+    app.useMailStore.setState({ reloadHistory: async () => {} });
+
+    await importArchive(app, null);
+    expect(doneInStore()).toEqual([]);
+
+    await reloadHistory();
+    expect(doneInStore().map((m) => m.subject)).toEqual(["Old conversation"]);
+  });
+
+  it("reloads Done once the import finishes", async () => {
+    app = await open(shapes.withArchive([], [personalMail({ subject: "Old conversation" })]));
+
+    await importArchive(app, null);
+
+    expect(
+      Object.values(app.store().messagesByKey)
+        .filter((m) => m.origin === "done")
+        .map((m) => m.subject),
+    ).toEqual(["Old conversation"]);
+  });
+
   it("stops at the chosen date", async () => {
     app = await open(
       shapes.withArchive([], [

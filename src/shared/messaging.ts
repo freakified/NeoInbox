@@ -52,10 +52,12 @@ export type ClientMsg =
    */
   | { type: "compose"; requestId: string; draft: ComposeDraft; send: boolean }
   /**
-   * Settings → Trips. `archive` reads archived mail as well as the inbox;
-   * `rebuild` deletes the auto-built trips and re-reads everything first.
+   * Settings → Trips, and the Trips view's footer. `archive` reads archived
+   * mail as well as the inbox; `rebuild` deletes the auto-built trips and
+   * re-reads everything first. `importSince` (ms; null for everything) first
+   * imports the archive back that far, unless an earlier import already did.
    */
-  | { type: "trip-scan"; archive: boolean; rebuild?: boolean }
+  | { type: "trip-scan"; archive: boolean; rebuild?: boolean; importSince?: number | null }
   | { type: "trip-scan-cancel" }
   /**
    * Settings → Advanced: cache archived mail from headers alone, back to
@@ -81,6 +83,13 @@ export interface TripScanStatus {
   error?: string;
   /** When an archive scan last finished (any run), so Rebuild can redo it. */
   archiveScannedAt?: number;
+  /**
+   * How far back the last finished archive scan read (ms; null for the whole
+   * archive): the archive import's coverage when it ran. Unset when unknown.
+   */
+  scannedBackTo?: number | null;
+  /** While running: importing the archive first, or reading messages. */
+  phase?: "import" | "read";
 }
 
 /** Progress of the archive import; the last finished one is persisted. */
@@ -92,6 +101,12 @@ export interface ArchiveImportStatus {
   scanned: number;
   /** New Done rows written so far. */
   imported: number;
+  /**
+   * Oldest date every finished import together reaches back to (ms; null for
+   * the whole archive). Unset until one finishes. Survives later, shallower
+   * imports, so a 1-year import after a 5-year one still reads as 5 years.
+   */
+  coveredSince?: number | null;
   /** Archive folders done / to do this run. */
   folders: number;
   totalFolders: number;

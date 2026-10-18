@@ -6,6 +6,7 @@ import { wireSyncEngine } from "./sync";
 import { onCommand, startPortServer } from "./port";
 import { installTripExtract, scheduleTripExtraction } from "./extract";
 import { installTripScan } from "./tripScan";
+import { resumeArchiveJob } from "./archiveJob";
 import { installClassifyDump } from "./classifyDebug";
 import { installSampleDump } from "./sampleDump";
 import { db } from "../store/db";
@@ -56,6 +57,7 @@ messenger.runtime.onInstalled.addListener((details) => {
   void ensureSnoozeAlarmsRestored().catch((e) => log.warn("snooze", "restore alarms failed", e));
   void runBackfill()
     .then(scheduleTripExtraction)
+    .then(resumeArchiveJob)
     .catch((e) => log.warn("backfill", "failed", e));
 });
 
@@ -63,6 +65,7 @@ messenger.runtime.onStartup.addListener(() => {
   void ensureSnoozeAlarmsRestored().catch((e) => log.warn("snooze", "restore alarms failed", e));
   void runStartupSync()
     .then(scheduleTripExtraction)
+    .then(resumeArchiveJob)
     .catch((e) => log.warn("backfill", "startup sync failed", e));
 });
 
