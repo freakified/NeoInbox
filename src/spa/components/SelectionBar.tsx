@@ -4,6 +4,7 @@ import { useShowDeleteActions } from "../lib/deleteActionPrefs";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
 import { useBulkActions } from "./BulkActionConfirm";
 import { Icon } from "./Icon";
+import { SelectionMoveMenu } from "./SelectionMoveMenu";
 import { SnoozeMenu } from "./SnoozeMenu";
 import s from "./SelectionBar.module.css";
 
@@ -18,11 +19,9 @@ const conversations = (n: number): string => `${n} conversation${n === 1 ? "" : 
 export const SelectionBar = ({
   threads,
   onClear,
-  onSelectAll,
 }: {
   threads: Thread[];
   onClear: () => void;
-  onSelectAll: () => void;
 }) => {
   const pin = useMailStore((st) => st.pin);
   const snoozeThread = useMailStore((st) => st.snoozeThread);
@@ -62,10 +61,6 @@ export const SelectionBar = ({
         </h1>
       </div>
       <div className={s.right}>
-        <button type="button" className={s.btn} title="Select all" aria-label="Select all" onClick={onSelectAll}>
-          <Icon name="select_all" className={s.icon} />
-        </button>
-        <span className={s.divider} />
         <button
           type="button"
           className={s.btn}
@@ -89,6 +84,7 @@ export const SelectionBar = ({
             }}
           />
         )}
+        <SelectionMoveMenu threads={threads} triggerClassName={s.btn} iconClassName={s.icon} onDone={onClear} />
         {snoozedIds.length > 0 && (
           <button
             type="button"

@@ -1,0 +1,123 @@
+.dialog {
+  width: min(480px, 100%);
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.group,
+.groupOn {
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+
+.groupOn {
+  background: rgb(26 115 232 / 0.07);
+  border-color: rgb(26 115 232 / 0.3);
+}
+
+.groupRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 8px;
+}
+
+.groupMain {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 6px;
+}
+
+.group .groupMain:hover {
+  background: #f5f5f5;
+}
+
+.checkbox {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 2px solid var(--color-md-secondary-text);
+}
+
+.groupOn .checkbox {
+  border-color: var(--color-md-primary);
+  background: var(--color-md-primary);
+}
+
+.checkIcon {
+  font-size: 14px;
+  color: #fff;
+}
+
+.groupText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.groupLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  color: var(--color-md-on-surface);
+}
+
+.groupCount {
+  font-size: 12px;
+  color: var(--color-md-secondary-text);
+}
+
+.typeToggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  border: 1px solid var(--color-md-divider);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.type,
+.typeOn {
+  border: none;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  background: #fff;
+  color: var(--color-md-secondary-text);
+}
+
+.type:hover {
+  background: #f5f5f5;
+  color: var(--color-md-on-surface);
+}
+
+.typeOn {
+  background: rgb(26 115 232 / 0.12);
+  color: var(--color-md-primary);
+  font-weight: 500;
+}
+
+.groupNote {
+  margin: 0 10px 8px 36px;
+  color: var(--color-md-secondary-text);
+  font-size: 12px;
+  line-height: 1.4;
+}

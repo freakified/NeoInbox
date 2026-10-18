@@ -6,8 +6,17 @@ import { useMailStore } from "../../store/mailStore";
 import m from "./MoveRuleDialog.module.css";
 import s from "./NewTripDialog.module.css";
 
-/** Names a new trip and files the thread into it in one step. */
-export const NewTripDialog = ({ thread, onClose }: { thread: Thread; onClose: () => void }) => {
+/** Names a new trip and files the threads into it in one step. */
+export const NewTripDialog = ({
+  threads,
+  onClose,
+  onCreated,
+}: {
+  threads: Thread[];
+  onClose: () => void;
+  /** After the trip exists and the threads are in it; onClose follows. */
+  onCreated?: () => void;
+}) => {
   const createTrip = useMailStore((st) => st.createTrip);
   const setTripMembership = useMailStore((st) => st.setTripMembership);
   const notify = useMailStore((st) => st.notify);
@@ -15,9 +24,10 @@ export const NewTripDialog = ({ thread, onClose }: { thread: Thread; onClose: ()
 
   const createAndMove = () => {
     const trip = createTrip(name);
-    setTripMembership(tripKeysOfThread(thread), trip.id);
+    setTripMembership(threads.flatMap(tripKeysOfThread), trip.id);
     notify(`Moved to ${trip.name}`);
     onClose();
+    onCreated?.();
   };
 
   return createPortal(
@@ -36,7 +46,9 @@ export const NewTripDialog = ({ thread, onClose }: { thread: Thread; onClose: ()
         <h2 id="new-trip-title" className={m.title}>
           New trip
         </h2>
-        <p className={m.subtitle}>{thread.subject || "(no subject)"}</p>
+        <p className={m.subtitle}>
+          {threads.length === 1 ? threads[0]?.subject || "(no subject)" : `${threads.length} conversations`}
+        </p>
         <input
           type="text"
           autoFocus

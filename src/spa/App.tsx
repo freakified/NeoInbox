@@ -218,7 +218,6 @@ export const App = () => {
   const selectedIds = useSelection((st) => st.ids);
   const clearSelection = useSelection((st) => st.clear);
   const retainSelection = useSelection((st) => st.retain);
-  const selectAll = useSelection((st) => st.selectAll);
 
   useEffect(() => {
     void init();
@@ -298,9 +297,15 @@ export const App = () => {
   // they always act on what the cursor is actually on.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (isTypingTarget(e.target)) return;
       if (overlayIsOpen()) return;
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "a") {
+        // Selects conversations instead of the page's text.
+        e.preventDefault();
+        useSelection.getState().selectAll(visibleThreadIds());
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       if (goPrefixRef.current) {
         goPrefixRef.current = false;
@@ -421,7 +426,6 @@ export const App = () => {
           <SelectionBar
             threads={selectedThreads}
             onClear={clearSelection}
-            onSelectAll={() => selectAll(visibleThreadIds())}
           />
         ) : (
           <>

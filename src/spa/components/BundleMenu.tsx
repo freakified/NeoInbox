@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CATEGORIES, getCategoryMeta } from "../../shared/categories";
+import { getCategoryMeta } from "../../shared/categories";
 import { findRouteRule, matchingRouteRules, ruleTypeLabel } from "../../shared/routeRules";
 import { parseSender } from "../../shared/senders";
 import { suggestTrips, tripIdOfThread, tripKeysOfThread } from "../../shared/trips";
-import type { BuiltinCategory, Category, RouteRuleRecord, RouteRuleType, Thread } from "../../shared/types";
+import type { Category, RouteRuleRecord, RouteRuleType, Thread } from "../../shared/types";
 import {
   useCustomBundles,
   useMailStore,
@@ -13,21 +13,11 @@ import {
   useTrips,
 } from "../../store/mailStore";
 import { Icon } from "./Icon";
+import { MoveDestinations } from "./MoveDestinations";
 import { MoveRuleDialog } from "./MoveRuleDialog";
 import { NewTripDialog } from "./NewTripDialog";
 import { TripPickerDialog } from "./TripPickerDialog";
-import { TRIP_COLOR } from "./TripSliceRow";
 import s from "./BundleMenu.module.css";
-
-// Trips aren't in this list because they aren't categories — they're appended
-// separately below, from the live trip records.
-const MOVE_DESTINATIONS: BuiltinCategory[] = [
-  "personal",
-  ...(Object.entries(CATEGORIES)
-    .filter(([cat]) => cat !== "personal")
-    .sort(([, a], [, b]) => a.order - b.order)
-    .map(([cat]) => cat as BuiltinCategory)),
-];
 
 export const BundleMenu = ({
   thread,
@@ -261,87 +251,28 @@ export const BundleMenu = ({
                 <Icon name="arrow_back" className={s.menuIcon} />
                 <span className={s.menuItemLabel}>Move to</span>
               </button>
-              <div className={s.menuScroll}>
-                {MOVE_DESTINATIONS.map((cat) => (
-                  <DestinationItem
-                    key={cat}
-                    name={CATEGORIES[cat].name}
-                    icon={CATEGORIES[cat].icon}
-                    color={CATEGORIES[cat].color}
-                    current={currentCategory === cat}
-                    onClick={() => moveTo(cat)}
-                  />
-                ))}
-                {customBundles.map((bundle) => (
-                  <DestinationItem
-                    key={bundle.id}
-                    name={bundle.name}
-                    icon={bundle.icon}
-                    color={bundle.color}
-                    current={currentCategory === bundle.id}
-                    onClick={() => moveTo(bundle.id)}
-                  />
-                ))}
-                {suggestedTrips.map((trip) => (
-                  <DestinationItem
-                    key={trip.id}
-                    name={trip.name}
-                    icon="travel"
-                    color={TRIP_COLOR}
-                    current={currentTripId === trip.id}
-                    onClick={() => moveToTrip(trip.id)}
-                  />
-                ))}
-              </div>
-              {moreTrips && (
-                <button
-                  type="button"
-                  className={s.menuItem}
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setTripPickerOpen(true);
-                  }}
-                >
-                  <Icon name="travel_explore" className={s.menuIcon} />
-                  <span className={s.menuItemLabel}>More trips…</span>
-                </button>
-              )}
-              {currentTripId && (
-                <button
-                  type="button"
-                  className={s.menuItem}
-                  role="menuitem"
-                  onClick={removeFromTrip}
-                >
-                  <Icon name="close" className={s.menuIcon} />
-                  <span className={s.menuItemLabel}>Remove from trip</span>
-                </button>
-              )}
-              <button
-                type="button"
-                className={s.menuItem}
-                role="menuitem"
-                onClick={() => {
+              <MoveDestinations
+                currentCategory={currentCategory}
+                currentTripId={currentTripId}
+                suggestedTrips={suggestedTrips}
+                moreTrips={moreTrips}
+                canRemoveFromTrip={!!currentTripId}
+                onCategory={moveTo}
+                onTrip={moveToTrip}
+                onMoreTrips={() => {
+                  setMenuOpen(false);
+                  setTripPickerOpen(true);
+                }}
+                onRemoveFromTrip={removeFromTrip}
+                onNewTrip={() => {
                   setMenuOpen(false);
                   setNewTripOpen(true);
                 }}
-              >
-                <Icon name="travel" className={s.menuIcon} />
-                <span className={s.menuItemLabel}>New trip…</span>
-              </button>
-              <button
-                type="button"
-                className={s.menuItem}
-                role="menuitem"
-                onClick={() => {
+                onNewBundle={() => {
                   openBundleSettings({ thread, startNewBundle: true });
                   setMenuOpen(false);
                 }}
-              >
-                <Icon name="add" className={s.menuIcon} />
-                <span className={s.menuItemLabel}>New bundle…</span>
-              </button>
+              />
             </>
           )}
         </div>,
@@ -359,7 +290,7 @@ export const BundleMenu = ({
         />
       )}
       {newTripOpen && (
-        <NewTripDialog thread={thread} onClose={() => setNewTripOpen(false)} />
+        <NewTripDialog threads={[thread]} onClose={() => setNewTripOpen(false)} />
       )}
       {movePrompt !== null && (
         <MoveRuleDialog
@@ -373,29 +304,3 @@ export const BundleMenu = ({
     </div>
   );
 };
-
-const DestinationItem = ({
-  name,
-  icon,
-  color,
-  current,
-  onClick,
-}: {
-  name: string;
-  icon: string;
-  color: string;
-  current: boolean;
-  onClick: () => void;
-}) => (
-  <button
-    type="button"
-    className={s.menuItem}
-    role="menuitem"
-    disabled={current}
-    onClick={onClick}
-  >
-    <Icon name={icon} className={s.menuIcon} style={{ color }} />
-    <span className={s.menuItemLabel}>{name}</span>
-    {current && <Icon name="check" className={s.menuCheck} />}
-  </button>
-);
