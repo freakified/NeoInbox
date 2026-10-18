@@ -172,6 +172,45 @@ describe("stays and rentals", () => {
   });
 });
 
+describe("stay cities", () => {
+  const city = (author: string, subject: string, html: string) =>
+    run(author, subject, html)?.segments[0]?.destination;
+  const stay = "<p>Confirmation number 3901857264</p>" + table(["Check-in", "Aug 19, 2026"], ["Check-out", "Aug 21, 2026"]);
+
+  it("reads a labeled US address (booking.com)", () => {
+    const html = stay + table(["Location", "1075 Columbus Avenue, North Beach, San Francisco, CA 94133, United States"]);
+    expect(city("noreply@booking.com", "Your booking is confirmed at Columbus Inn", html)).toBe("San Francisco");
+  });
+
+  it("reads the receipt's state-in-parens address", () => {
+    const html = stay + "<p>Property address</p><p>450 Post Street San Francisco (California), United States of America CA 94102</p>";
+    expect(city("noreply@booking.com", "This is your receipt", html)).toBe("San Francisco");
+  });
+
+  it("reads Japanese addresses down to the city, not the ward", () => {
+    const lead = stay + "<p>100-0005, Tokyo, Chiyoda Ward, Chiyoda-ku Marunouchi 1-9-1 100-0005, 東京都</p>";
+    expect(city("noreply@booking.com", "Your booking is confirmed", lead)).toBe("Tokyo");
+    const airbnb = stay + "<p>ADDRESS</p><p>1 Chome-1-2 Oshiage, Sumida-ku, Tōkyō-to 131-0045, Japan</p>";
+    expect(city("automated@airbnb.com", "Reservation reminder", airbnb)).toBe("Tokyo");
+  });
+
+  it("ignores the sender's own footer address (Airbnb HQ)", () => {
+    const html = stay + "<p>Airbnb, Inc., 888 Brannan St, San Francisco, CA 94103</p>";
+    expect(city("automated@airbnb.com", "Your receipt from Airbnb", html)).toBeUndefined();
+  });
+});
+
+describe("Amtrak", () => {
+  it("splits a route into the cities at each end", () => {
+    const html =
+      "<p>Reservation Number - 8D4B7E</p><p>TRAIN 6: Omaha, NE to Chicago, IL - Union Station (One-Way) " +
+      "Depart 7:40 AM, Thursday, November 19, 2026</p>";
+    const hit = run("etickets@amtrak.com", "Amtrak: eTicket and Receipt for Your 11/19/2026 Trip", html);
+    expect(legs(hit)).toEqual(["train 2026-11-19 Omaha Chicago"]);
+    expect(hit?.segments[0]?.summary).toBe("Train 6");
+  });
+});
+
 describe("confirmation codes", () => {
   it("takes capitalized codes after a label, not the prose that follows one", () => {
     const text = "Full itinerary\nConfirmation # 7HD3KR PASSENGER\nThanks for confirming your emails";

@@ -118,7 +118,9 @@ const segmentOf = (kind: ReservationKind, node: Node): ReservationSegment | null
       kind,
       start,
       end: time(node["checkoutTime"]) ?? time(node["checkoutDate"]),
-      destination: localityOf(target) ?? name,
+      // The hotel's name is the summary; as a destination it named trips
+      // "Trip to Sakura Hotel Nippori".
+      destination: localityOf(target),
       summary: name,
     };
   }

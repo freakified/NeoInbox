@@ -82,6 +82,15 @@ interface Cluster {
   textDests: string[];
   /** Every flight leg, so naming can tell a stopover from a layover. */
   legs: FlightLeg[];
+  /** Cities reached by train, stayed in, or rented a car in: names flightless trips. */
+  ground: GroundStop[];
+}
+
+interface GroundStop {
+  kind: string;
+  origin?: string;
+  destination: string;
+  start: number;
 }
 
 interface FlightLeg {
@@ -170,6 +179,8 @@ const addReservationToCluster = (
         c.flightDests.push(s.destination);
         c.legs.push({ origin: s.origin, destination: s.destination, start: s.start, end: s.end });
       }
+    } else if (s.destination && TRIP_CREATING.has(s.kind) && r.status !== "cancelled") {
+      c.ground.push({ kind: s.kind, origin: s.origin, destination: s.destination, start: s.start });
     } else if (s.destination) {
       c.textDests.push(s.destination);
     }
@@ -285,6 +296,25 @@ const stopsOf = (c: Cluster, home: string | null): string[] => {
   return stops;
 };
 
+/**
+ * stopsOf for a trip with no usable flights: where it slept and where its
+ * trains went, in date order, minus home. Without a home airport, the first
+ * train's origin stands in for it — that's where the trip set out from.
+ */
+const groundStopsOf = (c: Cluster, home: string | null): string[] => {
+  const ground = [...c.ground].sort((a, b) => a.start - b.start);
+  const homeCity =
+    (home ? cityOfAirport(home) : null) ??
+    ground.find((g) => g.kind === "train" && g.origin)?.origin ??
+    null;
+  const stops: string[] = [];
+  for (const g of ground) {
+    if (homeCity && g.destination.toLowerCase() === homeCity.toLowerCase()) continue;
+    if (!stops.includes(g.destination)) stops.push(g.destination);
+  }
+  return stops;
+};
+
 /** Leaves Friday or Saturday, back by Monday: Inbox called that a weekend. */
 const isWeekend = (c: Cluster): boolean => {
   if (c.end - c.start > 3 * DAY) return false;
@@ -308,6 +338,8 @@ const nameOf = (c: Cluster, inferredHome: string | null): string => {
   const home = inferredHome ?? firstLeg?.origin ?? null;
   const stops = stopsOf(c, home);
   if (stops.length) return nameForPlaces(stops, weekend);
+  const groundStops = groundStopsOf(c, inferredHome);
+  if (groundStops.length) return nameForPlaces(groundStops, weekend);
   // Every leg looked like a connection (or flew home): fall back to the most
   // visited airport so the trip still gets a place name.
   const away = c.flightDests.filter((code) => code !== home);
@@ -362,6 +394,7 @@ export const clusterTrips = (input: TripClusterInput): TripClusterResult => {
         flightDests: [],
         textDests: [],
         legs: [],
+        ground: [],
       };
       clusters.push(target);
       reason = { kind: "reservation", detail: describeReservation(r) };

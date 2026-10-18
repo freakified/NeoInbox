@@ -273,4 +273,22 @@ describe("trip names", () => {
       ]),
     ).toBe("Weekend in Boston");
   });
+
+  it("names a flightless trip after where it stayed and where the train went", () => {
+    expect(
+      nameFor([
+        { kind: "lodging", start: WED, end: WED + 4 * DAY, destination: "San Francisco" },
+        { kind: "train", start: WED + 4 * DAY, origin: "Omaha", destination: "Chicago" },
+      ]),
+    ).toBe("Trip to San Francisco & Chicago");
+  });
+
+  it("leaves home out of a train trip's name", () => {
+    expect(
+      nameFor([
+        { kind: "train", start: WED, origin: "Omaha", destination: "Sacramento" },
+        { kind: "train", start: WED + 2 * DAY, origin: "Sacramento", destination: "Omaha" },
+      ]),
+    ).toBe("Trip to Sacramento");
+  });
 });

@@ -9,6 +9,7 @@
  */
 import type { ReservationKind, ReservationSegment } from "../../shared/types";
 import type { Line } from "./layout";
+import { findLocality } from "./locality";
 import type { Extraction, Extractor, ExtractorInput } from "./types";
 import { CANCEL_RE, findConfirmationCodes, findDates } from "./text";
 
@@ -177,6 +178,8 @@ const extractStay = (input: ExtractorInput, config: StayConfig, owned: boolean):
 
   const segment: ReservationSegment = { kind: config.kind, start: span.start };
   if (span.end !== undefined) segment.end = span.end;
+  const city = findLocality(input.lines);
+  if (city) segment.destination = city;
   return {
     segments: [segment],
     confirmationCodes: codes,

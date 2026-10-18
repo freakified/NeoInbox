@@ -34,7 +34,7 @@ import type { Extraction, Extractor, ExtractorInput } from "./types";
 export type { Extraction, ExtractorInput } from "./types";
 
 /** Bump to invalidate every stored ReservationRecord and re-extract. */
-export const EXTRACTOR_VERSION = 5;
+export const EXTRACTOR_VERSION = 6;
 
 const DOMAIN_EXTRACTORS: Extractor[] = [
   unitedExtractor,
