@@ -9,6 +9,7 @@ import { useMailStore } from "../../store/mailStore";
 import { useShowDeleteActions } from "../lib/deleteActionPrefs";
 import { useTripItinerary } from "../lib/useTripItinerary";
 import { useBulkActions } from "./BulkActionConfirm";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { Icon } from "./Icon";
 import { ExpandableRegion, MotionRow, MotionSurface } from "./Motion";
 import { RowGroup } from "./RowGroup";
@@ -200,74 +201,76 @@ export const TripSliceRow = ({
         className={b.expandBody}
         innerClassName={s.expandInner}
       >
-        {itinerary.length > 0 && (
-          <Itinerary
-            items={itinerary}
-            onOpen={(item) => {
-              const thread = threadOfKey(item.sourceKey);
-              if (thread) setOpenThreadId(thread.id);
-            }}
-            canOpen={(item) => threadOfKey(item.sourceKey) !== undefined}
-          />
-        )}
-        {threads.length > 0 && (
-          <div className={b.bucketHeader}>
-            <h3 className={b.bucketLabel}>Related items</h3>
-          </div>
-        )}
-        {expandedIdx >= 0 ? (
-          <>
-            {expandedIdx > 0 && (
-              <RowGroup
-                layoutId={`trip-${trip.id}-before`}
-                className={clsx(b.innerRows, b.rowsBeforeOpen)}
-              >
-                {threads.slice(0, expandedIdx).map((t) => (
-                  <ThreadRow
-                    key={t.id}
-                    thread={t}
-                    isExpanded={false}
-                    onToggle={() => toggleThread(t.id)}
-                  />
-                ))}
-              </RowGroup>
-            )}
-            <MotionSurface key={threads[expandedIdx]!.id} className={b.expandedThread} data-expanded-thread>
-              <ThreadRow
-                key={threads[expandedIdx]!.id}
-                thread={threads[expandedIdx]!}
-                isExpanded={true}
-                onToggle={() => toggleThread(threads[expandedIdx]!.id)}
-              />
-            </MotionSurface>
-            {expandedIdx < threads.length - 1 && (
-              <RowGroup
-                layoutId={`trip-${trip.id}-after`}
-                className={clsx(b.innerRows, b.rowsAfterOpen)}
-              >
-                {threads.slice(expandedIdx + 1).map((t) => (
-                  <ThreadRow
-                    key={t.id}
-                    thread={t}
-                    isExpanded={false}
-                    onToggle={() => toggleThread(t.id)}
-                  />
-                ))}
-              </RowGroup>
-            )}
-          </>
-        ) : (
-          <RowGroup className={b.innerRows}>
-            {threads.map((t) => (
-              <ThreadRow
-                key={t.id}
-                thread={t}
-                isExpanded={false}
-                onToggle={() => toggleThread(t.id)}
-              />
-            ))}
-          </RowGroup>
-        )}
+        <ErrorBoundary scope="inline" label="trip">
+          {itinerary.length > 0 && (
+            <Itinerary
+              items={itinerary}
+              onOpen={(item) => {
+                const thread = threadOfKey(item.sourceKey);
+                if (thread) setOpenThreadId(thread.id);
+              }}
+              canOpen={(item) => threadOfKey(item.sourceKey) !== undefined}
+            />
+          )}
+          {threads.length > 0 && (
+            <div className={b.bucketHeader}>
+              <h3 className={b.bucketLabel}>Related items</h3>
+            </div>
+          )}
+          {expandedIdx >= 0 ? (
+            <>
+              {expandedIdx > 0 && (
+                <RowGroup
+                  layoutId={`trip-${trip.id}-before`}
+                  className={clsx(b.innerRows, b.rowsBeforeOpen)}
+                >
+                  {threads.slice(0, expandedIdx).map((t) => (
+                    <ThreadRow
+                      key={t.id}
+                      thread={t}
+                      isExpanded={false}
+                      onToggle={() => toggleThread(t.id)}
+                    />
+                  ))}
+                </RowGroup>
+              )}
+              <MotionSurface key={threads[expandedIdx]!.id} className={b.expandedThread} data-expanded-thread>
+                <ThreadRow
+                  key={threads[expandedIdx]!.id}
+                  thread={threads[expandedIdx]!}
+                  isExpanded={true}
+                  onToggle={() => toggleThread(threads[expandedIdx]!.id)}
+                />
+              </MotionSurface>
+              {expandedIdx < threads.length - 1 && (
+                <RowGroup
+                  layoutId={`trip-${trip.id}-after`}
+                  className={clsx(b.innerRows, b.rowsAfterOpen)}
+                >
+                  {threads.slice(expandedIdx + 1).map((t) => (
+                    <ThreadRow
+                      key={t.id}
+                      thread={t}
+                      isExpanded={false}
+                      onToggle={() => toggleThread(t.id)}
+                    />
+                  ))}
+                </RowGroup>
+              )}
+            </>
+          ) : (
+            <RowGroup className={b.innerRows}>
+              {threads.map((t) => (
+                <ThreadRow
+                  key={t.id}
+                  thread={t}
+                  isExpanded={false}
+                  onToggle={() => toggleThread(t.id)}
+                />
+              ))}
+            </RowGroup>
+          )}
+        </ErrorBoundary>
       </ExpandableRegion>
     </MotionRow>
   );

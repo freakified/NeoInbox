@@ -9,6 +9,7 @@ import { useIsSelected, useSelection, useSelectionActive } from "../lib/selectio
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
 import { useThreadActions } from "../lib/useThreadActions";
 import { ActionStrip } from "./ActionStrip";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { Icon } from "./Icon";
 import { MessageAttachments, collectAttachments } from "./MessageAttachments";
 import { FadeIn, MotionRow } from "./Motion";
@@ -157,7 +158,9 @@ export const ThreadRow = ({
       )}
       {isExpanded && (
         <FadeIn>
-          <ThreadView thread={t} />
+          <ErrorBoundary scope="inline" label="conversation">
+            <ThreadView thread={t} />
+          </ErrorBoundary>
         </FadeIn>
       )}
     </MotionRow>

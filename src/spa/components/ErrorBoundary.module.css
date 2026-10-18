@@ -1,0 +1,61 @@
+.page {
+  max-width: 720px;
+  margin: 64px auto;
+  padding: 0 24px;
+}
+
+.inline {
+  padding: 16px 24px;
+  background: var(--color-md-surface);
+  border-left: 3px solid #d93025;
+}
+
+.title {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--color-md-on-surface);
+}
+
+.message {
+  margin: 0;
+  color: var(--color-md-secondary-text);
+  word-break: break-word;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.button {
+  padding: 6px 12px;
+  border: 1px solid var(--color-md-divider);
+  border-radius: 4px;
+  background: var(--color-md-surface);
+  color: var(--color-md-primary-dark);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: var(--color-md-hover);
+}
+
+.details {
+  margin-top: 12px;
+  color: var(--color-md-secondary-text);
+  font-size: 13px;
+}
+
+.stack {
+  max-height: 320px;
+  overflow: auto;
+  padding: 8px;
+  background: var(--color-md-background);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

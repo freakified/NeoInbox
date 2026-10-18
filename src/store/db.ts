@@ -286,6 +286,21 @@ class NeoInboxDb extends Dexie {
           if (m.origin !== "inbox") m.detailsVersion = 3;
         });
     });
+    // Cc and Bcc joined RawMessage in May 2026, but rows cached before then
+    // never got them: rescans take the unchanged fast path, and old Done mail
+    // is never rescanned at all — yet trips load it (loadTripMembers), and
+    // opening one crashed on the missing lists. The headers were never stored,
+    // so empty is all there is to give them.
+    this.version(19).upgrade(async (tx) => {
+      await tx
+        .table<RawMessage>("messages")
+        .toCollection()
+        .modify((m) => {
+          if (!Array.isArray(m.recipients)) m.recipients = [];
+          if (!Array.isArray(m.ccList)) m.ccList = [];
+          if (!Array.isArray(m.bccList)) m.bccList = [];
+        });
+    });
   }
 }
 
