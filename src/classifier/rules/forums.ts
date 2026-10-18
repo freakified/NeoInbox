@@ -7,6 +7,7 @@
  */
 import type { Features } from "../features";
 import { domainMatches, hasAnyHeaderPrefix } from "../features";
+import { isFinanceDomain } from "./finance";
 
 const FORUM_DOMAINS = [
   // Group/list hosts.
@@ -55,6 +56,9 @@ export const FORUM_HEADER_PREFIXES = [
 const LIST_HOST_RE = /(?:^|[.@<])lists?\./i;
 
 export const matchesForums = (f: Features): boolean => {
+  // Banks and agencies broadcast through list software (TreasuryDirect sends
+  // from lists.fiscal.treasury.gov) but never host discussion; Finance owns them.
+  if (isFinanceDomain(f.senderDomain)) return false;
   if (f.hasListPost || f.hasMailingList) return true;
   if (domainMatches(f.senderDomain, FORUM_DOMAINS)) return true;
   if (hasAnyHeaderPrefix(f, FORUM_HEADER_PREFIXES)) return true;

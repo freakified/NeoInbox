@@ -1,151 +1,52 @@
 # NeoInbox
 
-Google Inbox died in 2019. NeoInbox brings its reading experience back as a
-Thunderbird MailExtension — auto-bundles, trip bundles, pin/snooze/done, and a
-single smooth list that expands in place instead of throwing you into a
-three-pane layout.
+Google Inbox, rebuilt as a Thunderbird MailExtension. It works with any IMAP
+account Thunderbird can use.
 
-It works against any IMAP account Thunderbird can talk to. Nothing about it is
-Gmail-specific.
+- **Bundles**: Finance, Purchases, Social, Updates, Promos and Forums, sorted
+  by a local rules classifier. You can also add your own bundles.
+- **Trips**: flight, hotel and rental confirmations grouped into one trip.
+- **Pin, snooze, done**, plus reminders, and conversations that expand in place.
 
-## What it does
+Classification runs entirely in the extension, and there's no telemetry.
+The only network request NeoInbox makes is for the optional translate
+feature, and only after you set it up with your own provider.
 
-- **Bundles.** Mail is grouped into Travel, Finance, Purchases, Social, Updates,
-  Promos and Forums by a local rules engine, then collapsed into one row per
-  bundle. You can add your own bundles and rules, and correct any message's
-  bundle from its row.
-- **Trips.** Flight, hotel and rental confirmations get clustered into a single
-  trip bundle by date and PNR, with the trip's date range on the row.
-- **Pin, snooze, done.** The Inbox verbs. Sweep a whole section done in one
-  click; pinned threads survive the sweep.
-- **Reminders.** Free-standing rows in the stream that aren't backed by mail.
-- **In-place expansion.** Opening a conversation expands it inside the list
-  rather than replacing the view.
-
-## Privacy
-
-This is a mail client, so it's worth being precise:
-
-- **Classification is local.** Bundling is a heuristic rules engine that runs in
-  the extension. No message content is uploaded to classify it, and there is no
-  telemetry, analytics or crash reporting of any kind.
-- **Bundle state stays in NeoInbox.** Categories live in a local IndexedDB
-  cache, not in tags on the server, so NeoInbox does not litter your mailbox for
-  every other client that reads it. Pin and snooze use small NeoInbox tags,
-  because that state has to survive a reinstall.
-- **It reads the Inbox and nothing else.** NeoInbox scans your inbox folders,
-  and lists Sent and Drafts by their headers. It never enumerates your archive
-  and never fetches a message body out of it — which matters on Gmail, where
-  Thunderbird treats All Mail as the archive folder, so reading it means
-  downloading the whole mailbox. Done and Snooze still perform a real archive
-  (a server-side move, the same one Thunderbird's own Archive does); NeoInbox
-  simply records where the message went instead of reading the folder back.
-  `src/background/inboxOnly.test.ts` holds this to it.
-- **Remote content is blocked by default.** Message bodies render in a sandboxed
-  iframe under a `default-src 'none'` CSP, so tracking pixels, remote
-  stylesheets, webfonts, nested frames and `<object>` embeds are all inert until
-  you allow images — per message, or per sender.
-- **One outbound request exists in the entire codebase**, in
-  `src/spa/lib/translation.ts`. It is the optional translate-message feature, it
-  is off until you enter your own provider and key in Settings, and you can
-  point it at a LibreTranslate instance or a local OpenAI-compatible model
-  instead of a cloud API. NeoInbox installs with no host permissions at all;
-  Thunderbird asks you to allow the one provider host when you set it up.
-
-## Keyboard shortcuts
-
-Press <kbd>?</kbd> in the app for the full list.
-
-| Key | Action |
-| --- | --- |
-| <kbd>j</kbd> / <kbd>k</kbd> | Next / previous conversation |
-| <kbd>Enter</kbd> | Open or close |
-| <kbd>Esc</kbd> | Close the open conversation |
-| <kbd>e</kbd> | Done |
-| <kbd>s</kbd> | Snooze until tomorrow |
-| <kbd>p</kbd> | Pin / unpin |
-| <kbd>#</kbd> | Trash (when delete actions are enabled) |
-| <kbd>g</kbd> then <kbd>i</kbd>/<kbd>s</kbd>/<kbd>d</kbd>/<kbd>t</kbd>/<kbd>r</kbd> | Go to Inbox / Snoozed / Done / Trips / Reminders |
+Press <kbd>?</kbd> in the app to see the keyboard shortcuts.
 
 ## Install
 
-Requires Thunderbird 115 or newer.
+Requires Thunderbird 115+.
 
 ```sh
 pnpm install
 pnpm build
 ```
 
-That produces `dist/`, an unpacked MailExtension.
-
-1. **Tools → Developer Tools → Debug Add-ons** (the `about:debugging` route is
-   under "this-thunderbird").
-2. **Load Temporary Add-on…**, and pick `dist/manifest.json`.
-3. Click the **Open NeoInbox** toolbar button.
-
-On first run the background script backfills and classifies the newest 1,000
-inbox messages; the header shows the progress. If your inbox is bigger than
-that, the bottom of the stream offers **Fetch older mail**, which widens the
-window by another 1,000 and rescans.
+In Thunderbird, go to **Tools → Developer Tools → Debug Add-ons → Load
+Temporary Add-on…** and pick `dist/manifest.json`. Then click **Open NeoInbox**
+in the toolbar.
 
 ## Development
 
 ```sh
-pnpm dev           # vite build --watch
-pnpm test          # vitest
-pnpm typecheck     # tsc --noEmit
+pnpm dev         # rebuild on change, then hit Reload in Debug Add-ons
+pnpm test
+pnpm typecheck
+pnpm harness     # run the UI in a browser against a fake Thunderbird: http://localhost:5199/dev.html
+pnpm shot        # headless screenshot of the harness, see scripts/shot.mjs
+pnpm eval        # trip-extraction eval against real-mail fixtures
 ```
 
-After a rebuild, hit **Reload** next to the extension in Debug Add-ons.
-
-### Without Thunderbird
-
-```sh
-pnpm harness       # http://localhost:5199/dev.html
-pnpm shot          # headless Chrome screenshot -> shots/inbox.png
-```
-
-The harness runs the real background and SPA in a plain browser tab against
-the fake `messenger` from the tests, seeded with a mailbox that fills every
-bundle, a few threads and a trip (`src/dev/seed.ts`). Each load starts fresh.
-`window.neo` drives it from the console — `await neo.deliver("promo")`,
-`neo.mail.hang("getFull")`, `neo.store()`. `pnpm shot` takes steps in
-order (`--click "text=Promos" --shot promos --eval "neo.deliver()"`); see
-`scripts/shot.mjs`. Anything the fake doesn't model (real MIME, compose,
-Thunderbird quirks) still needs the real thing.
-
-Layout:
-
-| Path | What lives there |
+| Path | Contents |
 | --- | --- |
-| `src/background/` | Backfill, incremental sync, snooze alarms, trip scanning |
-| `src/dev/` | Browser harness: fake-Thunderbird boot and seed mailbox |
-| `src/classifier/` | Bundle rules and the feature extractors they run on |
-| `src/shared/` | Threading, trip clustering, types shared across both sides |
-| `src/spa/` | The React UI rendered in the NeoInbox tab |
-| `src/store/` | Zustand store and the Dexie/IndexedDB cache |
-
-## Known sharp edges
-
-- Bundling is heuristic. Airline promos landing in Travel is the classic
-  failure; rules live in `src/classifier/rules/` and are easy to extend, and you
-  can correct any message from its row.
-- The rules bundle organisational mail aggressively: a shared mailbox
-  (`support@`, `info@`, `billing@`) writing to you out of the blue lands in
-  Updates, and only a thread it is replying into keeps it loose. A small
-  business's first mail to you is the case that gets this wrong — see
-  `knownLimitations` in `src/classifier/corpus.ts`.
-- Trip extraction has been exercised against a limited set of real
-  confirmations. Unusual airlines and hotel chains will need parser work.
-- Bundles cover your inbox plus whatever you have marked done from inside
-  NeoInbox. Mail archived elsewhere — from Thunderbird's three-pane, or another
-  client — stays out of the Done view, because finding it would mean reading the
-  archive folder.
-- Your own replies thread into a conversation by subject and participant until
-  you open it, which is when their `References` headers are fetched. A reply
-  whose subject was rewritten mid-thread may sit apart until then.
-- Inline `cid:` images in message bodies don't render yet.
+| `src/background/` | Sync, backfill, snooze alarms, trip scanning |
+| `src/classifier/` | Bundle rules and feature extractors |
+| `src/shared/` | Threading, trip clustering, shared types |
+| `src/spa/` | React UI shown in the NeoInbox tab |
+| `src/store/` | Zustand store and IndexedDB (Dexie) cache |
+| `src/dev/` | Browser harness and seed mailbox |
 
 ## License
 
-[MPL-2.0](LICENSE).
+[MPL-2.0](LICENSE)

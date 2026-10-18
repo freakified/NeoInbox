@@ -210,6 +210,19 @@ export const corpus: CorpusCase[] = [
     expect: "finance",
   },
   {
+    name: "a savings bond notice from TreasuryDirect",
+    author: "TreasuryDirect <no-reply@treasurydirect.gov>",
+    subject: "TreasuryDirect Account Update",
+    expect: "finance",
+  },
+  {
+    name: "a TreasuryDirect notice sent through Treasury's list server",
+    author: "TreasuryDirect <treasurydirect@lists.fiscal.treasury.gov>",
+    subject: "TreasuryDirect Account Update",
+    headers: { "List-Id": ["<treasurydirect.lists.fiscal.treasury.gov>"], ...listUnsubscribe },
+    expect: "finance",
+  },
+  {
     name: "a utility bill from a company on no list",
     // Nobody can enumerate every utility, landlord and gym. A billing subject
     // from an organisational sender is enough.
