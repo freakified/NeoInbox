@@ -68,7 +68,6 @@
   padding: 0 16px 0 28px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   transition: background-color 160ms ease;
 }
 
@@ -114,6 +113,9 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  /* The spacer: search and the pin switch pack left, the avatar sits right. */
+  margin-left: auto;
+  padding-left: 16px;
 }
 
 /* Inbox's search: a translucent bar in the app bar that turns white when
@@ -122,7 +124,7 @@
   flex: 1 1 auto;
   max-width: 800px;
   min-width: 0;
-  margin: 0 24px;
+  margin: 0 20px 0 24px;
   display: flex;
   align-items: center;
   height: 38px;
@@ -204,8 +206,8 @@
 
 .pinToggle {
   position: relative;
-  width: 42px;
-  height: 22px;
+  width: 46px;
+  height: 24px;
   padding: 0;
   border: none;
   background: transparent;
@@ -215,9 +217,9 @@
 
 .pinToggleTrack {
   position: absolute;
-  inset: 4px 1px;
+  inset: 4px 0 4px 2px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(0, 0, 0, 0.2);
   transition: background-color 160ms ease;
 }
 
@@ -229,12 +231,13 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  /* Off: a translucent knob with a white pin; on: solid white with a blue pin. */
-  background: rgba(255, 255, 255, 0.4);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  /* Off: a solid blue knob a touch lighter than the bar, with a white pin;
+     on: solid white with a blue pin. */
+  background: #5793fc;
+  box-shadow: var(--shadow-elevation-1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -242,13 +245,13 @@
 }
 
 .pinToggleOn .pinToggleKnob {
-  transform: translateX(20px);
+  transform: translateX(22px);
   background: #fff;
 }
 
 /* Doubled up to outrank the global .material-symbols-rounded size. */
 .pinToggleKnob .pinToggleIcon {
-  font-size: 14px;
+  font-size: 16px;
   transform: rotate(45deg);
   color: #fff;
   transition: color 160ms ease;
@@ -488,6 +491,19 @@
   .headerLeft {
     width: calc(var(--drawer-width) + 60px);
     flex: none;
+  }
+
+  /* Drawer closed: an auto left margin to match headerRight's spacer, so
+     search and the pin switch sit centred between the title and the avatar. */
+  /* Drawer closed: the title area shrinks to fit, and its 20px margin
+     mirrors headerRight's padding plus the avatar's margin. */
+  .root:not(.drawerOpen) .headerLeft {
+    width: auto;
+    margin-right: 20px;
+  }
+
+  .root:not(.drawerOpen) .search {
+    margin-left: auto;
   }
 
   .drawerOpen .content {

@@ -484,6 +484,22 @@ export const App = () => {
                 }}
               />
             </form>
+            {activeView.type === "inbox" && (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={pinnedOnly}
+                aria-label={pinnedOnly ? "Show all mail" : "Show pinned only"}
+                title={pinnedOnly ? "Show all mail" : "Show pinned only"}
+                className={`${s.pinToggle} ${pinnedOnly ? s.pinToggleOn : ""}`}
+                onClick={() => setPinnedOnly((v) => !v)}
+              >
+                <span className={s.pinToggleTrack} />
+                <span className={s.pinToggleKnob}>
+                  <Icon name="push_pin" className={s.pinToggleIcon} />
+                </span>
+              </button>
+            )}
             <div className={s.headerRight}>
               {syncing && sync && (
                 <span className={s.syncText}>
@@ -501,22 +517,6 @@ export const App = () => {
                 </button>
               )}
               {reconnecting && <span className={s.reconnectText}>Reconnecting…</span>}
-              {activeView.type === "inbox" && (
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={pinnedOnly}
-                  aria-label={pinnedOnly ? "Show all mail" : "Show pinned only"}
-                  title={pinnedOnly ? "Show all mail" : "Show pinned only"}
-                  className={`${s.pinToggle} ${pinnedOnly ? s.pinToggleOn : ""}`}
-                  onClick={() => setPinnedOnly((v) => !v)}
-                >
-                  <span className={s.pinToggleTrack} />
-                  <span className={s.pinToggleKnob}>
-                    <Icon name="push_pin" className={s.pinToggleIcon} />
-                  </span>
-                </button>
-              )}
               <AccountSwitcher onShowShortcuts={() => setShowShortcuts(true)} />
             </div>
           </>

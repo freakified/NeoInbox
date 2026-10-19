@@ -21,12 +21,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
   color: #fff;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 500;
 }
 
@@ -36,7 +35,7 @@
 }
 
 .allIcon {
-  font-size: 16px;
+  font-size: 20px;
 }
 
 .menu {
