@@ -59,7 +59,7 @@ export const OpenModeSection = () => {
             onChange={(e) => toggleStartup(e.target.checked)}
             className={s.checkInput}
           />
-          <span>Open when Thunderbird starts</span>
+          <span>Automatically open NeoInbox when Thunderbird starts</span>
         </label>
       </div>
     </section>
