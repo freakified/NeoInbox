@@ -11,6 +11,7 @@ export type SelectedBundle = { kind: "builtin"; id: BuiltinCategory } | { kind: 
 export type SelectedPane =
   | { kind: "general" }
   | { kind: "advanced" }
+  | { kind: "accounts" }
   | { kind: "trips" }
   | SelectedBundle;
 
@@ -155,7 +156,10 @@ export const bundleKey = (selected: SelectedBundle): string =>
   selected.kind === "new" ? "new" : `${selected.kind}:${selected.id}`;
 
 export const paneKey = (selected: SelectedPane): string =>
-  selected.kind === "general" || selected.kind === "advanced" || selected.kind === "trips"
+  selected.kind === "general" ||
+  selected.kind === "advanced" ||
+  selected.kind === "accounts" ||
+  selected.kind === "trips"
     ? selected.kind
     : bundleKey(selected);
 

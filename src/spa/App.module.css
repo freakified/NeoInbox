@@ -258,22 +258,6 @@
   color: var(--color-md-primary);
 }
 
-.settingsBtn {
-  color: rgba(255, 255, 255, 0.8);
-  background: none;
-  border: none;
-  cursor: pointer;
-  line-height: 1;
-}
-
-.settingsBtn:hover {
-  color: #fff;
-}
-
-.settingsIcon {
-  font-size: 20px;
-}
-
 .appShell {
   position: relative;
   padding-top: var(--header-height);

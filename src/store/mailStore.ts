@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { db } from "./db";
 import { deriveStream, type Stream, type StreamView } from "./stream";
 import { composeSlice } from "./composeSlice";
+import { getDefaultAccount } from "../spa/lib/accountPrefs";
 import { loadHistoryPage, loadStartupMessages } from "./history";
 import { mailSlice } from "./mailSlice";
 import { connectPort } from "./portClient";
@@ -63,6 +64,10 @@ export const useMailStore = create<MailStore>((set, get) => ({
   archiveImport: null,
   historyFrom: 0,
   loadingHistory: false,
+  // Opens on the default account; switching is for this session only.
+  accountFilter: getDefaultAccount(),
+
+  setAccountFilter: (accountId) => set({ accountFilter: accountId }),
 
   init: async () => {
     if (get().hydrated) return;
@@ -160,6 +165,7 @@ export const useStreamForView = (view: StreamView, pinnedOnly = false): Stream =
   const remindersById = useMailStore((s) => s.remindersById);
   const tripsById = useMailStore((s) => s.tripsById);
   const tripMembershipByKey = useMailStore((s) => s.tripMembershipByKey);
+  const accountFilter = useMailStore((s) => s.accountFilter);
   return useMemo(
     () =>
       deriveStream(
@@ -171,8 +177,19 @@ export const useStreamForView = (view: StreamView, pinnedOnly = false): Stream =
         remindersById,
         tripsById,
         tripMembershipByKey,
+        accountFilter,
       ),
-    [messagesByKey, myEmails, view, snoozesByKey, pinnedOnly, remindersById, tripsById, tripMembershipByKey],
+    [
+      messagesByKey,
+      myEmails,
+      view,
+      snoozesByKey,
+      pinnedOnly,
+      remindersById,
+      tripsById,
+      tripMembershipByKey,
+      accountFilter,
+    ],
   );
 }
 

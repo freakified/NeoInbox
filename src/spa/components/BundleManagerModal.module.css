@@ -264,6 +264,14 @@
   gap: 22px;
 }
 
+/* Names whose color row follows, in Settings → Accounts. */
+.accountLabel {
+  margin: 0;
+  color: var(--color-md-on-surface);
+  font-size: 14px;
+  font-weight: 500;
+}
+
 .colorGrid {
   display: flex;
   flex-wrap: wrap;

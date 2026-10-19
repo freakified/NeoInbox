@@ -10,6 +10,8 @@ import { corpus } from "../classifier/corpus";
 import type { FakeMessageSpec, FakeMessengerOptions } from "../test/fakeMessenger";
 
 export const ME = "you@neoinbox.test";
+/** The second account's address, so the harness has accounts to switch between. */
+export const WORK_ME = "you@work.example";
 export const INBOX = "inbox";
 export const SENT = "sent";
 export const ARCHIVE = "archive";
@@ -38,6 +40,7 @@ const thread = (
   subject: string,
   steps: ThreadStep[],
   now: number,
+  me = ME,
 ): { inbox: FakeMessageSpec[]; sent: FakeMessageSpec[] } => {
   const inbox: FakeMessageSpec[] = [];
   const sent: FakeMessageSpec[] = [];
@@ -53,8 +56,8 @@ const thread = (
     const mine = step.from === "me";
     const spec: FakeMessageSpec = {
       headerMessageId,
-      author: mine ? `You <${ME}>` : step.from,
-      recipients: mine ? [correspondent] : [ME],
+      author: mine ? `You <${me}>` : step.from,
+      recipients: mine ? [correspondent] : [me],
       subject: i === 0 ? subject : `Re: ${subject}`,
       date: new Date(now - step.hoursAgo * HOUR),
       read: mine || (step.read ?? false),
@@ -182,8 +185,17 @@ export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
           "Shout if I missed anything.",
         ],
       },
+      { from: "me", hoursAgo: 4, body: ["Thanks Sam — I'll take the sync rewrite."] },
+      { from: "Sam Okafor <sam@work.example>", hoursAgo: 2, body: ["Great, I'll put you down for it."] },
     ],
     now,
+    WORK_ME,
+  );
+  const review = thread(
+    "Design review moved to Thursday",
+    [{ from: "Lena Park <lena@work.example>", hoursAgo: 26, body: ["Room 4B, 2pm. Bring the onboarding mocks."] }],
+    now,
+    WORK_ME,
   );
   const reunion = thread(
     "Photos from the reunion",
@@ -240,7 +252,6 @@ export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
 
   const inbox = [
     ...hike.inbox,
-    ...planning.inbox,
     ...reunion.inbox,
     ...lease.inbox,
     ...tripMail(now),
@@ -253,12 +264,29 @@ export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
       {
         id: "dev",
         name: "Dev Mailbox",
-        identities: [{ email: ME, name: "Me" }, { email: "me@work.example", name: "Me (work)" }],
+        identities: [{ email: ME, name: "Me" }],
         folders: [
           { id: INBOX, name: "Inbox", specialUse: ["inbox"], messages: inbox },
           { id: SENT, name: "Sent", specialUse: ["sent"], messages: [...hike.sent, ...lease.sent] },
           { id: "drafts", name: "Drafts", specialUse: ["drafts"], messages: [reunionDraft] },
           { id: ARCHIVE, name: "Archives", specialUse: ["archives"] },
+        ],
+      },
+      {
+        id: "work",
+        name: "Work",
+        identities: [{ email: WORK_ME, name: "Me (work)" }],
+        folders: [
+          {
+            id: "work-inbox",
+            name: "Inbox",
+            specialUse: ["inbox"],
+            // The first corpus newsletter went to both addresses: the same
+            // Message-ID in two accounts, which stays two conversations.
+            messages: [...planning.inbox, ...review.inbox, { ...bundled[0]!, recipients: [WORK_ME] }],
+          },
+          { id: "work-sent", name: "Sent", specialUse: ["sent"], messages: planning.sent },
+          { id: "work-archive", name: "Archives", specialUse: ["archives"] },
         ],
       },
     ],

@@ -105,6 +105,8 @@ export const deriveStream = (
   remindersById: Record<string, ReminderRecord> = {},
   tripsById: Record<string, TripRecord> = {},
   tripMembershipByKey: Record<string, TripMembershipRecord> = {},
+  /** Only this account's mail; null for every account. */
+  accountId: string | null = null,
 ): Stream => {
   const allMessages = Object.values(messagesByKey);
   const anchorOrigins: ReadonlySet<MessageOrigin> = new Set(
@@ -165,6 +167,23 @@ export const deriveStream = (
   // Faithful to Google Inbox: each trip is its own row in the inbox stream,
   // not a slice of the travel bundle.
   const groupTrips = showInboxBundles || showTripsView;
+  // Threads never span accounts (see threading.ts), so narrowing to one is a
+  // filter on whole threads. Trips are the exception: a trip belongs to every
+  // account it has mail from, and shows whole in each, since a flight booked
+  // from work and a hotel booked from home are still one trip.
+  if (accountId) {
+    const accountTrips = new Set(
+      threads
+        .filter((t) => t.accountId === accountId)
+        .map((t) => tripIdOfThread(t, tripMembershipByKey)),
+    );
+    threads = threads.filter((t) => {
+      if (t.accountId === accountId) return true;
+      if (!groupTrips || (!showTripsView && t.pinned)) return false;
+      const tripId = tripIdOfThread(t, tripMembershipByKey);
+      return !!tripId && accountTrips.has(tripId);
+    });
+  }
 
   const byCategory = new Map<Category, Thread[]>();
   const byTrip = new Map<string, Thread[]>();

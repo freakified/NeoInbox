@@ -22,6 +22,8 @@ import {
 } from "./settings/bundleForm";
 import { GeneralSettings } from "./settings/GeneralSettings";
 import { AdvancedSettings } from "./settings/AdvancedSettings";
+import { AccountSettings } from "./settings/AccountSettings";
+import { useAccounts } from "../lib/accounts";
 import { TripSettings } from "./settings/TripSettings";
 import { TRIP_COLOR } from "./TripSliceRow";
 import { BuiltinBundleEditor, CustomBundleEditor, ThreadRouteSummary } from "./settings/BundleEditors";
@@ -35,7 +37,7 @@ export const BundleManagerModal = ({
   initialPane,
 }: {
   onClose: () => void;
-  initialPane?: "general" | "advanced" | "trips";
+  initialPane?: "general" | "advanced" | "accounts" | "trips";
   thread?: Thread;
   initialCategory?: Category | null;
   startNewBundle?: boolean;
@@ -111,6 +113,7 @@ export const BundleManagerModal = ({
   };
 
   const [selected, setSelected] = useState<SelectedPane>(selectedAtOpen);
+  const accounts = useAccounts();
   const [form, setForm] = useState<BundleFormState>(initialForm);
   const [ruleType, setRuleType] = useState<RuleType>(initialRuleType);
   const [ruleValue, setRuleValue] = useState(initialRuleValue);
@@ -283,6 +286,16 @@ export const BundleManagerModal = ({
               <Icon name="settings" className={s.navIcon} />
               <span className={s.navName}>General</span>
             </button>
+            {accounts.length > 1 && (
+              <button
+                type="button"
+                className={clsx(s.bundleNavItem, paneKey(selected) === "accounts" && s.bundleNavItemActive)}
+                onClick={() => choose({ kind: "accounts" })}
+              >
+                <Icon name="manage_accounts" className={s.navIcon} />
+                <span className={s.navName}>Accounts</span>
+              </button>
+            )}
             <button
               type="button"
               className={clsx(s.bundleNavItem, paneKey(selected) === "advanced" && s.bundleNavItemActive)}
@@ -359,6 +372,8 @@ export const BundleManagerModal = ({
               <GeneralSettings />
             ) : selected.kind === "advanced" ? (
               <AdvancedSettings />
+            ) : selected.kind === "accounts" ? (
+              <AccountSettings />
             ) : selected.kind === "trips" ? (
               <TripSettings />
             ) : (

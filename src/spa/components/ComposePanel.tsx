@@ -46,6 +46,8 @@ export const ComposePanel = ({
 }) => {
   const composeMessage = useMailStore((st) => st.composeMessage);
   const notify = useMailStore((st) => st.notify);
+  // A new message sends from the account being looked at.
+  const accountFilter = useMailStore((st) => st.accountFilter);
   const [value, setValue] = useState<ComposerValue>(() =>
     reply
       ? reply.value
@@ -158,7 +160,7 @@ export const ComposePanel = ({
           showSubject={!reply}
           foldAddresses
           fill
-          identityContext={reply?.identityContext}
+          identityContext={reply?.identityContext ?? { accountId: accountFilter ?? undefined }}
           placeholder={reply?.placeholder ?? "Say something"}
           focus={value.to.length ? "text" : "to"}
           onSubmit={submit}

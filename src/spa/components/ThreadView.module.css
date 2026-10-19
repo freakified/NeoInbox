@@ -19,6 +19,22 @@
   white-space: nowrap;
 }
 
+/* Which account the conversation is in, on the all-accounts view. */
+.accountChip {
+  flex: none;
+  max-width: 40%;
+  margin: 0 auto 0 12px;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--account-color) 14%, #fff);
+  color: color-mix(in srgb, var(--account-color) 65%, #000);
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .headerActions {
   flex-shrink: 0;
   margin-left: 12px;

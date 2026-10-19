@@ -50,7 +50,7 @@ const stream = (messages: RawMessage[], view: StreamView = { type: "inbox" }, ..
     byKey(messages),
     ME,
     view,
-    ...(rest as [Record<string, SnoozeRecord>?, boolean?, Record<string, ReminderRecord>?, Record<string, TripRecord>?, Record<string, TripMembershipRecord>?]),
+    ...(rest as [Record<string, SnoozeRecord>?, boolean?, Record<string, ReminderRecord>?, Record<string, TripRecord>?, Record<string, TripMembershipRecord>?, (string | null)?]),
   );
 
 const items = (s: { sections: { items: StreamItem[] }[] }): StreamItem[] =>
@@ -324,5 +324,60 @@ describe("date sections", () => {
     ]);
 
     expect(s.sections.map((sec) => sec.label)).toEqual(["Today", "Yesterday"]);
+  });
+});
+
+describe("one account", () => {
+  const trip: TripRecord = { id: "trip-1", name: "Lisbon", createdAt: NOW - 10 * MINUTE } as TripRecord;
+  const membership = (m: RawMessage): TripMembershipRecord =>
+    ({ key: m.headerMessageId, tripId: trip.id, source: "auto" }) as TripMembershipRecord;
+  const ofB = (over: Partial<RawMessage> = {}) => msg({ accountId: "b", folderId: "inbox-b", ...over });
+
+  it("shows only that account's threads, and every account's with no filter", () => {
+    const a = msg({ subject: "From a" });
+    const b = ofB({ subject: "From b" });
+    const subjects = (accountId: string | null) =>
+      items(stream([a, b], { type: "inbox" }, {}, false, {}, {}, {}, accountId)).map(
+        (i) => i.type === "thread" && i.thread.subject,
+      );
+
+    expect(subjects("a")).toEqual(["From a"]);
+    expect(subjects("b")).toEqual(["From b"]);
+    expect(subjects(null).sort()).toEqual(["From a", "From b"]);
+  });
+
+  it("keeps the same message delivered to two accounts as two threads", () => {
+    const a = msg({ headerMessageId: "<same@example.com>" });
+    const b = ofB({ headerMessageId: "<same@example.com>" });
+    const s = stream([a, b], { type: "inbox" }, {}, false, {}, {}, {}, null);
+
+    expect(kinds(s)).toEqual(["thread", "thread"]);
+  });
+
+  it("shows a trip whole in every account it has mail from", () => {
+    const flight = msg();
+    const hotel = ofB();
+    const memberships = { [flight.headerMessageId]: membership(flight), [hotel.headerMessageId]: membership(hotel) };
+    const tripThreads = (view: StreamView, accountId: string) => {
+      const item = items(
+        stream([flight, hotel], view, {}, false, {}, { [trip.id]: trip }, memberships, accountId),
+      ).find((i) => i.type === "trip");
+      return item?.type === "trip" ? item.threads.length : 0;
+    };
+
+    expect(tripThreads({ type: "inbox" }, "a")).toBe(2);
+    expect(tripThreads({ type: "trips" }, "b")).toBe(2);
+    expect(tripThreads({ type: "trips" }, "c")).toBe(0);
+  });
+
+  it("doesn't let another account's trip mail loose outside the trip", () => {
+    // Pinned mail surfaces outside its trip in the inbox, so a pinned thread
+    // from account b in a shared trip would otherwise leak into a's inbox.
+    const flight = msg();
+    const hotel = ofB({ pinned: true });
+    const memberships = { [flight.headerMessageId]: membership(flight), [hotel.headerMessageId]: membership(hotel) };
+    const s = stream([flight, hotel], { type: "inbox" }, {}, false, {}, { [trip.id]: trip }, memberships, "a");
+
+    expect(kinds(s)).toEqual(["trip"]);
   });
 });

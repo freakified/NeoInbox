@@ -68,7 +68,7 @@ export interface ToastRecord {
  */
 export interface BundleSettingsRequest {
   /** Open on one of the non-bundle panes instead. */
-  pane?: "general" | "advanced" | "trips";
+  pane?: "general" | "advanced" | "accounts" | "trips";
   category?: Category | null;
   thread?: Thread;
   highlightRuleId?: string;
@@ -108,6 +108,9 @@ export interface MailStore {
    */
   historyFrom: number;
   loadingHistory: boolean;
+  /** The one account the stream shows; null shows every account's mail. */
+  accountFilter: string | null;
+  setAccountFilter: (accountId: string | null) => void;
 
   init: () => Promise<void>;
   /** Page the next-older Sent and Done mail into memory. */

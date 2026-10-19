@@ -13,6 +13,7 @@ import {
 } from "../store/mailStore";
 import { CATEGORIES, getCategoryMeta } from "../shared/categories";
 import { scrollKeeper } from "./lib/scrollKeeper";
+import { AccountSwitcher } from "./components/AccountSwitcher";
 import { BundleSliceRow } from "./components/BundleSliceRow";
 import { BundleManagerModal } from "./components/BundleManagerModal";
 import { useBulkActions } from "./components/BulkActionConfirm";
@@ -192,7 +193,6 @@ export const App = () => {
   const headerRef = useRef<HTMLElement | null>(null);
   const contentRef = useRef<HTMLElement | null>(null);
   const bundleSettings = useBundleSettings();
-  const openBundleSettings = useMailStore((st) => st.openBundleSettings);
   const closeBundleSettings = useMailStore((st) => st.closeBundleSettings);
   const [activeView, setActiveView] = useState<StreamView>(parseHashView);
   const [pinnedOnly, setPinnedOnly] = useState(false);
@@ -212,6 +212,20 @@ export const App = () => {
   useEffect(() => {
     void init();
   }, [init]);
+
+  // Another account is another mailbox: nothing open or selected carries over.
+  const accountFilter = useMailStore((st) => st.accountFilter);
+  const firstAccountFilter = useRef(accountFilter);
+  useEffect(() => {
+    if (accountFilter === firstAccountFilter.current) return;
+    firstAccountFilter.current = accountFilter;
+    useSelection.getState().clear();
+    scrollKeeper.release();
+    setExpandedKey(null);
+    setOpenBundleThreadId(null);
+    setVisibleItemLimit(STREAM_PAGE_SIZE);
+    window.scrollTo(0, 0);
+  }, [accountFilter]);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -503,23 +517,7 @@ export const App = () => {
                   </span>
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => setShowShortcuts(true)}
-                title="Keyboard shortcuts (?)"
-                aria-label="Keyboard shortcuts"
-                className={s.settingsBtn}
-              >
-                <Icon name="keyboard" className={s.settingsIcon} />
-              </button>
-              <button
-                onClick={() => openBundleSettings({})}
-                title="Settings"
-                aria-label="Settings"
-                className={s.settingsBtn}
-              >
-                <Icon name="settings" className={s.settingsIcon} />
-              </button>
+              <AccountSwitcher onShowShortcuts={() => setShowShortcuts(true)} />
             </div>
           </>
         )}
