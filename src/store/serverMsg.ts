@@ -127,11 +127,20 @@ export const applyServerMsg = (
       // only a run that just ended deserves a toast.
       const justEnded = status.error !== undefined || Date.now() - (status.finishedAt ?? 0) < 60_000;
       if (wasRunning && !status.running && justEnded) {
-        const message = status.error
-          ? "Couldn't finish looking for trips"
-          : status.cancelled
-            ? `Stopped looking for trips after ${status.processed.toLocaleString()} ${status.processed === 1 ? "message" : "messages"}`
-            : `Trip scan done — ${(status.trips ?? 0).toLocaleString()} ${status.trips === 1 ? "trip" : "trips"}`;
+        const trips = `${(status.trips ?? 0).toLocaleString()} ${status.trips === 1 ? "trip" : "trips"}`;
+        // An archive scan that isn't a rebuild is Settings → Older mail: its
+        // import half stays quiet and this one toast speaks for both.
+        const message = status.archive && !status.rebuild
+          ? status.error
+            ? "Couldn't finish loading older mail"
+            : status.cancelled
+              ? "Stopped loading older mail"
+              : `Older mail loaded — ${trips}`
+          : status.error
+            ? "Couldn't finish looking for trips"
+            : status.cancelled
+              ? `Stopped looking for trips after ${status.processed.toLocaleString()} ${status.processed === 1 ? "message" : "messages"}`
+              : `Trip scan done — ${trips}`;
         set({ toasts: [...get().toasts, { id: nextToastId(), message }].slice(-TOAST_LIMIT) });
       }
       return;
@@ -142,15 +151,16 @@ export const applyServerMsg = (
       set({ archiveImport: status });
       // Imported rows were written without deltas; show them all at once.
       if (wasRunning && !status.running) void get().reloadHistory();
-      if (wasRunning && !status.running) {
+      // During a load from Older mail the trip scan's toast covers this.
+      if (wasRunning && !status.running && !get().tripScan?.running) {
         const count = `${status.imported.toLocaleString()} ${status.imported === 1 ? "message" : "messages"}`;
         const message = status.error
-          ? "Couldn't finish importing archived mail"
+          ? "Couldn't finish loading older mail"
           : status.cancelled
-            ? `Stopped importing archived mail after ${count}`
+            ? `Stopped loading older mail after ${count}`
             : status.imported === 0
-              ? "Nothing new to import from your archive"
-              : `Imported ${count} from your archive`;
+              ? "No new older mail to load"
+              : `Loaded ${count} of older mail`;
         set({ toasts: [...get().toasts, { id: nextToastId(), message }].slice(-TOAST_LIMIT) });
       }
       return;

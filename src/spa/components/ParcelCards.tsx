@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { log } from "../../shared/log";
 import type { Carrier, Parcel, RawMessage, Thread } from "../../shared/types";
 import { senderName } from "../lib/avatar";
+import { openExternal } from "../lib/external";
 import { Icon } from "./Icon";
 import { ParcelArt } from "./ParcelArt";
 import s from "./ParcelCards.module.css";
@@ -27,16 +28,6 @@ const formatNumber = (p: Parcel & { number: string }): string =>
   JP_CARRIERS.has(p.carrier) && /^\d{12}$/.test(p.number)
     ? p.number.replace(/^(\d{4})(\d{4})/, "$1-$2-")
     : p.number;
-
-/**
- * Hands a carrier page to the system browser. A plain link would load inside
- * Thunderbird's tab, if at all.
- */
-const openExternal = (url: string): void => {
-  messenger.windows.openDefaultBrowser(url).catch((e: unknown) => {
-    log.warn("parcels", "opening the tracking page failed", e);
-  });
-};
 
 /** A parcel with the message it came from, whose sender heads its card. */
 export interface ParcelRef {

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MPL-2.0",
-  "description": "Bring back the Google Inbox experience, as a Thunderbird MailExtension.",
+  "description": "Google Inbox reimplemented as a Thunderbird MailExtension.",
   "type": "module",
   "packageManager": "pnpm@12.4.2",
   "scripts": {

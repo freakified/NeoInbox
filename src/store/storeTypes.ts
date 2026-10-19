@@ -69,7 +69,7 @@ export interface ToastRecord {
  */
 export interface BundleSettingsRequest {
   /** Open on one of the non-bundle panes instead. */
-  pane?: "general" | "advanced" | "accounts" | "trips";
+  pane?: "general" | "privacy" | "advanced" | "accounts" | "archive";
   category?: Category | null;
   thread?: Thread;
   highlightRuleId?: string;

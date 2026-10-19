@@ -15,6 +15,7 @@ import { CATEGORIES, getCategoryMeta } from "../shared/categories";
 import { resolveThread } from "../shared/threading";
 import type { MessageKey } from "../shared/messageKey";
 import { scrollKeeper } from "./lib/scrollKeeper";
+import { AboutDialog } from "./components/AboutDialog";
 import { AccountSwitcher } from "./components/AccountSwitcher";
 import { BundleSliceRow } from "./components/BundleSliceRow";
 import { BundleManagerModal } from "./components/BundleManagerModal";
@@ -223,6 +224,7 @@ export const App = () => {
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 980px)").matches,
   );
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
   const goPrefixRef = useRef(false);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const [searchText, setSearchText] = useState(() =>
@@ -520,6 +522,7 @@ export const App = () => {
       }}
     >
       {showShortcuts && <ShortcutsHelp onClose={() => setShowShortcuts(false)} />}
+      {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
 
       {bundleSettings && (
         <BundleManagerModal
@@ -675,7 +678,10 @@ export const App = () => {
                 </button>
               )}
               {reconnecting && <span className={s.reconnectText}>Reconnecting…</span>}
-              <AccountSwitcher onShowShortcuts={() => setShowShortcuts(true)} />
+              <AccountSwitcher
+                onShowShortcuts={() => setShowShortcuts(true)}
+                onShowAbout={() => setShowAbout(true)}
+              />
             </div>
           </>
         )}

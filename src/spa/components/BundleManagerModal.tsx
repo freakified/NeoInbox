@@ -24,8 +24,8 @@ import { GeneralSettings } from "./settings/GeneralSettings";
 import { AdvancedSettings } from "./settings/AdvancedSettings";
 import { AccountSettings } from "./settings/AccountSettings";
 import { useAccounts } from "../lib/accounts";
-import { TripSettings } from "./settings/TripSettings";
-import { TRIP_COLOR } from "./TripSliceRow";
+import { ArchiveSettings } from "./settings/ArchiveSettings";
+import { PrivacySettings } from "./settings/PrivacySettings";
 import { BuiltinBundleEditor, CustomBundleEditor, ThreadRouteSummary } from "./settings/BundleEditors";
 
 export const BundleManagerModal = ({
@@ -37,7 +37,7 @@ export const BundleManagerModal = ({
   initialPane,
 }: {
   onClose: () => void;
-  initialPane?: "general" | "advanced" | "accounts" | "trips";
+  initialPane?: "general" | "privacy" | "advanced" | "accounts" | "archive";
   thread?: Thread;
   initialCategory?: Category | null;
   startNewBundle?: boolean;
@@ -286,6 +286,14 @@ export const BundleManagerModal = ({
               <Icon name="settings" className={s.navIcon} />
               <span className={s.navName}>General</span>
             </button>
+            <button
+              type="button"
+              className={clsx(s.bundleNavItem, paneKey(selected) === "privacy" && s.bundleNavItemActive)}
+              onClick={() => choose({ kind: "privacy" })}
+            >
+              <Icon name="shield" className={s.navIcon} />
+              <span className={s.navName}>Privacy</span>
+            </button>
             {accounts.length > 1 && (
               <button
                 type="button"
@@ -298,22 +306,25 @@ export const BundleManagerModal = ({
             )}
             <button
               type="button"
-              className={clsx(s.bundleNavItem, paneKey(selected) === "advanced" && s.bundleNavItemActive)}
-              onClick={() => choose({ kind: "advanced" })}
+              className={clsx(s.bundleNavItem, paneKey(selected) === "archive" && s.bundleNavItemActive)}
+              onClick={() => choose({ kind: "archive" })}
             >
-              <Icon name="tune" className={s.navIcon} />
-              <span className={s.navName}>Advanced</span>
+              <Icon name="archive" className={s.navIcon} />
+              <span className={s.navName}>Older mail</span>
             </button>
 
-            <div className={s.sideSectionLabel}>Bundling</div>
-            <button
-              type="button"
-              className={clsx(s.bundleNavItem, paneKey(selected) === "trips" && s.bundleNavItemActive)}
-              onClick={() => choose({ kind: "trips" })}
-            >
-              <Icon name="travel" className={s.navIcon} style={{ color: TRIP_COLOR }} />
-              <span className={s.navName}>Trips</span>
-            </button>
+            <div className={s.sideSectionLabel}>
+              Bundles
+              <button
+                type="button"
+                className={clsx(s.sideAddBtn, selected.kind === "new" && s.sideAddBtnActive)}
+                onClick={() => choose({ kind: "new" })}
+                title="New bundle"
+                aria-label="New bundle"
+              >
+                <Icon name="add" className={s.sideAddIcon} />
+              </button>
+            </div>
             {BUNDLE_CATEGORIES.filter((cat) => cat !== "personal").map((cat) => {
               const meta = CATEGORIES[cat];
               const selectedKey = paneKey(selected);
@@ -331,17 +342,6 @@ export const BundleManagerModal = ({
                 </button>
               );
             })}
-            <button
-              type="button"
-              className={clsx(s.bundleNavItem, paneKey(selected) === "builtin:personal" && s.bundleNavItemActive)}
-              onClick={() => choose({ kind: "builtin", id: "personal" })}
-            >
-              <Icon name={EXCLUSIONS.icon} className={s.navIcon} />
-              <span className={s.navName}>{EXCLUSIONS.name}</span>
-              {exclusionCount > 0 && <span className={s.navCount}>{exclusionCount}</span>}
-            </button>
-
-            <div className={s.sideSectionLabel}>Custom bundles</div>
             {customBundles.map((bundle) => {
               const meta = getCategoryMeta(bundle.id, customBundles);
               return (
@@ -359,11 +359,22 @@ export const BundleManagerModal = ({
             })}
             <button
               type="button"
-              className={clsx(s.newBundleBtn, selected.kind === "new" && s.bundleNavItemActive)}
-              onClick={() => choose({ kind: "new" })}
+              className={clsx(s.bundleNavItem, paneKey(selected) === "builtin:personal" && s.bundleNavItemActive)}
+              onClick={() => choose({ kind: "builtin", id: "personal" })}
             >
-              <Icon name="add" className={s.navIcon} />
-              <span className={s.navName}>New bundle</span>
+              <Icon name={EXCLUSIONS.icon} className={s.navIcon} />
+              <span className={s.navName}>{EXCLUSIONS.name}</span>
+              {exclusionCount > 0 && <span className={s.navCount}>{exclusionCount}</span>}
+            </button>
+
+            <div className={s.sideDivider} />
+            <button
+              type="button"
+              className={clsx(s.bundleNavItem, paneKey(selected) === "advanced" && s.bundleNavItemActive)}
+              onClick={() => choose({ kind: "advanced" })}
+            >
+              <Icon name="tune" className={s.navIcon} />
+              <span className={s.navName}>Advanced</span>
             </button>
           </aside>
 
@@ -374,8 +385,10 @@ export const BundleManagerModal = ({
               <AdvancedSettings />
             ) : selected.kind === "accounts" ? (
               <AccountSettings />
-            ) : selected.kind === "trips" ? (
-              <TripSettings />
+            ) : selected.kind === "privacy" ? (
+              <PrivacySettings />
+            ) : selected.kind === "archive" ? (
+              <ArchiveSettings />
             ) : (
               <>
                 {thread && (

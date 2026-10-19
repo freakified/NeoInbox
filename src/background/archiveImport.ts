@@ -129,6 +129,24 @@ export const runArchiveImport = (since: number | null): Promise<ArchiveImportSta
   return running;
 };
 
+/** How many messages the folders hold, for a progress bar; undefined if any won't say. */
+const countMessages = async (folders: readonly { id: string }[]): Promise<number | undefined> => {
+  let total = 0;
+  for (const folder of folders) {
+    try {
+      const info = await messenger.folders.getFolderInfo(
+        folder.id as unknown as messenger.folders.MailFolderId,
+      );
+      if (typeof info.totalMessageCount !== "number") return undefined;
+      total += info.totalMessageCount;
+    } catch (e) {
+      log.warn("archive-import", "couldn't count a folder", e);
+      return undefined;
+    }
+  }
+  return total;
+};
+
 const importArchive = async (since: number | null): Promise<ArchiveImportStatus> => {
   stopRequested = false;
   const coveredSince = (await getArchiveImportStatus())?.coveredSince;
@@ -155,7 +173,11 @@ const importArchive = async (since: number | null): Promise<ArchiveImportStatus>
 
   try {
     const archives = await collectArchiveFolders();
-    current = { ...current, totalFolders: archives.length };
+    current = {
+      ...current,
+      totalFolders: archives.length,
+      total: since === null ? await countMessages(archives) : undefined,
+    };
     publish(current, true);
     const skip = await liveElsewhere();
 

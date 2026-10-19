@@ -78,6 +78,9 @@
 }
 
 .sideSectionLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 12px 10px 6px;
   color: var(--color-md-secondary-text);
   font-size: 11px;
@@ -86,8 +89,40 @@
   letter-spacing: 0.025em;
 }
 
-.bundleNavItem,
-.newBundleBtn {
+.sideDivider {
+  height: 1px;
+  margin: 8px 4px;
+  background: var(--color-md-divider);
+}
+
+.sideAddBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: -6px -6px -6px 0;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--color-md-icon);
+  cursor: pointer;
+}
+
+.sideAddBtn:hover {
+  background: #e0e0e0;
+  color: var(--color-md-on-surface);
+}
+
+.sideAddBtnActive {
+  color: var(--color-md-primary);
+}
+
+.sideAddIcon {
+  font-size: 20px;
+}
+
+.bundleNavItem {
   width: 100%;
   min-height: 40px;
   display: flex;
@@ -102,8 +137,7 @@
   text-align: left;
 }
 
-.bundleNavItem:hover,
-.newBundleBtn:hover {
+.bundleNavItem:hover {
   background: #eeeeee;
 }
 
@@ -732,45 +766,6 @@
   margin-right: 0;
 }
 
-@media (max-width: 720px) {
-  .overlay {
-    align-items: stretch;
-    padding: 12px;
-  }
-
-  .dialog {
-    max-height: calc(100vh - 24px);
-  }
-
-  .body {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--color-md-divider);
-  }
-
-  .sideSectionLabel {
-    display: none;
-  }
-
-  .bundleNavItem,
-  .newBundleBtn {
-    width: auto;
-    min-width: 140px;
-  }
-
-  .twoColumn,
-  .ruleInputRow,
-  .ruleChoices + .ruleInputRow {
-    grid-template-columns: 1fr;
-  }
-}
-
 .scanProgress {
   display: flex;
   align-items: center;
@@ -779,6 +774,7 @@
 }
 
 .scanBar {
+  position: relative;
   flex: 1 1 200px;
   height: 4px;
   border-radius: 2px;
@@ -806,4 +802,29 @@
 
 .textBtn:hover {
   background: rgba(0, 0, 0, 0.04);
+}
+
+.scanBarIndeterminate {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  background: var(--color-md-primary);
+  animation: scan-sweep 1.2s ease-in-out infinite;
+}
+
+@keyframes scan-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scanBarIndeterminate {
+    animation: none;
+    width: 100%;
+    opacity: 0.4;
+  }
 }

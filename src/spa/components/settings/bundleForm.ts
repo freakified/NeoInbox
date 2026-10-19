@@ -12,7 +12,8 @@ export type SelectedPane =
   | { kind: "general" }
   | { kind: "advanced" }
   | { kind: "accounts" }
-  | { kind: "trips" }
+  | { kind: "privacy" }
+  | { kind: "archive" }
   | SelectedBundle;
 
 export interface BundleFormState {
@@ -33,7 +34,7 @@ export const BUNDLE_CATEGORIES = Object.entries(CATEGORIES)
   .map(([cat]) => cat as BuiltinCategory);
 
 /** How settings presents "personal": rules there keep mail out of bundles. */
-export const EXCLUSIONS = { name: "Exclusions", icon: "inbox" };
+export const EXCLUSIONS = { name: "Unbundled", icon: "inbox" };
 
 export const PRESET_COLORS = [
   "#4285F4", "#34A853", "#FBBC04", "#EA4335",
@@ -159,7 +160,8 @@ export const paneKey = (selected: SelectedPane): string =>
   selected.kind === "general" ||
   selected.kind === "advanced" ||
   selected.kind === "accounts" ||
-  selected.kind === "trips"
+  selected.kind === "privacy" ||
+  selected.kind === "archive"
     ? selected.kind
     : bundleKey(selected);
 

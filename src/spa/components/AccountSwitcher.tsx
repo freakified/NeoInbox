@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useMailStore } from "../../store/mailStore";
 import { type MailAccount, useAccounts } from "../lib/accounts";
 import { useSelfProfile } from "../lib/contactCards";
+import { NEW_ISSUE_URL, openExternal } from "../lib/external";
 import { useAnchoredMenu } from "../lib/useAnchoredMenu";
 import { Icon } from "./Icon";
 import { ContactPhoto } from "./ContactPhoto";
@@ -42,11 +43,16 @@ const AccountAvatar = ({
 );
 
 /**
- * Google-style avatar menu in the app bar: settings, keyboard shortcuts, and
- * with more than one account, narrowing every view to one account's mail or
- * showing them all.
+ * Google-style avatar menu in the app bar: settings, help, and with more than
+ * one account, narrowing every view to one account's mail or showing them all.
  */
-export const AccountSwitcher = ({ onShowShortcuts }: { onShowShortcuts: () => void }) => {
+export const AccountSwitcher = ({
+  onShowShortcuts,
+  onShowAbout,
+}: {
+  onShowShortcuts: () => void;
+  onShowAbout: () => void;
+}) => {
   const accounts = useAccounts();
   const accountFilter = useMailStore((st) => st.accountFilter);
   const setAccountFilter = useMailStore((st) => st.setAccountFilter);
@@ -167,9 +173,8 @@ export const AccountSwitcher = ({ onShowShortcuts }: { onShowShortcuts: () => vo
               key={account.id}
               account={account}
               active={current?.id === account.id}
-              multiple={multiple}
               count={multiple ? unread.get(account.id) ?? 0 : 0}
-              onChoose={() => choose(multiple ? account.id : null)}
+              onChoose={multiple ? () => choose(account.id) : undefined}
             />
           ))}
           {accounts.length > 0 && <div className={s.divider} />}
@@ -185,6 +190,7 @@ export const AccountSwitcher = ({ onShowShortcuts }: { onShowShortcuts: () => vo
             <Icon name="settings" className={s.footerIcon} />
             <span className={s.itemName}>Settings</span>
           </button>
+          <div className={s.divider} />
           <button
             type="button"
             role="menuitem"
@@ -196,7 +202,30 @@ export const AccountSwitcher = ({ onShowShortcuts }: { onShowShortcuts: () => vo
           >
             <Icon name="keyboard" className={s.footerIcon} />
             <span className={s.itemName}>Keyboard shortcuts</span>
-            <span className={s.count}>?</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={s.item}
+            onClick={() => {
+              setOpen(false);
+              openExternal(NEW_ISSUE_URL);
+            }}
+          >
+            <Icon name="bug_report" className={s.footerIcon} />
+            <span className={s.itemName}>Report a bug</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={s.item}
+            onClick={() => {
+              setOpen(false);
+              onShowAbout();
+            }}
+          >
+            <Icon name="info" className={s.footerIcon} />
+            <span className={s.itemName}>About NeoInbox</span>
           </button>
         </div>,
         document.body,
@@ -205,28 +234,21 @@ export const AccountSwitcher = ({ onShowShortcuts }: { onShowShortcuts: () => vo
   );
 };
 
+/** An account to switch to, or with `onChoose` absent, just who you are. */
 const AccountItem = ({
   account,
   active,
-  multiple,
   count,
   onChoose,
 }: {
   account: MailAccount;
   active: boolean;
-  multiple: boolean;
   count: number;
-  onChoose: () => void;
+  onChoose?: () => void;
 }) => {
   const person = useAccountPerson(account)!;
-  return (
-    <button
-      type="button"
-      role="menuitemradio"
-      aria-checked={active}
-      className={clsx(s.item, multiple && active && s.itemActive)}
-      onClick={onChoose}
-    >
+  const content = (
+    <>
       <AccountAvatar account={account} person={person} className={s.itemAvatar} />
       <span className={s.itemText}>
         <span className={s.itemName}>{person.label}</span>
@@ -235,6 +257,18 @@ const AccountItem = ({
         )}
       </span>
       {count > 0 && <span className={s.count}>{count}</span>}
+    </>
+  );
+  if (!onChoose) return <div className={clsx(s.item, s.itemStatic)}>{content}</div>;
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={active}
+      className={clsx(s.item, active && s.itemActive)}
+      onClick={onChoose}
+    >
+      {content}
     </button>
   );
 };

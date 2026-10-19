@@ -110,6 +110,11 @@ export interface ArchiveImportStatus {
   /** Archive folders done / to do this run. */
   folders: number;
   totalFolders: number;
+  /**
+   * Headers this run will look at, when knowable: only a whole-archive run,
+   * since folders report their size but not how much of it a range covers.
+   */
+  total?: number;
   finishedAt?: number;
   cancelled?: boolean;
   error?: string;
