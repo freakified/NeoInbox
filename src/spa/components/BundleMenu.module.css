@@ -25,8 +25,8 @@
   z-index: 1300;
   width: 220px;
   padding: 6px 0;
-  border: 1px solid var(--color-md-divider);
-  border-radius: 6px;
+  border: none;
+  border-radius: 2px;
   background: #fff;
   box-shadow: var(--shadow-elevation-2);
 }
@@ -131,8 +131,8 @@
   width: min(420px, 100%);
   background: #fff;
   box-shadow: var(--shadow-elevation-2);
-  border-radius: 6px;
-  border: 1px solid var(--color-md-divider);
+  border-radius: 2px;
+  border: none;
   padding: 16px;
 }
 

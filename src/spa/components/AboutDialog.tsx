@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import manifest from "../../../public/manifest.json";
 import { REPO_URL, openExternal, openNewIssue } from "../lib/external";
+import { Icon } from "./Icon";
 import s from "./AboutDialog.module.css";
 
 export const AboutDialog = ({ onClose }: { onClose: () => void }) => {
@@ -21,6 +22,9 @@ export const AboutDialog = ({ onClose }: { onClose: () => void }) => {
         aria-labelledby="about-title"
         onClick={(e) => e.stopPropagation()}
       >
+        <button type="button" className={s.closeBtn} onClick={onClose} aria-label="Close">
+          <Icon name="close" className={s.closeIcon} />
+        </button>
         <img className={s.logo} src="icon.svg" alt="" />
         <h2 id="about-title" className={s.title}>NeoInbox</h2>
         <p className={s.version}>Version {manifest.version}</p>

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Icon } from "./Icon";
 import s from "./ShortcutsHelp.module.css";
 
 const GROUPS: { title: string; items: [string, string][] }[] = [
@@ -53,6 +54,9 @@ export const ShortcutsHelp = ({ onClose }: { onClose: () => void }) => {
         aria-label="Keyboard shortcuts"
         onClick={(e) => e.stopPropagation()}
       >
+        <button type="button" className={s.closeBtn} onClick={onClose} aria-label="Close">
+          <Icon name="close" className={s.closeIcon} />
+        </button>
         <h2 className={s.title}>Keyboard shortcuts</h2>
         <div className={s.groups}>
           {GROUPS.map((group) => (

@@ -11,8 +11,8 @@
 
 .dialog {
   width: min(360px, 100%);
-  border: 1px solid var(--color-md-divider);
-  border-radius: 6px;
+  border: none;
+  border-radius: 2px;
   background: #fff;
   box-shadow: var(--shadow-elevation-2);
   padding: 18px;

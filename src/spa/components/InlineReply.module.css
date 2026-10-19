@@ -116,7 +116,7 @@
   z-index: 1200;
   min-width: 160px;
   padding: 6px 0;
-  border-radius: 4px;
+  border-radius: 2px;
   background: #fff;
   box-shadow: var(--shadow-elevation-2);
 }

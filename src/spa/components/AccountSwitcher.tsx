@@ -203,6 +203,7 @@ export const AccountSwitcher = ({
           >
             <Icon name="bug_report" className={s.footerIcon} />
             <span className={s.itemName}>Report a bug</span>
+            <Icon name="open_in_new" className={s.externalIcon} />
           </button>
           <button
             type="button"
@@ -215,6 +216,7 @@ export const AccountSwitcher = ({
           >
             <Icon name="lightbulb" className={s.footerIcon} />
             <span className={s.itemName}>Request a feature</span>
+            <Icon name="open_in_new" className={s.externalIcon} />
           </button>
           <div className={s.divider} />
           <button

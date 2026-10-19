@@ -38,8 +38,8 @@
   z-index: 1300;
   width: 280px;
   padding: 6px 0;
-  border: 1px solid var(--color-md-divider);
-  border-radius: 6px;
+  border: none;
+  border-radius: 2px;
   background: #fff;
   box-shadow: var(--shadow-elevation-2);
   overflow-x: hidden;
@@ -136,7 +136,19 @@
 
 .footerIcon {
   width: 32px;
-  font-size: 20px;
   text-align: center;
   color: var(--color-md-icon);
+}
+
+.item .externalIcon {
+  margin-left: auto;
+  font-size: 16px;
+  color: var(--color-md-icon);
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.item:hover .externalIcon,
+.item:focus-visible .externalIcon {
+  opacity: 0.6;
 }
