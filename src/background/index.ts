@@ -12,17 +12,55 @@ import { installSampleDump } from "./sampleDump";
 import { db } from "../store/db";
 import { invalidateFolderCache } from "../shared/folders";
 import { log } from "../shared/log";
+import { getOpenMode, getOpenOnStartup, getWindowBounds } from "../shared/openMode";
 
 const INBOX_URL = "inbox.html";
 
-const openOrFocusInbox = async (): Promise<void> => {
+const isInboxTab = (tab: messenger.tabs.Tab): boolean => !!tab.url?.endsWith(`/${INBOX_URL}`);
+
+const openInboxTab = async (): Promise<void> => {
   const tabs = await messenger.tabs.query({});
-  const existing = tabs.find((t) => t.url?.endsWith(`/${INBOX_URL}`));
+  const existing = tabs.find(isInboxTab);
   if (existing?.id !== undefined) {
     await messenger.tabs.update(existing.id, { active: true });
     return;
   }
   await messenger.tabs.create({ url: INBOX_URL });
+}
+
+/**
+ * Window mode: NeoInbox gets a popup window of its own, so it reads as a
+ * standalone app. The main window is left alone; the user can close it and
+ * NeoInbox keeps running. Any NeoInbox tab left in a main window is closed so
+ * there's only ever one copy on screen.
+ */
+const openInboxWindow = async (): Promise<void> => {
+  const windows = await messenger.windows.getAll({ populate: true });
+  const popup = windows.find((w) => w.type === "popup" && w.tabs?.some(isInboxTab));
+
+  if (popup?.id !== undefined) {
+    await messenger.windows.update(popup.id, {
+      focused: true,
+      ...(popup.state === "minimized" ? { state: "normal" as const } : {}),
+    });
+  } else {
+    const bounds = await getWindowBounds();
+    await messenger.windows.create({
+      type: "popup",
+      url: INBOX_URL,
+      ...(bounds ?? { width: 1200, height: 860 }),
+    });
+    for (const tab of windows.filter((w) => w.type === "normal").flatMap((w) => w.tabs ?? [])) {
+      if (isInboxTab(tab) && tab.id !== undefined) {
+        await messenger.tabs.remove(tab.id).catch(() => undefined);
+      }
+    }
+  }
+}
+
+const openOrFocusInbox = async (): Promise<void> => {
+  if ((await getOpenMode()) === "window") await openInboxWindow();
+  else await openInboxTab();
 }
 
 let restoreSnoozeAlarmsPromise: Promise<void> | null = null;
@@ -54,6 +92,10 @@ messenger.browserAction.onClicked.addListener(() => {
 
 messenger.runtime.onInstalled.addListener((details) => {
   log.info("background", "onInstalled", details.reason);
+  // A first-timer shouldn't have to find the toolbar button.
+  if (details.reason === "install") {
+    void openOrFocusInbox().catch((e) => log.warn("background", "opening inbox failed", e));
+  }
   void ensureSnoozeAlarmsRestored().catch((e) => log.warn("snooze", "restore alarms failed", e));
   void runBackfill()
     .then(scheduleTripExtraction)
@@ -62,6 +104,9 @@ messenger.runtime.onInstalled.addListener((details) => {
 });
 
 messenger.runtime.onStartup.addListener(() => {
+  void getOpenOnStartup()
+    .then((open) => (open ? openOrFocusInbox() : undefined))
+    .catch((e) => log.warn("background", "opening inbox failed", e));
   void ensureSnoozeAlarmsRestored().catch((e) => log.warn("snooze", "restore alarms failed", e));
   void runStartupSync()
     .then(scheduleTripExtraction)

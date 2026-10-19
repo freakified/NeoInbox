@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite build --watch --mode development",
     "build": "vite build",
+    "package": "vite build && rm -f neoinbox.xpi && cd dist && zip -qr ../neoinbox.xpi .",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.eval.json",

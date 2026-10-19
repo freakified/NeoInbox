@@ -56,7 +56,12 @@ const showFolder = async (
   if (mailTab) {
     await messenger.mailTabs.update(mailTab.id, { displayedFolder: folder.id });
     await messenger.tabs.update(mailTab.id, { active: true });
-    await messenger.windows.update(mailTab.windowId, { focused: true });
+    // Window mode keeps the main window minimized; bring it back up.
+    const mainWindow = await messenger.windows.get(mailTab.windowId);
+    await messenger.windows.update(mailTab.windowId, {
+      focused: true,
+      ...(mainWindow.state === "minimized" ? { state: "normal" as const } : {}),
+    });
     return mailTab.id;
   }
   return (await messenger.mailTabs.create({ displayedFolder: folder.id })).id;

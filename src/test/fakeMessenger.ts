@@ -830,6 +830,8 @@ export class FakeMessenger {
       browserAction: { onClicked: new Event<[]>() },
       windows: {
         getLastFocused: async () => ({ id: 1, type: "normal" }),
+        getCurrent: async () => ({ id: 1, type: "normal" }),
+        get: async (windowId: number) => ({ id: windowId, type: "normal", state: "normal" }),
         update: async (windowId: number, info: { focused?: boolean }) => {
           if (info.focused) self.calls.focusedWindows.push(windowId);
           return { id: windowId };

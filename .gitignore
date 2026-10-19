@@ -7,3 +7,4 @@ shots/
 
 # Real mail captured by neoSampleDump() — personal data, never commit
 fixtures/real-mail/
+*.xpi
