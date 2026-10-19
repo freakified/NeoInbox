@@ -2,6 +2,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMailStore, type NewMessagePrefill } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
+import { ContactPhoto } from "./ContactPhoto";
 import { Icon } from "./Icon";
 import { ReminderComposer } from "./ReminderComposer";
 import { ComposeDock, ComposePanel } from "./ComposePanel";
@@ -124,7 +125,7 @@ export const Fab = () => {
           className={s.miniCircle}
           style={{ backgroundColor: avatarColor(contact.name), color: "#fff" }}
         >
-          {senderInitial(contact.raw)}
+          <ContactPhoto address={contact.raw}>{senderInitial(contact.raw)}</ContactPhoto>
         </span>
       ),
       onClick: () => runAction(() => startMessage([contact.raw])),

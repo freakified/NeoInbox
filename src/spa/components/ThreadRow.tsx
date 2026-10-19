@@ -1,6 +1,7 @@
 import { clsx } from "clsx";
 import type { RawMessage, Thread } from "../../shared/types";
-import { avatarColor, senderInitial, senderName } from "../lib/avatar";
+import { useMailStore } from "../../store/mailStore";
+import { avatarColor, senderInitial, senderName, threadAvatarAddress } from "../lib/avatar";
 import { formatDate, formatTimeAgo } from "../lib/dateBucket";
 import { overlayIsOpen } from "../lib/overlays";
 import { keepFocusAfterRowRemoval } from "../lib/rowNavigation";
@@ -15,6 +16,7 @@ import { FadeIn, MotionRow } from "./Motion";
 import { ParcelCards, collectParcels } from "./ParcelCards";
 import { RowHeader } from "./RowHeader";
 import { ThreadView } from "./ThreadView";
+import { ContactPhoto } from "./ContactPhoto";
 import s from "./ThreadRow.module.css";
 
 export const ThreadRow = ({
@@ -58,10 +60,11 @@ export const ThreadRow = ({
     else if (e.key === "x") run(true, () => toggleSelected(t.id), false);
   };
 
-  const firstSender = t.messages[0];
-  const name = firstSender ? senderName(firstSender.author) : "";
+  const myEmails = useMailStore((st) => st.myEmails);
+  const avatarAddress = threadAvatarAddress(t.messages, myEmails);
+  const name = avatarAddress ? senderName(avatarAddress) : "";
   const avatarBg = avatarColor(name);
-  const initial = firstSender ? senderInitial(firstSender.author) : "?";
+  const initial = avatarAddress ? senderInitial(avatarAddress) : "?";
   const attachmentRefs = collectAttachments(t.messages);
   const parcels = collectParcels(t.messages);
   const hasDraft = t.messages.some((m) => m.origin === "draft");
@@ -122,7 +125,9 @@ export const ThreadRow = ({
                 select(e);
               }}
             >
-              <span className={s.avatarInitial}>{initial}</span>
+              <span className={s.avatarInitial}>
+                <ContactPhoto address={avatarAddress}>{initial}</ContactPhoto>
+              </span>
               <Icon name="check" className={s.avatarCheck} />
             </button>
           }

@@ -3,10 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMailStore } from "../../store/mailStore";
 import { type MailAccount, useAccounts } from "../lib/accounts";
-import { useSelfProfile } from "../lib/selfProfile";
+import { useSelfProfile } from "../lib/contactCards";
 import { useAnchoredMenu } from "../lib/useAnchoredMenu";
 import { Icon } from "./Icon";
-import { SelfPhoto } from "./SelfPhoto";
+import { ContactPhoto } from "./ContactPhoto";
 import s from "./AccountSwitcher.module.css";
 
 /**
@@ -37,7 +37,7 @@ const AccountAvatar = ({
   className: string | undefined;
 }) => (
   <span className={className} style={{ backgroundColor: account.color }}>
-    <SelfPhoto email={account.email}>{person.initial}</SelfPhoto>
+    <ContactPhoto address={account.email} self>{person.initial}</ContactPhoto>
   </span>
 );
 

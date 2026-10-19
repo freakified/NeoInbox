@@ -178,7 +178,7 @@ export interface FakeMessengerOptions {
   /** Page size for list()/query(); small values exercise continueList paging. */
   pageSize?: number;
   /** Address-book cards, all in one local book. */
-  contacts?: { email: string; name?: string; photo?: Blob }[];
+  contacts?: { emails: string[]; name?: string; photo?: Blob }[];
 }
 
 interface StoredMessage {
@@ -795,16 +795,29 @@ export class FakeMessenger {
           self.calls.quickFilters.push({ tabId, properties });
         },
       },
-      addressBooks: { openUI: async () => ({ id: 3 }) },
+      addressBooks: {
+        openUI: async () => ({ id: 3 }),
+        list: async (complete = false) => [
+          {
+            id: "book",
+            type: "addressBook",
+            name: "Personal Address Book",
+            contacts: complete
+              ? (self.options.contacts ?? []).map((card, i) => ({
+                  id: `card${i}`,
+                  parentId: "book",
+                  type: "contact",
+                  properties: {
+                    PrimaryEmail: card.emails[0] ?? null,
+                    DisplayName: card.name ?? null,
+                    vCard: card.emails.map((email) => `EMAIL:${email}`).join("\r\n"),
+                  },
+                }))
+              : undefined,
+          },
+        ],
+      },
       contacts: {
-        quickSearch: async (query: string | { searchString?: string }) => {
-          const term = (typeof query === "string" ? query : query.searchString ?? "").toLowerCase();
-          return (self.options.contacts ?? []).flatMap((card, i) =>
-            card.email.toLowerCase().includes(term) || card.name?.toLowerCase().includes(term)
-              ? [{ id: `card${i}`, type: "contact", properties: { PrimaryEmail: card.email, DisplayName: card.name ?? null } }]
-              : [],
-          );
-        },
         getPhoto: async (id: string) => self.options.contacts?.[Number(id.slice(4))]?.photo ?? null,
       },
       permissions: { contains: async () => true, request: async () => true },

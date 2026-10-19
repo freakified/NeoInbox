@@ -1,17 +1,15 @@
 import { clsx } from "clsx";
 import { useEffect, useState } from "react";
-import { addressEmail } from "../../shared/compose";
 import { liveTbId } from "../../shared/liveMessage";
 import { parseSender } from "../../shared/senders";
 import type { RawMessage } from "../../shared/types";
-import { useMailStore } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate, formatFullDate } from "../lib/dateBucket";
 import { extractPreviewText } from "../lib/srcdoc";
 import { MessageAttachments } from "./MessageAttachments";
 import { MessageBody } from "./MessageBody";
 import { ExpandableRegion } from "./Motion";
-import { SelfPhoto } from "./SelfPhoto";
+import { ContactPhoto } from "./ContactPhoto";
 import s from "./InlineMessage.module.css";
 
 const displayAddressName = (raw: string): { name: string; email: string } | null => {
@@ -80,8 +78,6 @@ export const InlineMessage = ({
   const ccRecipients = displayAddressList(m.ccList);
   const bccRecipients = displayAddressList(m.bccList);
   const color = avatarColor(name);
-  const authorEmail = addressEmail(m.author);
-  const mine = useMailStore((st) => st.myEmails.has(authorEmail));
   const [preview, setPreview] = useState<string | null>(null);
   const isDraft = m.origin === "draft";
 
@@ -121,7 +117,7 @@ export const InlineMessage = ({
         }}
       >
         <div className={s.avatar} style={{ backgroundColor: color }}>
-          <SelfPhoto email={mine ? authorEmail : null}>{senderInitial(m.author)}</SelfPhoto>
+          <ContactPhoto address={m.author}>{senderInitial(m.author)}</ContactPhoto>
         </div>
         <div className={s.meta}>
           <div className={s.metaLine}>

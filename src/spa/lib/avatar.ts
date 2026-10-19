@@ -1,3 +1,6 @@
+import { addressEmail } from "../../shared/compose";
+import type { RawMessage } from "../../shared/types";
+
 const AVATAR_COLORS = [
   "#4285F4",
   "#EA4335",
@@ -32,3 +35,19 @@ export const senderDomain = (author: string): string => {
   const at = email.lastIndexOf("@");
   return at >= 0 ? email.slice(at + 1) : "";
 }
+
+/**
+ * Whose face a conversation row shows: the first person in it who isn't you.
+ * A thread of only your own messages shows whoever you wrote to.
+ */
+export const threadAvatarAddress = (
+  messages: readonly Pick<RawMessage, "author" | "recipients" | "ccList">[],
+  myEmails: ReadonlySet<string>,
+): string | undefined => {
+  const notMe = (raw: string) => !myEmails.has(addressEmail(raw));
+  return (
+    messages.find((m) => notMe(m.author))?.author ??
+    messages.flatMap((m) => [...m.recipients, ...m.ccList]).find(notMe) ??
+    messages[0]?.author
+  );
+};

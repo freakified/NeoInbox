@@ -18,7 +18,7 @@ import {
   type ComposerValue,
 } from "./ComposerForm";
 import { Icon } from "./Icon";
-import { SelfPhoto } from "./SelfPhoto";
+import { ContactPhoto } from "./ContactPhoto";
 import s from "./InlineReply.module.css";
 
 type ReplyKind = Exclude<ComposeKind, "new" | "draft">;
@@ -204,7 +204,7 @@ const DraftCard = ({
       }}
     >
       <div className={s.draftAvatar} style={{ backgroundColor: avatarColor(name) }}>
-        <SelfPhoto email={identity?.email}>{senderInitial(name)}</SelfPhoto>
+        <ContactPhoto address={identity?.email ?? draft.author} self>{senderInitial(name)}</ContactPhoto>
       </div>
       <div className={s.draftMeta}>
         <div className={s.draftLine}>
@@ -432,7 +432,7 @@ export const InlineReply = ({
         {(!draft || unsentReply) && (
           <div className={s.bar} onClick={(e) => e.stopPropagation()}>
             <div className={s.barAvatar} style={{ backgroundColor: avatarColor(meName) }}>
-              <SelfPhoto email={defaultIdentity?.email}>{senderInitial(meName)}</SelfPhoto>
+              <ContactPhoto address={defaultIdentity?.email} self>{senderInitial(meName)}</ContactPhoto>
             </div>
             <button
               type="button"

@@ -10,6 +10,7 @@ import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { useKnownContacts } from "../lib/contacts";
 import { useIdentities } from "../lib/identities";
 import { sanitizeComposerHtml } from "../lib/richText";
+import { ContactPhoto } from "./ContactPhoto";
 import { Icon } from "./Icon";
 import { captureSelection, FormatBar, RichTextEditor } from "./RichTextEditor";
 import s from "./ComposerForm.module.css";
@@ -414,7 +415,7 @@ export const ComposerForm = ({
     >
       {avatar && (
         <div className={s.avatar} style={{ backgroundColor: avatarColor(fromName) }}>
-          {senderInitial(fromName)}
+          <ContactPhoto address={identity?.email} self>{senderInitial(fromName)}</ContactPhoto>
         </div>
       )}
       <div className={s.main}>

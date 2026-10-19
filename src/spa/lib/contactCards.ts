@@ -2,37 +2,55 @@ import { useEffect, useState } from "react";
 import { log } from "../../shared/log";
 import { listIdentities } from "./identities";
 
-/** What your own address-book card says about one of your addresses. */
-export interface SelfProfile {
+type Card = messenger.contacts.ContactNode;
+
+/** What the address book says about an address. */
+export interface ContactProfile {
   name: string;
   /** An object URL for a card's photo, alive for the tab's lifetime. */
   photo: string | null;
 }
 
-const EMPTY: SelfProfile = { name: "", photo: null };
+const EMPTY: ContactProfile = { name: "", photo: null };
 
-const cache = new Map<string, Promise<SelfProfile>>();
-
-const cardHasEmail = (properties: messenger.contacts.ContactProperties, email: string): boolean =>
-  [properties.PrimaryEmail, properties.SecondEmail].some((e) => e?.toLowerCase() === email) ||
-  // Cards with more than two addresses only list the rest in the vCard.
-  (properties.vCard ?? "")
+/** Every address on a card: two named fields, the rest only in the vCard. */
+const cardEmails = (properties: messenger.contacts.ContactProperties): string[] => [
+  ...[properties.PrimaryEmail, properties.SecondEmail].flatMap((e) => (e ? [e] : [])),
+  ...(properties.vCard ?? "")
     .split(/\r?\n/)
-    .some((line) => /^(item\d+\.)?EMAIL[;:]/i.test(line) && line.slice(line.lastIndexOf(":") + 1).trim().toLowerCase() === email);
+    .filter((line) => /^(item\d+\.)?EMAIL[;:]/i.test(line))
+    .map((line) => line.slice(line.lastIndexOf(":") + 1)),
+].map((e) => e.trim().toLowerCase());
+
+let index: Promise<Map<string, Card[]>> | null = null;
 
 /**
- * Your cards for an address in Thunderbird's address books, minus remote
- * (LDAP) ones, which can't be yours. Searches with a plain string: the
- * QueryInfo form isn't dependable across Thunderbird versions.
+ * Cards in Thunderbird's local address books (CardDAV ones included), by
+ * every address on them. One read per tab beats a search per sender, and
+ * remote (LDAP) directories can't be listed, only searched.
  */
-const cardsFor = async (email: string): Promise<messenger.contacts.ContactNode[]> =>
-  (await messenger.contacts.quickSearch(email)).filter(
-    (card) => !card.remote && cardHasEmail(card.properties, email),
-  );
+const cardIndex = (): Promise<Map<string, Card[]>> =>
+  (index ??= (async () => {
+    const byEmail = new Map<string, Card[]>();
+    if (!messenger.addressBooks?.list) return byEmail;
+    for (const book of await messenger.addressBooks.list(true)) {
+      if (book.remote) continue;
+      for (const card of book.contacts ?? []) {
+        for (const email of new Set(cardEmails(card.properties))) {
+          byEmail.set(email, [...(byEmail.get(email) ?? []), card]);
+        }
+      }
+    }
+    return byEmail;
+  })().catch((e) => {
+    log.warn("contactCards", "couldn't read address books", e);
+    index = null;
+    return new Map<string, Card[]>();
+  }));
 
 const photos = new Map<string, Promise<string | null>>();
 
-const photoOf = (card: messenger.contacts.ContactNode): Promise<string | null> => {
+const photoOf = (card: Card): Promise<string | null> => {
   let pending = photos.get(card.id);
   if (!pending) {
     pending = messenger.contacts
@@ -44,7 +62,7 @@ const photoOf = (card: messenger.contacts.ContactNode): Promise<string | null> =
   return pending;
 };
 
-const firstPhoto = async (cards: messenger.contacts.ContactNode[]): Promise<string | null> => {
+const firstPhoto = async (cards: readonly Card[]): Promise<string | null> => {
   for (const card of cards) {
     const photo = await photoOf(card);
     if (photo) return photo;
@@ -52,58 +70,70 @@ const firstPhoto = async (cards: messenger.contacts.ContactNode[]): Promise<stri
   return null;
 };
 
-let anyOwnPhoto: Promise<string | null> | null = null;
-
-/**
- * A photo from any card for any of your addresses. People often have a card
- * per address and only put a photo on one; every one of them is you.
- */
-const ownPhoto = (): Promise<string | null> =>
-  (anyOwnPhoto ??= listIdentities().then(async (identities) => {
-    for (const email of new Set(identities.map((i) => i.email.toLowerCase()))) {
-      const photo = await firstPhoto(await cardsFor(email));
-      if (photo) return photo;
-    }
-    return null;
-  }).catch(() => null));
+const profiles = new Map<string, Promise<ContactProfile>>();
 
 /** Of several cards for the address, the first with a photo wins. */
-const loadProfile = async (email: string): Promise<SelfProfile> => {
-  if (!messenger.contacts?.quickSearch) return EMPTY;
-  const cards = await cardsFor(email);
-  const name = cards.map((card) => card.properties.DisplayName?.trim()).find(Boolean) ?? "";
-  return { name, photo: (await firstPhoto(cards)) ?? (await ownPhoto()) };
-};
-
-export const profileFor = (email: string): Promise<SelfProfile> => {
+export const contactFor = (email: string): Promise<ContactProfile> => {
   const key = email.toLowerCase();
-  let pending = cache.get(key);
+  let pending = profiles.get(key);
   if (!pending) {
-    pending = loadProfile(key).catch((e) => {
-      log.warn("selfProfile", "couldn't search address books", e);
-      cache.delete(key);
-      return EMPTY;
+    pending = cardIndex().then(async (byEmail) => {
+      const cards = byEmail.get(key) ?? [];
+      if (!cards.length) return EMPTY;
+      const name = cards.map((card) => card.properties.DisplayName?.trim()).find(Boolean) ?? "";
+      return { name, photo: await firstPhoto(cards) };
     });
-    cache.set(key, pending);
+    profiles.set(key, pending);
   }
   return pending;
 };
 
+let anyOwnPhoto: Promise<string | null> | null = null;
+
 /**
- * Your name and photo for one of your addresses, from your own cards in the
- * address book. Loads once per tab; card edits show up on reload.
+ * A photo from any card for any of your addresses. Thunderbird shows cards
+ * that share an address as one, so a photo on any of yours is your photo.
  */
-export const useSelfProfile = (email: string | null | undefined): SelfProfile => {
-  const [profile, setProfile] = useState<{ email: string; profile: SelfProfile } | null>(null);
+const ownPhoto = (): Promise<string | null> =>
+  (anyOwnPhoto ??= listIdentities().then(async (identities) => {
+    for (const email of new Set(identities.map((i) => i.email.toLowerCase()))) {
+      const { photo } = await contactFor(email);
+      if (photo) return photo;
+    }
+    return null;
+  }));
+
+/** Your name and photo for one of your own addresses. */
+export const selfProfileFor = async (email: string): Promise<ContactProfile> => {
+  const profile = await contactFor(email);
+  return profile.photo ? profile : { ...profile, photo: await ownPhoto() };
+};
+
+export const useProfile = (
+  email: string | null | undefined,
+  load: (email: string) => Promise<ContactProfile>,
+): ContactProfile => {
+  const [loaded, setLoaded] = useState<{ email: string; profile: ContactProfile } | null>(null);
   useEffect(() => {
     if (!email) return;
     let cancelled = false;
-    void profileFor(email).then((p) => {
-      if (!cancelled) setProfile({ email, profile: p });
+    void load(email).then((profile) => {
+      if (!cancelled) setLoaded({ email, profile });
     });
     return () => {
       cancelled = true;
     };
-  }, [email]);
-  return email && profile?.email === email ? profile.profile : EMPTY;
+  }, [email, load]);
+  return email && loaded?.email === email ? loaded.profile : EMPTY;
 };
+
+/**
+ * Name and photo for anyone's address from the address book. Loads once per
+ * tab; card edits show up on reload.
+ */
+export const useContact = (email: string | null | undefined): ContactProfile =>
+  useProfile(email, contactFor);
+
+/** Like useContact, for your own addresses: falls back to your other cards' photo. */
+export const useSelfProfile = (email: string | null | undefined): ContactProfile =>
+  useProfile(email, selfProfileFor);

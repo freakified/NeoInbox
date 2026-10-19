@@ -20,6 +20,11 @@
   transition: background-color 120ms ease, box-shadow 120ms ease;
 }
 
+/* Lets a contact photo fill the circle. */
+.avatarInitial {
+  display: contents;
+}
+
 /* Scoped under .avatar to outrank the Icon component's own display rule. */
 .avatar .avatarCheck {
   display: none;

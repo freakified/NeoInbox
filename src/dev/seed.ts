@@ -14,11 +14,18 @@ export const ME = "you@neoinbox.test";
 export const WORK_ME = "you@work.example";
 export const INBOX = "inbox";
 
-const SELF_PHOTO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" fill="#8ab4f8"/>
-  <circle cx="32" cy="25" r="12" fill="#f3d2b6"/>
-  <path d="M10 64c2-14 11-21 22-21s20 7 22 21z" fill="#1a73e8"/>
-</svg>`;
+/** A stand-in contact photo: a head and shoulders on a colored ground. */
+const portrait = (ground: string, skin: string, shirt: string): Blob =>
+  new Blob(
+    [
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" fill="${ground}"/>
+  <circle cx="32" cy="25" r="12" fill="${skin}"/>
+  <path d="M10 64c2-14 11-21 22-21s20 7 22 21z" fill="${shirt}"/>
+</svg>`,
+    ],
+    { type: "image/svg+xml" },
+  );
 export const SENT = "sent";
 export const ARCHIVE = "archive";
 
@@ -297,7 +304,13 @@ export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
         ],
       },
     ],
-    // Your own card, so the app bar and your messages show a photo.
-    contacts: [{ email: ME, name: "Alex Rivera", photo: new Blob([SELF_PHOTO], { type: "image/svg+xml" }) }],
+    // Your own card (photo on the second of two, as Thunderbird merges
+    // them), and cards for some correspondents; Sam and Lena have none.
+    contacts: [
+      { emails: [ME], name: "Alex Rivera" },
+      { emails: [WORK_ME, ME], name: "Alex Rivera", photo: portrait("#8ab4f8", "#f3d2b6", "#1a73e8") },
+      { emails: ["priya@example.com"], name: "Priya Raman", photo: portrait("#fdd663", "#c68863", "#d93025") },
+      { emails: ["mom@family.example"], name: "Mom", photo: portrait("#a8dab5", "#e8b896", "#7e57c2") },
+    ],
   };
 };
