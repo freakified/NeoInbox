@@ -3,12 +3,43 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMailStore } from "../../store/mailStore";
 import { type MailAccount, useAccounts } from "../lib/accounts";
+import { useSelfProfile } from "../lib/selfProfile";
 import { useAnchoredMenu } from "../lib/useAnchoredMenu";
 import { Icon } from "./Icon";
+import { SelfPhoto } from "./SelfPhoto";
 import s from "./AccountSwitcher.module.css";
 
-const initialOf = (account: MailAccount): string =>
-  (account.name || account.email).charAt(0).toUpperCase() || "?";
+/**
+ * Who an account belongs to, for its avatar: your name and photo from the
+ * identity and your own address-book card. Thunderbird names mail accounts
+ * after their address by default, so the account name only labels the
+ * account when you've given it one of your own ("Work").
+ */
+const useAccountPerson = (account: MailAccount | null) => {
+  const profile = useSelfProfile(account?.email);
+  if (!account) return null;
+  const isAddress = !account.name || account.name.toLowerCase() === account.email.toLowerCase();
+  const person = account.ownerName || profile.name;
+  return {
+    label: isAddress ? person || account.email : account.name,
+    initial: (person || account.name || account.email).charAt(0).toUpperCase() || "?",
+    photo: profile.photo,
+  };
+};
+
+const AccountAvatar = ({
+  account,
+  person,
+  className,
+}: {
+  account: MailAccount;
+  person: NonNullable<ReturnType<typeof useAccountPerson>>;
+  className: string | undefined;
+}) => (
+  <span className={className} style={{ backgroundColor: account.color }}>
+    <SelfPhoto email={account.email}>{person.initial}</SelfPhoto>
+  </span>
+);
 
 /**
  * Google-style avatar menu in the app bar: settings, keyboard shortcuts, and
@@ -30,6 +61,7 @@ export const AccountSwitcher = ({ onShowShortcuts }: { onShowShortcuts: () => vo
   const filtered = accounts.find((a) => a.id === accountFilter) ?? null;
   // With one account there's nothing to switch between: it is the account.
   const current = multiple ? filtered : accounts[0] ?? null;
+  const currentPerson = useAccountPerson(current);
 
   // A remembered account that's since been removed from Thunderbird would
   // otherwise leave every view empty with no way to tell why.
@@ -74,11 +106,11 @@ export const AccountSwitcher = ({ onShowShortcuts }: { onShowShortcuts: () => vo
     setAccountFilter(accountId);
   };
 
-  const label = !multiple
-    ? current?.email || current?.name || "your account"
-    : current
-      ? `${current.name} (${current.email})`
-      : "All accounts";
+  const label = !current || !currentPerson
+    ? multiple ? "All accounts" : "your account"
+    : current.email && current.email !== currentPerson.label
+      ? `${currentPerson.label} (${current.email})`
+      : currentPerson.label;
 
   return (
     <>
@@ -92,10 +124,8 @@ export const AccountSwitcher = ({ onShowShortcuts }: { onShowShortcuts: () => vo
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        {current ? (
-          <span className={s.avatar} style={{ backgroundColor: current.color }}>
-            {initialOf(current)}
-          </span>
+        {current && currentPerson ? (
+          <AccountAvatar account={current} person={currentPerson} className={s.avatar} />
         ) : (
           <span className={clsx(s.avatar, s.allAvatar)}>
             <Icon name={multiple ? "all_inbox" : "person"} className={s.allIcon} />
@@ -132,31 +162,16 @@ export const AccountSwitcher = ({ onShowShortcuts }: { onShowShortcuts: () => vo
               <div className={s.divider} />
             </>
           )}
-          {accounts.map((account) => {
-            const active = current?.id === account.id;
-            const count = unread.get(account.id) ?? 0;
-            return (
-              <button
-                key={account.id}
-                type="button"
-                role="menuitemradio"
-                aria-checked={active}
-                className={clsx(s.item, multiple && active && s.itemActive)}
-                onClick={() => choose(multiple ? account.id : null)}
-              >
-                <span className={s.itemAvatar} style={{ backgroundColor: account.color }}>
-                  {initialOf(account)}
-                </span>
-                <span className={s.itemText}>
-                  <span className={s.itemName}>{account.name}</span>
-                  {account.email && account.email !== account.name && (
-                    <span className={s.itemEmail}>{account.email}</span>
-                  )}
-                </span>
-                {multiple && count > 0 && <span className={s.count}>{count}</span>}
-              </button>
-            );
-          })}
+          {accounts.map((account) => (
+            <AccountItem
+              key={account.id}
+              account={account}
+              active={current?.id === account.id}
+              multiple={multiple}
+              count={multiple ? unread.get(account.id) ?? 0 : 0}
+              onChoose={() => choose(multiple ? account.id : null)}
+            />
+          ))}
           {accounts.length > 0 && <div className={s.divider} />}
           <button
             type="button"
@@ -187,5 +202,39 @@ export const AccountSwitcher = ({ onShowShortcuts }: { onShowShortcuts: () => vo
         document.body,
       )}
     </>
+  );
+};
+
+const AccountItem = ({
+  account,
+  active,
+  multiple,
+  count,
+  onChoose,
+}: {
+  account: MailAccount;
+  active: boolean;
+  multiple: boolean;
+  count: number;
+  onChoose: () => void;
+}) => {
+  const person = useAccountPerson(account)!;
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={active}
+      className={clsx(s.item, multiple && active && s.itemActive)}
+      onClick={onChoose}
+    >
+      <AccountAvatar account={account} person={person} className={s.itemAvatar} />
+      <span className={s.itemText}>
+        <span className={s.itemName}>{person.label}</span>
+        {account.email && account.email !== person.label && (
+          <span className={s.itemEmail}>{account.email}</span>
+        )}
+      </span>
+      {count > 0 && <span className={s.count}>{count}</span>}
+    </button>
   );
 };

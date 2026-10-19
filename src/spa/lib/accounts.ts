@@ -9,6 +9,8 @@ export interface MailAccount {
   name: string;
   /** The account's default identity, for labelling it. */
   email: string;
+  /** That identity's "Your Name", which the account name often isn't. */
+  ownerName: string;
   color: string;
 }
 
@@ -69,6 +71,7 @@ const loadAccounts = async (): Promise<BareAccount[]> => {
       id: account.id,
       name: account.name,
       email: account.identities?.[0]?.email ?? "",
+      ownerName: account.identities?.[0]?.name?.trim() ?? "",
     }));
 };
 

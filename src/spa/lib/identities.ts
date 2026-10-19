@@ -26,16 +26,18 @@ const loadIdentities = async (): Promise<ComposeIdentity[]> => {
 };
 
 /** Identities load once per tab; changes in Thunderbird show up on reload. */
+export const listIdentities = (): Promise<ComposeIdentity[]> =>
+  (cached ??= loadIdentities().catch((e) => {
+    log.warn("identities", "couldn't list identities", e);
+    cached = null;
+    return [];
+  }));
+
 export const useIdentities = (): ComposeIdentity[] => {
   const [identities, setIdentities] = useState<ComposeIdentity[]>([]);
   useEffect(() => {
     let cancelled = false;
-    cached ??= loadIdentities().catch((e) => {
-      log.warn("identities", "couldn't list identities", e);
-      cached = null;
-      return [];
-    });
-    void cached.then((list) => {
+    void listIdentities().then((list) => {
       if (!cancelled) setIdentities(list);
     });
     return () => {

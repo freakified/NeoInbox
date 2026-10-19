@@ -1,10 +1,12 @@
 import { useMemo, useRef } from "react";
+import { addressEmail } from "../../shared/compose";
 import type { PendingReply } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { buildComposedSrcdoc } from "../lib/srcdoc";
 import { useIframeAutoHeight } from "../lib/useIframeAutoHeight";
 import { Icon } from "./Icon";
 import { AddressList, displayAddressList } from "./InlineMessage";
+import { SelfPhoto } from "./SelfPhoto";
 import ms from "./InlineMessage.module.css";
 import bs from "./MessageBody.module.css";
 import s from "./PendingMessage.module.css";
@@ -23,7 +25,7 @@ export const PendingMessage = ({ reply }: { reply: PendingReply }) => {
     <div className={ms.message} aria-busy="true">
       <div className={`${ms.header} ${ms.headerLocked}`} onClick={(e) => e.stopPropagation()}>
         <div className={ms.avatar} style={{ backgroundColor: avatarColor(name) }}>
-          {senderInitial(reply.author)}
+          <SelfPhoto email={addressEmail(reply.author)}>{senderInitial(reply.author)}</SelfPhoto>
         </div>
         <div className={ms.meta}>
           <div className={ms.metaLine}>

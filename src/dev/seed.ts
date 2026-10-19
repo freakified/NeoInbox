@@ -13,6 +13,12 @@ export const ME = "you@neoinbox.test";
 /** The second account's address, so the harness has accounts to switch between. */
 export const WORK_ME = "you@work.example";
 export const INBOX = "inbox";
+
+const SELF_PHOTO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" fill="#8ab4f8"/>
+  <circle cx="32" cy="25" r="12" fill="#f3d2b6"/>
+  <path d="M10 64c2-14 11-21 22-21s20 7 22 21z" fill="#1a73e8"/>
+</svg>`;
 export const SENT = "sent";
 export const ARCHIVE = "archive";
 
@@ -263,8 +269,9 @@ export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
     accounts: [
       {
         id: "dev",
-        name: "Dev Mailbox",
-        identities: [{ email: ME, name: "Me" }],
+        // Thunderbird's default: an account named after its address.
+        name: ME,
+        identities: [{ email: ME, name: "Alex Rivera" }],
         folders: [
           { id: INBOX, name: "Inbox", specialUse: ["inbox"], messages: inbox },
           { id: SENT, name: "Sent", specialUse: ["sent"], messages: [...hike.sent, ...lease.sent] },
@@ -290,5 +297,7 @@ export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
         ],
       },
     ],
+    // Your own card, so the app bar and your messages show a photo.
+    contacts: [{ email: ME, name: "Alex Rivera", photo: new Blob([SELF_PHOTO], { type: "image/svg+xml" }) }],
   };
 };
