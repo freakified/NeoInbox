@@ -12,6 +12,8 @@ import {
   type StreamView,
 } from "../store/mailStore";
 import { CATEGORIES, getCategoryMeta } from "../shared/categories";
+import { resolveThread } from "../shared/threading";
+import type { MessageKey } from "../shared/messageKey";
 import { scrollKeeper } from "./lib/scrollKeeper";
 import { AccountSwitcher } from "./components/AccountSwitcher";
 import { BundleSliceRow } from "./components/BundleSliceRow";
@@ -350,6 +352,12 @@ export const App = () => {
       setActiveView(view);
     }
   }, []);
+  /** Empty the box, and leave the results for wherever search was started from. */
+  const cancelSearch = () => {
+    setSearchText("");
+    setActiveSuggestion(-1);
+    if (activeView.type === "search") navigate(lastBrowseViewRef.current);
+  };
   const runSearch = (text: string) => {
     const query = text.trim();
     if (!query) return;
@@ -440,6 +448,28 @@ export const App = () => {
   useEffect(() => {
     retainSelection(new Set(streamThreads.map((t) => t.id)));
   }, [retainSelection, streamThreads]);
+
+  // Thread ids change as threading learns more: opening a header-only row
+  // fetches its References, which can join it to earlier mail, and search
+  // reads in older matches. The open conversation is followed by its
+  // messages (as of the last commit) to wherever it now lives.
+  const openThreadId =
+    openBundleThreadId ?? (expandedKey?.startsWith("thread:") ? expandedKey.slice("thread:".length) : null);
+  const openThreadKeys = useRef<readonly MessageKey[]>([]);
+  const openThread = openThreadId
+    ? resolveThread(streamThreads, { id: openThreadId, keys: openThreadKeys.current })
+    : undefined;
+  useEffect(() => {
+    openThreadKeys.current = openThread?.messages.map((m) => m.key) ?? [];
+  }, [openThread]);
+  if (openThreadId && openThread && openThread.id !== openThreadId) {
+    // Adjusted during render so the card never commits closed. The scroll
+    // keeper is told first, or it would take the old row's leaving the
+    // stream for the card going away.
+    scrollKeeper.rename(`thread:${openThreadId}`, `thread:${openThread.id}`);
+    if (openBundleThreadId) setOpenBundleThreadId(openThread.id);
+    else setExpandedKey(`thread:${openThread.id}`);
+  }
   const selectedThreads = useMemo(
     () => streamThreads.filter((t) => selectedIds.has(t.id)),
     [selectedIds, streamThreads],
@@ -580,12 +610,28 @@ export const App = () => {
                     const count = suggestions.length + 1;
                     setActiveSuggestion((i) => ((i + 1 + step + count) % count) - 1);
                   } else if (e.key === "Escape") {
-                    setSearchText("");
                     e.currentTarget.blur();
-                    if (activeView.type === "search") navigate(lastBrowseViewRef.current);
+                    cancelSearch();
                   }
                 }}
               />
+              {(searchText || activeView.type === "search") && (
+                <button
+                  type="button"
+                  className={s.searchClear}
+                  aria-label="Clear search"
+                  title="Clear search"
+                  // Keep the box focused while typing; leaving the results blurs it.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    if (activeView.type === "search") searchRef.current?.blur();
+                    else searchRef.current?.focus();
+                    cancelSearch();
+                  }}
+                >
+                  <Icon name="close" />
+                </button>
+              )}
               {showSuggestions && (
                 <SearchSuggestions
                   text={searchText}

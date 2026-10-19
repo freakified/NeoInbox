@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
+import { isSameThread } from "../../shared/threading";
 import type { Thread } from "../../shared/types";
 import { useMailStore, type PendingReply } from "../../store/mailStore";
 import { useAccountMarker } from "../lib/accounts";
@@ -53,7 +54,7 @@ export const ThreadView = ({
     const pendingReplies: PendingReply[] = [];
     const arrived: { reply: PendingReply; messageKey: string }[] = [];
     for (const r of allPendingReplies) {
-      if (r.threadId !== t.id) continue;
+      if (!isSameThread(t, { id: r.threadId, keys: r.knownKeys })) continue;
       const known = new Set(r.knownKeys);
       const landed = t.messages.find((m) => m.origin === "sent" && !known.has(m.key));
       if (landed) arrived.push({ reply: r, messageKey: landed.key });

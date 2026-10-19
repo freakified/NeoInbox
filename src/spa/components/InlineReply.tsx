@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { clsx } from "clsx";
 import { pickIdentity, replyRecipients, type ComposeKind } from "../../shared/compose";
 import { liveTbId } from "../../shared/liveMessage";
+import { isSameThread, threadRef, type ThreadRef } from "../../shared/threading";
 import type { RawMessage, Thread } from "../../shared/types";
 import { useMailStore } from "../../store/mailStore";
 import { avatarColor, senderInitial, senderName } from "../lib/avatar";
@@ -31,8 +32,23 @@ type ReplyState =
 /**
  * Unsent replies by thread, so closing a conversation (or switching away and
  * back) doesn't throw away what was typed. Lives for the tab's lifetime.
+ * Found by the thread's messages too, since its id can change under a reply.
  */
-const unsentReplies = new Map<string, ReplyState>();
+const unsentReplies: { thread: ThreadRef; state: ReplyState }[] = [];
+
+const unsentIndex = (thread: Thread): number => {
+  const byId = unsentReplies.findIndex((r) => r.thread.id === thread.id);
+  return byId >= 0 ? byId : unsentReplies.findIndex((r) => isSameThread(thread, r.thread));
+};
+
+const getUnsent = (thread: Thread): ReplyState | undefined =>
+  unsentReplies[unsentIndex(thread)]?.state;
+
+const setUnsent = (thread: Thread, state: ReplyState | null): void => {
+  const at = unsentIndex(thread);
+  if (at >= 0) unsentReplies.splice(at, 1);
+  if (state) unsentReplies.push({ thread: threadRef(thread), state });
+};
 
 /**
  * Drafts just sent from here. Thunderbird deletes them once the send lands;
@@ -245,7 +261,7 @@ export const InlineReply = ({
   const notify = useMailStore((st) => st.notify);
   const popOutReply = useMailStore((st) => st.popOutReply);
   // While this thread's reply is out in the floating panel, the thread shows none.
-  const poppedOut = useMailStore((st) => st.poppedReply?.threadId === thread.id);
+  const poppedOut = useMailStore((st) => !!st.poppedReply && isSameThread(thread, st.poppedReply.thread));
   const draft = isEditableDraft(savedDraft) ? savedDraft : undefined;
   const identities = useIdentities();
   const identityContext = {
@@ -258,9 +274,9 @@ export const InlineReply = ({
 
   /** What's kept for this thread, minus edits to a draft that has since gone. */
   const stored = (): ReplyState | null => {
-    const st = unsentReplies.get(thread.id);
+    const st = getUnsent(thread);
     if (st?.kind === "draft" && st.draftKey !== draft?.key) {
-      unsentReplies.delete(thread.id);
+      setUnsent(thread, null);
       return null;
     }
     return st ?? null;
@@ -274,13 +290,12 @@ export const InlineReply = ({
   }, [thread.id, draft?.key]);
 
   const update = (next: ReplyState | null) => {
-    if (next) unsentReplies.set(thread.id, next);
-    else unsentReplies.delete(thread.id);
+    setUnsent(thread, next);
     setState(next);
   };
 
   const start = async (kind: ReplyKind) => {
-    const value = unsentReplies.get(thread.id)?.value ?? emptyComposerValue();
+    const value = getUnsent(thread)?.value ?? emptyComposerValue();
     if (kind === "forward") {
       update({ kind, value: { ...value, to: [], cc: [] } });
       return;
@@ -293,7 +308,7 @@ export const InlineReply = ({
     const replyTo = await loadReplyTo(replyTarget);
     replyToRef.current = { key: replyTarget.key, value: replyTo };
     if (!replyTo) return;
-    const latest = unsentReplies.get(thread.id);
+    const latest = getUnsent(thread);
     if (!latest || latest.kind !== kind) return;
     update({
       kind,
@@ -372,14 +387,14 @@ export const InlineReply = ({
     const subject = (st.kind === "draft" ? draft?.subject : replyTarget.subject) ?? "";
     const prefix = st.kind === "forward" ? "Fwd: " : st.kind === "draft" ? "" : "Re: ";
     popOutReply({
-      threadId: thread.id,
+      thread: threadRef(thread),
       title: /^(re|fwd?):/i.test(subject) ? subject : `${prefix}${subject}`,
       value: st.value,
       identityContext,
       placeholder: st.kind === "forward" ? "Add a note" : "Write your reply",
       submit: (value, send, identityId) => void submit({ ...st, value }, send, identityId),
       keep: (value) => {
-        unsentReplies.set(thread.id, { ...st, value });
+        setUnsent(thread, { ...st, value });
       },
       discard: (value) => {
         if (st.kind === "draft") {
@@ -389,7 +404,7 @@ export const InlineReply = ({
         }
       },
     });
-    unsentReplies.delete(thread.id);
+    setUnsent(thread, null);
     setState(null);
   };
 

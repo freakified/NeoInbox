@@ -179,6 +179,28 @@
   display: none;
 }
 
+.searchClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin-right: -6px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 22px;
+  opacity: 0.9;
+  cursor: pointer;
+}
+
+.searchClear:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
 .syncText {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.8);
@@ -558,6 +580,11 @@
 
   .searchInput {
     width: 0;
+  }
+
+  /* Collapsed to the magnifier until focused: nothing to clear yet. */
+  .search:not(:focus-within) .searchClear {
+    display: none;
   }
 
   .search:focus-within {

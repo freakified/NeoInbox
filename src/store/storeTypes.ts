@@ -1,5 +1,6 @@
 import type { ComposeDraft } from "../shared/compose";
 import type { MessageKey } from "../shared/messageKey";
+import type { ThreadRef } from "../shared/threading";
 import type { ArchiveImportStatus, FailedCommand, TripScanStatus } from "../shared/messaging";
 import type { ComposerValue } from "../spa/components/ComposerForm";
 import type {
@@ -198,7 +199,8 @@ export interface MailStore {
  */
 export interface PoppedReply {
   key: number;
-  threadId: string;
+  /** By its messages too: the thread's id may change while the reply is out. */
+  thread: ThreadRef;
   /** Shown in the panel's title bar, e.g. "Re: Dinner Friday". */
   title: string;
   value: ComposerValue;

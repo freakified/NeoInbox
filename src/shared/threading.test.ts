@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MessageOrigin, RawMessage } from "./types";
-import { buildThreads, normalizeSubject } from "./threading";
+import { buildThreads, normalizeSubject, resolveThread, threadRef } from "./threading";
 
 let nextId = 1;
 
@@ -140,6 +140,20 @@ describe("buildThreads", () => {
     expect(after).toBe(before);
   });
 
+  it("gives a conversation the same id in every view", () => {
+    const sent = msg({ headerMessageId: "<a@example.com>", origin: "sent", date: 1_000 });
+    const reply = msg({
+      headerMessageId: "<b@example.com>",
+      inReplyTo: ["<a@example.com>"],
+      date: 5_000,
+    });
+
+    const inbox = buildThreads([sent, reply], ME, new Set(["inbox"]))[0]!.id;
+    const search = buildThreads([sent, reply], ME, new Set(["inbox", "done", "sent", "draft"]))[0]!.id;
+
+    expect(search).toBe(inbox);
+  });
+
   it("sorts a resurfaced thread by its wake time, not its original date", () => {
     const old = msg({ headerMessageId: "<a@example.com>", date: 1_000, resurfacedAt: 9_000 });
     const recent = msg({ headerMessageId: "<b@example.com>", author: "Bob <bob@example.com>", date: 5_000 });
@@ -161,5 +175,34 @@ describe("buildThreads", () => {
     );
 
     expect(buildThreads(senders, ME)[0]!.participantsLabel).toBe("Ada, Bob, +2 (4)");
+  });
+});
+
+describe("resolveThread", () => {
+  it("follows a thread whose id changes once its References are fetched", () => {
+    // An archive-imported row is headers only: no References until the
+    // conversation is opened and its details are filled in.
+    const earlier = msg({ headerMessageId: "<a@example.com>", origin: "done", date: 1_000 });
+    const headerOnly = msg({ headerMessageId: "<b@example.com>", origin: "done", date: 5_000 });
+    const anchors = new Set<MessageOrigin>(["inbox", "done"]);
+
+    const opened = buildThreads([earlier, headerOnly], ME, anchors).find((t) =>
+      t.messages.includes(headerOnly),
+    )!;
+    const hydrated = { ...headerOnly, references: ["<a@example.com>"] };
+    const after = buildThreads([earlier, hydrated], ME, anchors);
+
+    expect(after.some((t) => t.id === opened.id)).toBe(false);
+    const found = resolveThread(after, threadRef(opened));
+    expect(found?.messages.map((m) => m.key)).toEqual([earlier.key, hydrated.key]);
+  });
+
+  it("prefers an exact id over a thread that shares a message", () => {
+    const a = msg({ headerMessageId: "<a@example.com>" });
+    const b = msg({ headerMessageId: "<b@example.com>", author: "Bob <bob@example.com>" });
+    const threads = buildThreads([a, b], ME);
+    const target = threads.find((t) => t.messages.includes(b))!;
+
+    expect(resolveThread(threads, { id: target.id, keys: [a.key] })).toBe(target);
   });
 });

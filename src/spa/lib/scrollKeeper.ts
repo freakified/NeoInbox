@@ -309,6 +309,14 @@ export const scrollKeeper = {
     setAnchor(el, true, Math.max(viewportTop(el), visibleTop()));
   },
 
+  /** A row's key changed (a thread re-threaded under a new id); keep holding it. */
+  rename(from: string, to: string): void {
+    if (!anchor) return;
+    if (anchor.key === from) anchor.key = to;
+    if (anchor.next === from) anchor.next = to;
+    if (anchor.prev?.key === from) anchor.prev.key = to;
+  },
+
   /** Forget the anchor (switching views). */
   release(): void {
     anchor = null;

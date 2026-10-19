@@ -105,16 +105,39 @@ function threadCategory(msgs: RawMessage[]): RawMessage["category"] {
 const messageSortDate = (msg: RawMessage): number =>
   msg.origin === "inbox" ? msg.resurfacedAt ?? msg.date : msg.date;
 
+// Named for its earliest message, whatever its origin, so a conversation has
+// the same id in every view. Ids still change as threading learns more (older
+// mail loads, a header-only row gains its References, two halves merge), so
+// UI state holds on to a ThreadRef rather than a bare id.
 const stableThreadId = (
   msgs: readonly RawMessage[],
   messageNodes: ReadonlyMap<MessageKey, string>,
-  anchorOrigins: ReadonlySet<MessageOrigin>,
 ): string => {
-  const anchors = msgs.filter((m) => anchorOrigins.has(m.origin));
-  const candidates = anchors.length ? anchors : msgs;
-  const [first] = [...candidates].sort((a, b) => a.date - b.date || a.key.localeCompare(b.key));
+  const [first] = [...msgs].sort((a, b) => a.date - b.date || a.key.localeCompare(b.key));
   return first ? messageNodes.get(first.key) ?? first.key : "";
 }
+
+/** A conversation as UI state remembers it: its id then, and its messages. */
+export interface ThreadRef {
+  id: string;
+  keys: readonly MessageKey[];
+}
+
+export const threadRef = (thread: Thread): ThreadRef => ({
+  id: thread.id,
+  keys: thread.messages.map((m) => m.key),
+});
+
+/** Whether `thread` is the remembered one, under its old id or a new one. */
+export const isSameThread = (thread: Thread, ref: ThreadRef): boolean =>
+  thread.id === ref.id || thread.messages.some((m) => ref.keys.includes(m.key));
+
+/** The remembered conversation in `threads`: by id, else by any of its messages. */
+export const resolveThread = <T extends Thread>(
+  threads: readonly T[],
+  ref: ThreadRef,
+): T | undefined =>
+  threads.find((t) => t.id === ref.id) ?? threads.find((t) => isSameThread(t, ref));
 
 export function buildThreads(
   messages: readonly RawMessage[],
@@ -202,7 +225,7 @@ export function buildThreads(
       0,
     );
     threads.push({
-      id: stableThreadId(msgs, messageNodes, anchorOrigins) || key,
+      id: stableThreadId(msgs, messageNodes) || key,
       subject: latest.subject || "(no subject)",
       messages: msgs,
       participantsLabel: makeParticipantsLabel(msgs, myEmails),
