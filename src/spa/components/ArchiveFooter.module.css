@@ -30,6 +30,18 @@
   cursor: pointer;
 }
 
+/* Like the drawer's Thunderbird shortcuts: the open-in-new mark after the label. */
+.externalBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.externalIcon {
+  font-size: 16px;
+  opacity: 0.7;
+}
+
 .actions {
   display: flex;
   align-items: center;

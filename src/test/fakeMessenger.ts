@@ -260,6 +260,8 @@ export class FakeMessenger {
     /** URLs handed to the system browser through windows.openDefaultBrowser. */
     openedUrls: [] as string[],
     quickFilters: [] as { tabId: number; properties: messenger.mailTabs._SetQuickFilterProperties }[],
+    /** Folders shown in a new mail tab through mailTabs.create, by id. */
+    mailTabFolders: [] as (string | undefined)[],
   };
 
   /** Open compose windows by tab id; tab and window ids are the same here. */
@@ -786,7 +788,11 @@ export class FakeMessenger {
       },
       mailTabs: {
         query: async () => [],
-        create: async () => ({ id: 2 }),
+        create: async (properties?: { displayedFolder?: string | { id?: string } }) => {
+          const folder = properties?.displayedFolder;
+          self.calls.mailTabFolders.push(typeof folder === "string" ? folder : folder?.id);
+          return { id: 2 };
+        },
         update: async () => ({ id: 2 }),
         setQuickFilter: async (
           tabId: number,

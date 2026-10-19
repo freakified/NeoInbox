@@ -1,6 +1,6 @@
 import { log } from "../../shared/log";
 
-type FolderRole = "inbox" | "trash" | "junk";
+type FolderRole = "inbox" | "trash" | "junk" | "archives";
 
 const findFolder = (
   folders: messenger.folders.MailFolder[],
@@ -14,15 +14,20 @@ const findFolder = (
   return null;
 };
 
-/** The default account's folder for a role, else the first account that has one. */
-const folderForRole = async (role: FolderRole): Promise<messenger.folders.MailFolder | null> => {
+/**
+ * The folder for a role in `accountId`, else the default account's, else the
+ * first account that has one.
+ */
+const folderForRole = async (
+  role: FolderRole,
+  accountId?: string | null,
+): Promise<messenger.folders.MailFolder | null> => {
   const [accounts, defaultAccount] = await Promise.all([
     messenger.accounts.list(true),
     messenger.accounts.getDefault?.(false).catch(() => null) ?? Promise.resolve(null),
   ]);
-  const ordered = defaultAccount
-    ? [...accounts].sort((a, b) => Number(b.id === defaultAccount.id) - Number(a.id === defaultAccount.id))
-    : accounts;
+  const rank = (id: string) => (id === accountId ? 2 : id === defaultAccount?.id ? 1 : 0);
+  const ordered = [...accounts].sort((a, b) => rank(b.id) - rank(a.id));
   for (const account of ordered) {
     const folder = findFolder(account.folders ?? [], role);
     if (folder) return folder;
@@ -34,10 +39,17 @@ const folderForRole = async (role: FolderRole): Promise<messenger.folders.MailFo
  * Shows a folder in Thunderbird's own mail view: reuses an existing 3-pane
  * tab rather than piling up new ones each click. Returns that tab's id.
  */
-const showFolder = async (role: FolderRole): Promise<number | null> => {
-  const folder = await folderForRole(role);
+const showFolder = async (
+  roles: readonly FolderRole[],
+  accountId?: string | null,
+): Promise<number | null> => {
+  let folder: messenger.folders.MailFolder | null = null;
+  for (const role of roles) {
+    folder = await folderForRole(role, accountId);
+    if (folder?.id) break;
+  }
   if (!folder?.id) {
-    log.warn("tb-views", `No ${role} folder found in any account`);
+    log.warn("tb-views", `No ${roles.join("/")} folder found in any account`);
     return null;
   }
   const [mailTab] = await messenger.mailTabs.query({});
@@ -52,28 +64,29 @@ const showFolder = async (role: FolderRole): Promise<number | null> => {
 
 export const openThunderbirdFolder = async (role: FolderRole): Promise<void> => {
   try {
-    await showFolder(role);
+    await showFolder([role]);
   } catch (err) {
     log.warn("tb-views", `Opening ${role} folder in Thunderbird failed`, err);
   }
 };
 
 /**
- * Hands a search to Thunderbird: the Inbox in a mail tab, narrowed by the
- * Quick Filter bar to sender, recipients and subject. The WebExtension API has
- * no handle on Thunderbird's global search box, so this is the closest search
- * of its own it can open; the filter bar it leaves showing can widen the
- * match to message bodies.
+ * Hands a search to Thunderbird: the account's archive in a mail tab (Gmail's
+ * All Mail, which holds nearly everything), narrowed by the Quick Filter bar
+ * to sender, recipients, subject and body. The WebExtension API has no handle
+ * on Thunderbird's global search, and the filter bar works on one folder, so
+ * this is the widest search of its own it can open. Accounts without an
+ * archive folder get their Inbox.
  */
-export const searchInThunderbird = async (query: string): Promise<void> => {
+export const searchInThunderbird = async (query: string, accountId?: string | null): Promise<void> => {
   const text = query.trim();
   if (!text) return;
   try {
-    const tabId = await showFolder("inbox");
+    const tabId = await showFolder(["archives", "inbox"], accountId);
     if (tabId === null) return;
     await messenger.mailTabs.setQuickFilter(tabId, {
       show: true,
-      text: { text, author: true, recipients: true, subject: true },
+      text: { text, author: true, recipients: true, subject: true, body: true },
     });
   } catch (err) {
     log.warn("tb-views", "Searching in Thunderbird failed", err);

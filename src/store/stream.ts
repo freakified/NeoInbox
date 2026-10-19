@@ -12,6 +12,7 @@ import type {
   TripRecord,
 } from "../shared/types";
 import { dateBucket, futureDateBucket } from "../spa/lib/dateBucket";
+import { messageMatcher, textMatches } from "./search";
 
 export type StreamView =
   | { type: "inbox" }
@@ -23,7 +24,9 @@ export type StreamView =
   // Trips is not a bundle: membership is explicit (TripMembershipRecord), not
   // a category, so it gets its own view rather than borrowing a category name.
   | { type: "trips" }
-  | { type: "bundle"; category: Category };
+  | { type: "bundle"; category: Category }
+  // Everything cached, narrowed to whole conversations with a matching message.
+  | { type: "search"; query: string };
 
 export type StreamItem =
   | { type: "thread"; date: number; thread: Thread }
@@ -93,6 +96,10 @@ const reminderDateForView = (
     if (r.status !== "active") return null;
     return snoozed ? r.snoozeWakeAt! : r.resurfacedAt ?? r.createdAt;
   }
+  if (view.type === "search") {
+    if (!textMatches(view.query, r.text)) return null;
+    return r.status === "done" ? r.doneAt ?? r.createdAt : r.resurfacedAt ?? r.createdAt;
+  }
   return null;
 };
 
@@ -110,18 +117,21 @@ export const deriveStream = (
 ): Stream => {
   const allMessages = Object.values(messagesByKey);
   const anchorOrigins: ReadonlySet<MessageOrigin> = new Set(
-    view.type === "sent"
-      ? ["sent"]
-      : view.type === "draft"
-        ? ["draft"]
-        : view.type === "done"
-          ? ["done"]
-          : view.type === "bundle" || view.type === "trips"
-            ? ["inbox", "done"]
-            : ["inbox"],
+    view.type === "search"
+      ? ["inbox", "done", "sent", "draft"]
+      : view.type === "sent"
+        ? ["sent"]
+        : view.type === "draft"
+          ? ["draft"]
+          : view.type === "done"
+            ? ["done"]
+            : view.type === "bundle" || view.type === "trips"
+              ? ["inbox", "done"]
+              : ["inbox"],
   );
   const visible = allMessages.filter((m) => {
     if (view.type === "reminders") return false;
+    if (view.type === "search") return true;
     if (view.type === "inbox") {
       return m.origin === "sent" || m.origin === "draft" || (m.origin === "inbox" && !m.snoozed);
     }
@@ -158,6 +168,10 @@ export const deriveStream = (
         return dueAt ? { ...thread, latestDate: dueAt, snoozeDueAt: dueAt } : thread;
       })
       .filter((thread) => typeof thread.snoozeDueAt === "number");
+  }
+  if (view.type === "search") {
+    const matches = messageMatcher(view.query);
+    threads = threads.filter((t) => t.messages.some(matches));
   }
   if (pinnedOnly && view.type === "inbox") {
     threads = threads.filter((t) => t.pinned);

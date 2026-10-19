@@ -1,5 +1,6 @@
 import { useMailStore } from "../../store/mailStore";
 import { DEFAULT_ARCHIVE_YEARS, formatDay, rangesBeyond, sinceOf } from "../lib/archiveRanges";
+import { searchInThunderbird } from "../lib/thunderbirdViews";
 import { Icon } from "./Icon";
 import s from "./ArchiveFooter.module.css";
 
@@ -69,7 +70,19 @@ const Actions = ({
   );
 };
 
-export const DoneArchiveFooter = () => {
+/**
+ * The archive import's offer and progress. Each place it shows words the
+ * offer for itself: what is missing there until older mail is imported.
+ */
+const ArchiveImportFooter = ({
+  notYet,
+  importedTo,
+}: {
+  /** Nothing imported yet. */
+  notYet: string;
+  /** Imported back to this day. */
+  importedTo: (day: string) => string;
+}) => {
   const status = useMailStore((st) => st.archiveImport);
   const importArchive = useMailStore((st) => st.importArchive);
   const stopArchiveImport = useMailStore((st) => st.stopArchiveImport);
@@ -102,14 +115,50 @@ export const DoneArchiveFooter = () => {
         {status?.error
           ? "Couldn't finish importing archived mail."
           : covered === undefined
-            ? "Done shows mail archived since you started using NeoInbox."
-            : `Archived mail imported back to ${formatDay(covered)}.`}
+            ? notYet
+            : importedTo(formatDay(covered))}
       </p>
       <Actions
         action={resumable ? "Continue importing" : offersDefault(covered) ? "Import older mail" : undefined}
         onAction={() => importArchive(resumable ? status!.since : sinceOf(DEFAULT_ARCHIVE_YEARS))}
         pane="advanced"
       />
+    </footer>
+  );
+};
+
+export const DoneArchiveFooter = () => (
+  <ArchiveImportFooter
+    notYet="Done shows mail archived since you started using NeoInbox."
+    importedTo={(day) => `Archived mail imported back to ${day}.`}
+  />
+);
+
+/** Search reads only what's cached, so older archived mail can't match until imported. */
+export const SearchArchiveFooter = () => (
+  <ArchiveImportFooter
+    notYet="Search covers mail archived since you started using NeoInbox."
+    importedTo={(day) => `Search covers archived mail back to ${day}.`}
+  />
+);
+
+/**
+ * Bodies aren't cached; Thunderbird's own search can look in them, over the
+ * whole archive (All Mail on Gmail) of the account being shown.
+ */
+export const ThunderbirdSearchFooter = ({ query }: { query: string }) => {
+  const accountFilter = useMailStore((st) => st.accountFilter);
+  return (
+    <footer className={s.root}>
+      <button
+        type="button"
+        className={`${s.actionBtn} ${s.externalBtn}`}
+        onClick={() => void searchInThunderbird(query, accountFilter)}
+        title="Opens in Thunderbird"
+      >
+        Search in Thunderbird
+        <Icon name="open_in_new" className={s.externalIcon} />
+      </button>
     </footer>
   );
 };

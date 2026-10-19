@@ -5,6 +5,7 @@ import { useMailStore } from "../../store/mailStore";
 import { formatDate, formatTimeAgo } from "../lib/dateBucket";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
 import strip from "./ActionStrip.module.css";
+import { Highlight } from "./Highlight";
 import { Icon } from "./Icon";
 import { MotionRow } from "./Motion";
 import { ReminderComposer } from "./ReminderComposer";
@@ -126,7 +127,7 @@ export const ReminderRow = ({ reminder }: { reminder: ReminderRecord }) => {
           </div>
         }
         primary="Reminder"
-        secondary={reminder.text}
+        secondary={<Highlight text={reminder.text} />}
         subline={woke}
         date={date}
         onClick={() => setEditing(true)}

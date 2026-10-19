@@ -18,6 +18,7 @@ export const parseHashView = (): StreamView => {
   // Trips used to ride on the retired "travel" category. Old hashes are still
   // in tab history and bookmarks, so keep honouring them.
   if (raw === "bundle/travel") return { type: "trips" };
+  if (raw.startsWith("search/")) return { type: "search", query: raw.slice("search/".length) };
   if (raw.startsWith("bundle/")) {
     const category = raw.slice("bundle/".length);
     if (category) return { type: "bundle", category };
@@ -27,11 +28,14 @@ export const parseHashView = (): StreamView => {
 
 export const viewHash = (view: StreamView): string => {
   if (view.type === "bundle") return `#bundle/${encodeURIComponent(view.category)}`;
+  if (view.type === "search") return `#search/${encodeURIComponent(view.query)}`;
   return `#${view.type}`;
 };
 
 export const isSameView = (a: StreamView, b: StreamView): boolean =>
-  a.type === b.type && (a.type !== "bundle" || b.type !== "bundle" || a.category === b.category);
+  a.type === b.type &&
+  (a.type !== "bundle" || b.type !== "bundle" || a.category === b.category) &&
+  (a.type !== "search" || b.type !== "search" || a.query === b.query);
 
 /** Navigate from anywhere in the tree; App reacts via its hashchange listener. */
 export const navigateToView = (view: StreamView): void => {

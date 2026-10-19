@@ -381,3 +381,42 @@ describe("one account", () => {
     expect(kinds(s)).toEqual(["trip"]);
   });
 });
+
+describe("search view", () => {
+  const search = (query: string): StreamView => ({ type: "search", query });
+
+  it("finds matches wherever they are, loose rather than bundled", () => {
+    const inbox = msg({ subject: "Dinner Friday", category: "promos" });
+    const done = msg({ subject: "Dinner plans", origin: "done", date: NOW - 5 * MINUTE });
+    const snoozed = msg({ subject: "Dinner again", snoozed: true, date: NOW - 6 * MINUTE });
+    const other = msg({ subject: "Lunch" });
+
+    const s = stream([inbox, done, snoozed, other], search("dinner"));
+
+    expect(kinds(s)).toEqual(["thread", "thread", "thread"]);
+    expect(s.threadCount).toBe(3);
+  });
+
+  it("shows the whole conversation around a matching message", () => {
+    const original = msg({ subject: "Dinner Friday", author: "Bo <bo@example.com>" });
+    const reply = msg({
+      subject: "Re: Dinner Friday",
+      author: "Me <me@example.com>",
+      origin: "sent",
+      date: NOW,
+      inReplyTo: [original.headerMessageId],
+    });
+
+    const s = stream([original, reply], search("bo@example"));
+    const [item] = items(s);
+
+    expect(item?.type === "thread" && item.thread.messages.length).toBe(2);
+  });
+
+  it("includes reminders whose text matches", () => {
+    const r: ReminderRecord = { id: "r1", text: "Book the café", createdAt: NOW, status: "active", pinned: false };
+
+    expect(kinds(stream([], search("cafe"), {}, false, { r1: r }))).toEqual(["reminder"]);
+    expect(kinds(stream([], search("tea"), {}, false, { r1: r }))).toEqual([]);
+  });
+});

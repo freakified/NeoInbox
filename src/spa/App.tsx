@@ -18,12 +18,19 @@ import { BundleSliceRow } from "./components/BundleSliceRow";
 import { BundleManagerModal } from "./components/BundleManagerModal";
 import { useBulkActions } from "./components/BulkActionConfirm";
 import { EmptyState, InboxZero } from "./components/EmptyState";
-import { DoneArchiveFooter, PastTripsFooter } from "./components/ArchiveFooter";
+import {
+  DoneArchiveFooter,
+  PastTripsFooter,
+  SearchArchiveFooter,
+  ThunderbirdSearchFooter,
+} from "./components/ArchiveFooter";
 import { Fab } from "./components/Fab";
+import { SearchTermsContext } from "./components/Highlight";
 import { Icon } from "./components/Icon";
 import { ReminderRow } from "./components/ReminderRow";
 import { SelectionBar } from "./components/SelectionBar";
 import { MotionSurface } from "./components/Motion";
+import { SearchSuggestions, SEARCH_SUGGESTIONS_ID, suggestionId } from "./components/SearchSuggestions";
 import { SectionLabel } from "./components/SectionLabel";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { ThreadRow } from "./components/ThreadRow";
@@ -32,18 +39,29 @@ import { overlayIsOpen } from "./lib/overlays";
 import { moveRowFocus } from "./lib/rowNavigation";
 import { useSelection, visibleThreadIds } from "./lib/selection";
 import { TRIP_COLOR, TripSliceRow } from "./components/TripSliceRow";
+import { useKnownContacts } from "./lib/contacts";
 import { isSameView, parseHashView, viewHash } from "./lib/routing";
 import {
-  openThunderbirdContacts,
-  openThunderbirdFolder,
-  searchInThunderbird,
-} from "./lib/thunderbirdViews";
+  recentSearches,
+  rememberSearch,
+  searchSuggestions,
+  suggestionQuery,
+  type SearchSuggestion,
+} from "./lib/searchSuggestions";
+import { searchTerms } from "../store/search";
+import { openThunderbirdContacts, openThunderbirdFolder } from "./lib/thunderbirdViews";
 import s from "./App.module.css";
 
 const STREAM_PAGE_SIZE = 80;
 
 /** App bar color while conversations are selected, whatever the view's own. */
 const SELECTION_HEADER_COLOR = "#5f6368";
+
+/** Fewer results than this and search offers to bring in older archived mail. */
+const FEW_SEARCH_RESULTS = 5;
+
+/** How long typing has to pause before search goes back to Dexie for older mail. */
+const SEARCH_DEBOUNCE_MS = 250;
 
 
 /** What an empty view shows; null for the inbox, which gets its sunny sky. */
@@ -76,7 +94,7 @@ const emptyStateForView = (
     const meta = getCategoryMeta(view.category, customBundles);
     return { icon: meta.icon, title: `Nothing in ${meta.name}` };
   }
-  return { icon: "search", title: "No messages found" };
+  return { icon: "search", title: "No messages found", hint: "Try different words, or fewer of them." };
 };
 
 const headerForView = (
@@ -89,6 +107,7 @@ const headerForView = (
   if (view.type === "sent") return { title: "Sent", color: "var(--color-md-primary)" };
   if (view.type === "reminders") return { title: "Reminders", color: "var(--color-md-primary)" };
   if (view.type === "trips") return { title: "Trips", color: "#3F51B5" };
+  if (view.type === "search") return { title: "Search", color: "#546E7A" };
   if (view.type === "bundle") {
     const meta = getCategoryMeta(view.category, customBundles);
     return { title: meta.name, color: meta.color };
@@ -204,7 +223,23 @@ export const App = () => {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const goPrefixRef = useRef(false);
   const searchRef = useRef<HTMLInputElement | null>(null);
-  const [searchText, setSearchText] = useState("");
+  const [searchText, setSearchText] = useState(() =>
+    activeView.type === "search" ? activeView.query : "",
+  );
+  // Where clearing a search goes back to.
+  const lastBrowseViewRef = useRef<StreamView>({ type: "inbox" });
+  const search = useMailStore((st) => st.search);
+  const searchMail = useMailStore((st) => st.searchMail);
+  const importingArchive = !!useMailStore((st) => st.archiveImport?.running);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [activeSuggestion, setActiveSuggestion] = useState(-1);
+  const [recent, setRecent] = useState(recentSearches);
+  const contacts = useKnownContacts(1000, searchFocused);
+  const suggestions = useMemo(
+    () => (searchFocused ? searchSuggestions(searchText, contacts, recent) : []),
+    [searchFocused, searchText, contacts, recent],
+  );
+  const showSuggestions = suggestions.length > 0;
   const selectedIds = useSelection((st) => st.ids);
   const clearSelection = useSelection((st) => st.clear);
   const retainSelection = useSelection((st) => st.retain);
@@ -229,7 +264,9 @@ export const App = () => {
 
   useEffect(() => {
     const onHashChange = () => {
-      setActiveView(parseHashView());
+      const view = parseHashView();
+      setActiveView(view);
+      setSearchText(view.type === "search" ? view.query : "");
       useSelection.getState().clear();
       scrollKeeper.release();
       setExpandedKey(null);
@@ -240,6 +277,22 @@ export const App = () => {
     onHashChange();
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
+
+  useEffect(() => {
+    if (activeView.type !== "search") lastBrowseViewRef.current = activeView;
+  }, [activeView]);
+
+  // The stream narrows to what's in memory as you type; once typing pauses,
+  // older matches are read in from Dexie. An archive import just finished
+  // may have brought in more.
+  const searchQuery = activeView.type === "search" ? activeView.query : null;
+  useEffect(() => {
+    if (searchQuery === null) return;
+    const timer = window.setTimeout(() => void searchMail(searchQuery), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery, searchMail, importingArchive]);
+  const searching = searchQuery !== null && (search?.query !== searchQuery || search.loading);
+  const highlightTerms = useMemo(() => (searchQuery ? searchTerms(searchQuery) : []), [searchQuery]);
 
   // The scroll keeper holds the open conversation (or whatever's at the top of
   // the screen) in place as the stream changes around it.
@@ -297,6 +350,17 @@ export const App = () => {
       setActiveView(view);
     }
   }, []);
+  const runSearch = (text: string) => {
+    const query = text.trim();
+    if (!query) return;
+    setSearchText(query);
+    setRecent(rememberSearch(query));
+    // Off the box, so j/k and the row shortcuts work on the results.
+    searchRef.current?.blur();
+    navigate({ type: "search", query });
+  };
+  const pickSuggestion = (item: SearchSuggestion) => runSearch(suggestionQuery(item));
+
   // List-wide keys. Row-scoped ones (e/s/p/#) are handled by the focused row so
   // they always act on what the cursor is actually on.
   useEffect(() => {
@@ -394,9 +458,17 @@ export const App = () => {
     historyFrom > 0 &&
     (activeView.type === "done" || activeView.type === "sent" || activeView.type === "bundle");
 
-  // Done and Trips end by offering mail that's still only in the archive.
+  // Done, Trips and a thin search end by offering mail that's still only in
+  // the archive.
   const archiveFooter =
-    activeView.type === "done" && !canLoadOlderHistory ? (
+    searchQuery !== null ? (
+      searching ? null : (
+        <>
+          {stream.threadCount < FEW_SEARCH_RESULTS && <SearchArchiveFooter />}
+          <ThunderbirdSearchFooter query={searchQuery} />
+        </>
+      )
+    ) : activeView.type === "done" && !canLoadOlderHistory ? (
       <DoneArchiveFooter />
     ) : activeView.type === "trips" && !canLoadOlderMail ? (
       <PastTripsFooter />
@@ -460,7 +532,9 @@ export const App = () => {
               className={s.search}
               onSubmit={(e) => {
                 e.preventDefault();
-                void searchInThunderbird(searchText);
+                const picked = suggestions[activeSuggestion];
+                if (picked) pickSuggestion(picked);
+                else runSearch(searchText);
               }}
             >
               <label htmlFor="neo-search" className={s.searchIcon}>
@@ -472,17 +546,55 @@ export const App = () => {
                 type="search"
                 className={s.searchInput}
                 placeholder="Search"
-                aria-label="Search in Thunderbird"
-                title="Searches your Inbox in Thunderbird"
+                aria-label="Search mail"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={showSuggestions}
+                aria-controls={showSuggestions ? SEARCH_SUGGESTIONS_ID : undefined}
+                aria-activedescendant={
+                  showSuggestions && activeSuggestion >= 0 ? suggestionId(activeSuggestion) : undefined
+                }
+                autoComplete="off"
                 value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => {
+                  setSearchFocused(false);
+                  setActiveSuggestion(-1);
+                }}
+                onChange={(e) => {
+                  setSearchText(e.target.value);
+                  setActiveSuggestion(-1);
+                  // On the results already, they follow the typing; replacing
+                  // the hash keeps every keystroke out of the back history.
+                  const query = e.target.value.trim();
+                  if (activeView.type !== "search" || !query) return;
+                  const view: StreamView = { type: "search", query };
+                  window.history.replaceState(null, "", viewHash(view));
+                  setActiveView(view);
+                }}
                 onKeyDown={(e) => {
-                  if (e.key === "Escape") {
+                  if (showSuggestions && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+                    e.preventDefault();
+                    const step = e.key === "ArrowDown" ? 1 : -1;
+                    // Wraps through "nothing picked" (-1), back to what's typed.
+                    const count = suggestions.length + 1;
+                    setActiveSuggestion((i) => ((i + 1 + step + count) % count) - 1);
+                  } else if (e.key === "Escape") {
                     setSearchText("");
                     e.currentTarget.blur();
+                    if (activeView.type === "search") navigate(lastBrowseViewRef.current);
                   }
                 }}
               />
+              {showSuggestions && (
+                <SearchSuggestions
+                  text={searchText}
+                  items={suggestions}
+                  active={activeSuggestion}
+                  onActiveChange={setActiveSuggestion}
+                  onPick={pickSuggestion}
+                />
+              )}
             </form>
             {activeView.type === "inbox" && (
               <button
@@ -615,196 +727,202 @@ export const App = () => {
           </nav>
         </aside>
 
-        <main ref={contentRef} className={s.content}>
-          {!hydrated && (
-            <p className={s.emptyText}>Loading…</p>
-          )}
+        <SearchTermsContext.Provider value={highlightTerms}>
+          <main ref={contentRef} className={s.content}>
+            {!hydrated && (
+              <p className={s.emptyText}>Loading…</p>
+            )}
 
-          {hydrated && stream.threadCount === 0 && !syncing && (
-            emptyState ? <EmptyState {...emptyState}>{archiveFooter}</EmptyState> : <InboxZero />
-          )}
+            {hydrated && searching && stream.threadCount === 0 && (
+              <p className={s.emptyText}>Searching…</p>
+            )}
 
-          {visibleStream.sections.map((group) => {
-            const expandedBundleIdx = expandedKey && isGroupKey(expandedKey)
-              ? group.items.findIndex((item) => groupKeyOf(item) === expandedKey)
-              : -1;
+            {hydrated && stream.threadCount === 0 && !syncing && !searching && (
+              emptyState ? <EmptyState {...emptyState}>{archiveFooter}</EmptyState> : <InboxZero />
+            )}
 
-            const renderItems = (items: StreamItem[]) =>
-              items.map((item) =>
-                item.type === "thread" ? (
-                  <ThreadRow
-                    key={item.thread.id}
-                    thread={item.thread}
-                    isExpanded={expandedKey === `thread:${item.thread.id}`}
-                    onToggle={() => toggleKey(`thread:${item.thread.id}`)}
-                  />
-                ) : item.type === "reminder" ? (
-                  <ReminderRow key={item.reminder.id} reminder={item.reminder} />
-                ) : item.type === "trip" ? (
-                  <TripSliceRow
-                    key={item.trip.id}
-                    tripKey={`trip:${item.trip.id}`}
-                    trip={item.trip}
-                    threads={item.threads}
-                    isOpen={false}
-                    onToggle={toggleKey}
-                  />
-                ) : (
-                  <BundleSliceRow
-                    key={item.category}
-                    bundleKey={`bundle:${item.category}`}
-                    category={item.category}
-                    threads={item.threads}
-                    isOpen={false}
-                    onToggle={toggleKey}
-                  />
-                )
-              );
+            {visibleStream.sections.map((group) => {
+              const expandedBundleIdx = expandedKey && isGroupKey(expandedKey)
+                ? group.items.findIndex((item) => groupKeyOf(item) === expandedKey)
+                : -1;
 
-            const openBundle = expandedBundleIdx >= 0
-              ? group.items[expandedBundleIdx] as GroupItem
-              : null;
-
-            const expandedThreadIdx = !openBundle && expandedKey?.startsWith("thread:")
-              ? group.items.findIndex(
-                (item) => item.type === "thread" && expandedKey === `thread:${item.thread.id}`
-              )
-              : -1;
-
-            return (
-              <section key={group.label} className={s.section}>
-                <div className={s.sectionHeader}>
-                  <SectionLabel>{group.label}</SectionLabel>
-                  {showDoneAll && canDoneSection(group.items) && (
-                    <div className={s.sectionActions}>
-                      <button
-                        onClick={() => sectionDoneAll(group.items)}
-                        title="Done all"
-                        className={s.sectionActionBtn}
-                      >
-                        <Icon name="done_all" className={s.sectionActionIcon} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <LayoutGroup>
-                  {openBundle ? (
-                    <>
-                      {expandedBundleIdx > 0 && (
-                        <MotionSurface className={s.card}>
-                          {renderItems(group.items.slice(0, expandedBundleIdx))}
-                        </MotionSurface>
-                      )}
-                      {openBundle.type === "trip" ? (
-                        <TripSliceRow
-                          tripKey={`trip:${openBundle.trip.id}`}
-                          trip={openBundle.trip}
-                          threads={openBundle.threads}
-                          isOpen={true}
-                          onToggle={toggleKey}
-                          openThreadId={openBundleThreadId}
-                          onOpenThreadChange={setBundleThread}
-                        />
-                      ) : (
-                        <BundleSliceRow
-                          bundleKey={`bundle:${openBundle.category}`}
-                          category={openBundle.category}
-                          threads={openBundle.threads}
-                          isOpen={true}
-                          onToggle={toggleKey}
-                          openThreadId={openBundleThreadId}
-                          onOpenThreadChange={setBundleThread}
-                        />
-                      )}
-                      {expandedBundleIdx < group.items.length - 1 && (
-                        <MotionSurface className={s.card}>
-                          {renderItems(group.items.slice(expandedBundleIdx + 1))}
-                        </MotionSurface>
-                      )}
-                    </>
-                  ) : expandedThreadIdx >= 0 ? (
-                    <>
-                      {expandedThreadIdx > 0 && (
-                        <MotionSurface className={s.card}>
-                          {renderItems(group.items.slice(0, expandedThreadIdx))}
-                        </MotionSurface>
-                      )}
-                      {/* Keyed per thread: reusing the previous card's element would
-                        make framer fly it here from wherever that card was. */}
-                      <MotionSurface key={expandedKey} className={s.expandedThread}>
-                        <ThreadRow
-                          thread={(group.items[expandedThreadIdx] as Extract<StreamItem, { type: "thread" }>).thread}
-                          isExpanded={true}
-                          onToggle={() => toggleKey(expandedKey!)}
-                        />
-                      </MotionSurface>
-                      {expandedThreadIdx < group.items.length - 1 && (
-                        <MotionSurface className={s.card}>
-                          {renderItems(group.items.slice(expandedThreadIdx + 1))}
-                        </MotionSurface>
-                      )}
-                    </>
+              const renderItems = (items: StreamItem[]) =>
+                items.map((item) =>
+                  item.type === "thread" ? (
+                    <ThreadRow
+                      key={item.thread.id}
+                      thread={item.thread}
+                      isExpanded={expandedKey === `thread:${item.thread.id}`}
+                      onToggle={() => toggleKey(`thread:${item.thread.id}`)}
+                    />
+                  ) : item.type === "reminder" ? (
+                    <ReminderRow key={item.reminder.id} reminder={item.reminder} />
+                  ) : item.type === "trip" ? (
+                    <TripSliceRow
+                      key={item.trip.id}
+                      tripKey={`trip:${item.trip.id}`}
+                      trip={item.trip}
+                      threads={item.threads}
+                      isOpen={false}
+                      onToggle={toggleKey}
+                    />
                   ) : (
-                    <MotionSurface className={s.card}>
-                      {renderItems(group.items)}
-                    </MotionSurface>
-                  )}
-                </LayoutGroup>
-              </section>
-            );
-          })}
-          {hasMoreItems && (
-            <div className={s.loadMoreWrap}>
-              <button
-                type="button"
-                className={s.loadMoreBtn}
-                onClick={() => setVisibleItemLimit((limit) => limit + STREAM_PAGE_SIZE)}
-              >
-                Load more
-                <span className={s.loadMoreCount}>
-                  {visibleStream.visibleCount} of {visibleStream.totalCount}
-                </span>
-              </button>
-            </div>
-          )}
-          {/*
-          Only once everything already cached is on screen: the button above
-          pages what NeoInbox has, this one goes back to the mailbox for older
-          inbox mail that the scan window left alone.
-        */}
-          {!hasMoreItems && canLoadOlderMail && (
-            <div className={s.loadMoreWrap}>
-              <button
-                type="button"
-                className={s.loadMoreBtn}
-                onClick={loadMoreInbox}
-                disabled={loadingMoreInbox}
-              >
-                {loadingMoreInbox ? "Fetching older mail…" : "Fetch older mail"}
-                <span className={s.loadMoreCount}>
-                  {inboxWindow?.skipped.toLocaleString()} older in this inbox
-                </span>
-              </button>
-            </div>
-          )}
-          {!hasMoreItems && canLoadOlderHistory && (
-            <div className={s.loadMoreWrap}>
-              <button
-                type="button"
-                className={s.loadMoreBtn}
-                onClick={() => void loadOlderHistory()}
-                disabled={loadingHistory}
-              >
-                {loadingHistory ? "Loading older mail…" : "Show older mail"}
-                <span className={s.loadMoreCount}>
-                  before {new Date(historyFrom).toLocaleDateString()}
-                </span>
-              </button>
-            </div>
-          )}
-          {/* Past the last cached row: offer what's still only in the archive. */}
-          {hydrated && !hasMoreItems && stream.threadCount > 0 && archiveFooter}
-        </main>
+                    <BundleSliceRow
+                      key={item.category}
+                      bundleKey={`bundle:${item.category}`}
+                      category={item.category}
+                      threads={item.threads}
+                      isOpen={false}
+                      onToggle={toggleKey}
+                    />
+                  )
+                );
+
+              const openBundle = expandedBundleIdx >= 0
+                ? group.items[expandedBundleIdx] as GroupItem
+                : null;
+
+              const expandedThreadIdx = !openBundle && expandedKey?.startsWith("thread:")
+                ? group.items.findIndex(
+                  (item) => item.type === "thread" && expandedKey === `thread:${item.thread.id}`
+                )
+                : -1;
+
+              return (
+                <section key={group.label} className={s.section}>
+                  <div className={s.sectionHeader}>
+                    <SectionLabel>{group.label}</SectionLabel>
+                    {showDoneAll && canDoneSection(group.items) && (
+                      <div className={s.sectionActions}>
+                        <button
+                          onClick={() => sectionDoneAll(group.items)}
+                          title="Done all"
+                          className={s.sectionActionBtn}
+                        >
+                          <Icon name="done_all" className={s.sectionActionIcon} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <LayoutGroup>
+                    {openBundle ? (
+                      <>
+                        {expandedBundleIdx > 0 && (
+                          <MotionSurface className={s.card}>
+                            {renderItems(group.items.slice(0, expandedBundleIdx))}
+                          </MotionSurface>
+                        )}
+                        {openBundle.type === "trip" ? (
+                          <TripSliceRow
+                            tripKey={`trip:${openBundle.trip.id}`}
+                            trip={openBundle.trip}
+                            threads={openBundle.threads}
+                            isOpen={true}
+                            onToggle={toggleKey}
+                            openThreadId={openBundleThreadId}
+                            onOpenThreadChange={setBundleThread}
+                          />
+                        ) : (
+                          <BundleSliceRow
+                            bundleKey={`bundle:${openBundle.category}`}
+                            category={openBundle.category}
+                            threads={openBundle.threads}
+                            isOpen={true}
+                            onToggle={toggleKey}
+                            openThreadId={openBundleThreadId}
+                            onOpenThreadChange={setBundleThread}
+                          />
+                        )}
+                        {expandedBundleIdx < group.items.length - 1 && (
+                          <MotionSurface className={s.card}>
+                            {renderItems(group.items.slice(expandedBundleIdx + 1))}
+                          </MotionSurface>
+                        )}
+                      </>
+                    ) : expandedThreadIdx >= 0 ? (
+                      <>
+                        {expandedThreadIdx > 0 && (
+                          <MotionSurface className={s.card}>
+                            {renderItems(group.items.slice(0, expandedThreadIdx))}
+                          </MotionSurface>
+                        )}
+                        {/* Keyed per thread: reusing the previous card's element would
+                          make framer fly it here from wherever that card was. */}
+                        <MotionSurface key={expandedKey} className={s.expandedThread}>
+                          <ThreadRow
+                            thread={(group.items[expandedThreadIdx] as Extract<StreamItem, { type: "thread" }>).thread}
+                            isExpanded={true}
+                            onToggle={() => toggleKey(expandedKey!)}
+                          />
+                        </MotionSurface>
+                        {expandedThreadIdx < group.items.length - 1 && (
+                          <MotionSurface className={s.card}>
+                            {renderItems(group.items.slice(expandedThreadIdx + 1))}
+                          </MotionSurface>
+                        )}
+                      </>
+                    ) : (
+                      <MotionSurface className={s.card}>
+                        {renderItems(group.items)}
+                      </MotionSurface>
+                    )}
+                  </LayoutGroup>
+                </section>
+              );
+            })}
+            {hasMoreItems && (
+              <div className={s.loadMoreWrap}>
+                <button
+                  type="button"
+                  className={s.loadMoreBtn}
+                  onClick={() => setVisibleItemLimit((limit) => limit + STREAM_PAGE_SIZE)}
+                >
+                  Load more
+                  <span className={s.loadMoreCount}>
+                    {visibleStream.visibleCount} of {visibleStream.totalCount}
+                  </span>
+                </button>
+              </div>
+            )}
+            {/*
+            Only once everything already cached is on screen: the button above
+            pages what NeoInbox has, this one goes back to the mailbox for older
+            inbox mail that the scan window left alone.
+          */}
+            {!hasMoreItems && canLoadOlderMail && (
+              <div className={s.loadMoreWrap}>
+                <button
+                  type="button"
+                  className={s.loadMoreBtn}
+                  onClick={loadMoreInbox}
+                  disabled={loadingMoreInbox}
+                >
+                  {loadingMoreInbox ? "Fetching older mail…" : "Fetch older mail"}
+                  <span className={s.loadMoreCount}>
+                    {inboxWindow?.skipped.toLocaleString()} older in this inbox
+                  </span>
+                </button>
+              </div>
+            )}
+            {!hasMoreItems && canLoadOlderHistory && (
+              <div className={s.loadMoreWrap}>
+                <button
+                  type="button"
+                  className={s.loadMoreBtn}
+                  onClick={() => void loadOlderHistory()}
+                  disabled={loadingHistory}
+                >
+                  {loadingHistory ? "Loading older mail…" : "Show older mail"}
+                  <span className={s.loadMoreCount}>
+                    before {new Date(historyFrom).toLocaleDateString()}
+                  </span>
+                </button>
+              </div>
+            )}
+            {/* Past the last cached row: offer what's still only in the archive. */}
+            {hydrated && !hasMoreItems && stream.threadCount > 0 && archiveFooter}
+          </main>
+        </SearchTermsContext.Provider>
       </div>
       <Fab />
       <Toaster />

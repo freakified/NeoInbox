@@ -121,6 +121,7 @@
 /* Inbox's search: a translucent bar in the app bar that turns white when
    focused. It starts where the content column does when the drawer is open. */
 .search {
+  position: relative;
   flex: 1 1 auto;
   max-width: 800px;
   min-width: 0;

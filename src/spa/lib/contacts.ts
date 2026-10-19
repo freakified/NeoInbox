@@ -4,12 +4,15 @@ import { useMailStore } from "../../store/mailStore";
 
 /**
  * Everyone you've written to or heard from in cached mail, most frequent
- * first, as "Name <email>" strings — the recipient field's suggestions.
+ * first, as "Name <email>" strings — the recipient field's and the search
+ * box's suggestions. A walk of every cached message, so a caller that only
+ * sometimes shows them passes `enabled` to skip it the rest of the time.
  */
-export const useKnownContacts = (limit = 300): string[] => {
+export const useKnownContacts = (limit = 300, enabled = true): string[] => {
   const messagesByKey = useMailStore((st) => st.messagesByKey);
   const myEmails = useMailStore((st) => st.myEmails);
   return useMemo(() => {
+    if (!enabled) return [];
     const counts = new Map<string, { raw: string; count: number }>();
     const add = (raw: string, weight: number) => {
       const email = addressEmail(raw);
@@ -34,5 +37,5 @@ export const useKnownContacts = (limit = 300): string[] => {
       .sort((a, b) => b.count - a.count)
       .slice(0, limit)
       .map((entry) => entry.raw);
-  }, [messagesByKey, myEmails, limit]);
+  }, [messagesByKey, myEmails, limit, enabled]);
 };

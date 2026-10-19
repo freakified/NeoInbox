@@ -7,6 +7,8 @@ import { getDefaultAccount } from "../spa/lib/accountPrefs";
 import { loadHistoryPage, loadStartupMessages } from "./history";
 import { mailSlice } from "./mailSlice";
 import { connectPort } from "./portClient";
+import { searchCachedMail } from "./search";
+import { log } from "../shared/log";
 import { remindersSlice, startReminderWakeTimer } from "./remindersSlice";
 import { applyServerMsg } from "./serverMsg";
 import type {
@@ -64,6 +66,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   archiveImport: null,
   historyFrom: 0,
   loadingHistory: false,
+  search: null,
   // Opens on the default account; switching is for this session only.
   accountFilter: getDefaultAccount(),
 
@@ -138,6 +141,24 @@ export const useMailStore = create<MailStore>((set, get) => ({
     const map = { ...get().messagesByKey };
     for (const m of rows) map[m.key] ??= m;
     set({ messagesByKey: map, historyFrom: historyFrom === 0 ? 0 : Math.max(current, historyFrom) });
+  },
+
+  searchMail: async (query) => {
+    set({ search: { query, loading: true } });
+    let rows: RawMessage[] = [];
+    try {
+      rows = await searchCachedMail(query);
+    } catch (err) {
+      log.warn("search", "Searching cached mail failed", err);
+    }
+    // Typing on has already asked for something else.
+    if (get().search?.query !== query) return;
+    // Rows already in memory are newer than Dexie's copy or the same, and a
+    // pending op's row (e.g. trashed, awaiting undo) must stay as it is.
+    const pending = get().pendingOps;
+    const map = { ...get().messagesByKey };
+    for (const m of rows) if (!pending[m.key]) map[m.key] ??= m;
+    set({ messagesByKey: map, search: { query, loading: false } });
   },
 
   ...mailSlice(set, get),

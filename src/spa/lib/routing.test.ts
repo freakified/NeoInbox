@@ -17,6 +17,7 @@ describe("hash routing", () => {
       { type: "reminders" },
       { type: "trips" },
       { type: "bundle", category: "promos" },
+      { type: "search", query: "dinner \"at 8\" / 50% off" },
     ] as const) {
       expect(at(viewHash(view))).toEqual(view);
     }

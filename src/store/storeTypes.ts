@@ -108,6 +108,8 @@ export interface MailStore {
    */
   historyFrom: number;
   loadingHistory: boolean;
+  /** The search view's lookup in Dexie: the query it was for, and whether it's still reading. */
+  search: { query: string; loading: boolean } | null;
   /** The one account the stream shows; null shows every account's mail. */
   accountFilter: string | null;
   setAccountFilter: (accountId: string | null) => void;
@@ -117,6 +119,8 @@ export interface MailStore {
   loadOlderHistory: () => Promise<void>;
   /** Re-read the newest Sent/Done page, e.g. after an archive import. */
   reloadHistory: () => Promise<void>;
+  /** Load every cached message matching `query` into memory, however old. */
+  searchMail: (query: string) => Promise<void>;
   pin: (messageKey: MessageKey, pinned: boolean) => void;
   doneThread: (messageKeys: MessageKey[]) => void;
   snoozeThread: (messageKeys: MessageKey[], wakeAt: number) => void;

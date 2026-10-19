@@ -1,0 +1,6 @@
+/* A soft highlighter rather than bold: unread subjects are bold already. */
+.mark {
+  background: #fde293;
+  color: inherit;
+  border-radius: 2px;
+}

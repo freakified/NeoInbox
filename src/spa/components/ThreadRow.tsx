@@ -10,6 +10,7 @@ import { formatSnoozeToastTime } from "../lib/snoozePresets";
 import { useThreadActions } from "../lib/useThreadActions";
 import { ActionStrip } from "./ActionStrip";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { Highlight } from "./Highlight";
 import { Icon } from "./Icon";
 import { MessageAttachments, collectAttachments } from "./MessageAttachments";
 import { FadeIn, MotionRow } from "./Motion";
@@ -131,12 +132,17 @@ export const ThreadRow = ({
               <Icon name="check" className={s.avatarCheck} />
             </button>
           }
-          primary={t.participantsLabel}
+          primary={<Highlight text={t.participantsLabel} />}
           secondary={
             <>
               {hasDraft && <span className={s.draftLabel}>Draft </span>}
-              {t.subject || "(no subject)"}
-              {snippet && <span className={s.snippet}> – {snippet}</span>}
+              {t.subject ? <Highlight text={t.subject} /> : "(no subject)"}
+              {snippet && (
+                <span className={s.snippet}>
+                  {" – "}
+                  <Highlight text={snippet} />
+                </span>
+              )}
             </>
           }
           subline={woke}

@@ -61,7 +61,7 @@ export const ARCHIVE = "archive-a";
 export const SENT = "sent-a";
 export const DRAFTS = "drafts-a";
 
-const account = (
+export const account = (
   id: string,
   prefix: string,
   messages: FakeMessageSpec[],
