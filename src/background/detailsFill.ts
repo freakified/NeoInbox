@@ -8,6 +8,7 @@ import {
   extractMessageDetails,
   MESSAGE_DETAILS_VERSION,
   needsMessageDetails,
+  setIncompleteClassifications,
 } from "./ingest";
 import { broadcast } from "./port";
 import { BATCH_FLUSH, DETAILS_FILL_LIMIT, withTimeout } from "./scanQueue";
@@ -110,6 +111,9 @@ export const hydrateDetails = async (messageKeys: readonly MessageKey[]): Promis
     try {
       const row = await hydrateRow(cached, "on-demand details for");
       if (row) updated.push(row);
+      // Older inbox mail was classified from its headers. Now that it has its
+      // body, the retry sweep can take a proper look.
+      if (row?.origin === "inbox" && row.classifiedIncomplete) await setIncompleteClassifications(true);
     } catch (e) {
       log.debug("backfill", "on-demand details fetch failed", { key, e: String(e) });
     }

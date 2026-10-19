@@ -33,11 +33,12 @@ import { findConfirmationCodes, findDates } from "../classifier/extractors/text"
 import { buildExtractorInput } from "../classifier/samples";
 import { withTimeout } from "./scanQueue";
 import {
-  archiveCovers,
   cancelArchiveImport,
   getArchiveImportStatus,
   runArchiveImport,
 } from "./archiveImport";
+import { cancelInboxImport, runInboxImport } from "./inboxImport";
+import { isHeaderOnly } from "./ingest";
 import { broadcast } from "./port";
 import { liveTbId } from "../shared/liveMessage";
 import { log } from "../shared/log";
@@ -160,6 +161,9 @@ const sweepReservations = async (options: SweepOptions = {}): Promise<number> =>
       .between([origin, Dexie.minKey], [origin, Dexie.maxKey])
       .toArray();
     for (const m of rows) {
+      // Older inbox mail cached from headers is read like the archive: only
+      // by a scan someone started from Older mail, never automatically.
+      if (!includeDone && isHeaderOnly(m)) continue;
       if (!isTripCandidate(m, includeDone)) continue;
       const key = pinKeyOf(m);
       const prev = byKey.get(key);
@@ -514,21 +518,27 @@ export const getTripScanStatus = async (): Promise<TripScanStatus | null> => {
 export const cancelTripScan = (): void => {
   stopRequested = true;
   // Stop means the whole run, including the import it may be waiting on.
-  if (scanStatus?.phase === "import") cancelArchiveImport();
+  if (scanStatus?.phase === "import") {
+    cancelArchiveImport();
+    cancelInboxImport();
+  }
 };
 
 /**
- * Import the archive back to `since` unless finished imports already reach
- * that far. Waits out an import someone else started first. False when the
- * import was stopped or failed, so the scan should not go on.
+ * Import the archive back to `since`. Always runs: the import skips its
+ * header pass on its own when an earlier one reached that far, and its read
+ * pass is what a stopped load has left to finish. False when it was stopped
+ * or failed, so the scan should not go on.
  */
 const ensureArchiveImported = async (since: number | null): Promise<boolean> => {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    if (await archiveCovers(since)) return true;
-    const result = await runArchiveImport(since);
-    if (stopRequested || result.cancelled || result.error) return false;
-  }
-  return archiveCovers(since);
+  const result = await runArchiveImport(since);
+  return !(stopRequested || result.cancelled || result.error);
+};
+
+/** ensureArchiveImported, for older inbox mail. */
+const ensureInboxImported = async (since: number | null): Promise<boolean> => {
+  const result = await runInboxImport(since);
+  return !(stopRequested || result.cancelled || result.error);
 };
 
 /**
@@ -542,19 +552,28 @@ export const runTripScan = async ({
   archive,
   rebuild = false,
   importSince,
+  inboxSince,
 }: {
   archive: boolean;
   rebuild?: boolean;
   /** Import the archive back this far first (ms; null for everything). */
   importSince?: number | null;
+  /** Import older inbox mail back this far first (ms; null for everything). */
+  inboxSince?: number | null;
 }): Promise<TripScanStatus | null> => {
   if (scanStatus?.running) return null;
   stopRequested = false;
   let processed = 0;
   let total = 0;
-  if (archive && importSince !== undefined) {
-    await publish({ running: true, archive, rebuild, processed, total, phase: "import" });
-    if (!(await ensureArchiveImported(importSince))) {
+  const fromInbox = inboxSince !== undefined || undefined;
+  const imports: [number | null | undefined, (since: number | null) => Promise<boolean>, string][] = [
+    [importSince, ensureArchiveImported, "Couldn't import archived mail"],
+    [inboxSince, ensureInboxImported, "Couldn't load older inbox mail"],
+  ];
+  for (const [since, ensure, failure] of imports) {
+    if (!archive || since === undefined) continue;
+    await publish({ running: true, archive, rebuild, processed, total, phase: "import", fromInbox });
+    if (!(await ensure(since))) {
       const stopped: TripScanStatus = {
         running: false,
         archive,
@@ -563,13 +582,14 @@ export const runTripScan = async ({
         total,
         finishedAt: Date.now(),
         cancelled: stopRequested || undefined,
-        error: stopRequested ? undefined : "Couldn't import archived mail",
+        error: stopRequested ? undefined : failure,
+        fromInbox,
       };
       await publish(stopped);
       return stopped;
     }
   }
-  await publish({ running: true, archive, rebuild, processed, total, phase: "read" });
+  await publish({ running: true, archive, rebuild, processed, total, phase: "read", fromInbox });
   // An automatic inbox sweep may hold the lock; it's short, so wait it out.
   while (sweeping) await sleep(500);
   sweeping = true;
@@ -589,7 +609,7 @@ export const runTripScan = async ({
         total = all;
         if (Date.now() - last < PROGRESS_EVERY_MS && done < all) return;
         last = Date.now();
-        void publish({ running: true, archive, rebuild, processed, total, phase: "read" });
+        void publish({ running: true, archive, rebuild, processed, total, phase: "read", fromInbox });
       },
     });
     await recluster();
@@ -602,6 +622,7 @@ export const runTripScan = async ({
       trips: await db.trips.count(),
       finishedAt: Date.now(),
       cancelled: stopRequested || undefined,
+      fromInbox,
     };
     // A stopped scan didn't read everything; it keeps the last full one's reach.
     if (archive) {
@@ -614,7 +635,15 @@ export const runTripScan = async ({
     return finished;
   } catch (e) {
     log.warn("trip-extract", "trip scan failed", e);
-    const failed: TripScanStatus = { running: false, archive, rebuild, processed, total, error: String(e) };
+    const failed: TripScanStatus = {
+      running: false,
+      archive,
+      rebuild,
+      processed,
+      total,
+      error: String(e),
+      fromInbox,
+    };
     await publish(failed);
     return failed;
   } finally {

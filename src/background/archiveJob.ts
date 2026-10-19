@@ -10,7 +10,7 @@ import { runTripScan } from "./extract";
 
 type ArchiveJob =
   | { kind: "import"; since: number | null }
-  | { kind: "trips"; importSince?: number | null };
+  | { kind: "trips"; importSince?: number | null; inboxSince?: number | null };
 
 const JOB_KEY = "neoinbox-archive-job";
 
@@ -35,7 +35,7 @@ const runJob = (job: ArchiveJob): Promise<void> =>
   run(job, () =>
     job.kind === "import"
       ? runArchiveImport(job.since)
-      : runTripScan({ archive: true, importSince: job.importSince }),
+      : runTripScan({ archive: true, importSince: job.importSince, inboxSince: job.inboxSince }),
   );
 
 export const startArchiveImport = (since: number | null): Promise<void> =>
@@ -48,8 +48,9 @@ export const startArchiveImport = (since: number | null): Promise<void> =>
 export const startArchiveTripScan = (options: {
   rebuild?: boolean;
   importSince?: number | null;
+  inboxSince?: number | null;
 }): Promise<void> =>
-  run({ kind: "trips", importSince: options.importSince }, () =>
+  run({ kind: "trips", importSince: options.importSince, inboxSince: options.inboxSince }, () =>
     runTripScan({ archive: true, ...options }),
   );
 

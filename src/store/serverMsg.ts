@@ -52,7 +52,6 @@ export const applyServerMsg = (
     case "inbox-window":
       set({
         inboxWindow: { cap: msg.cap, skipped: msg.skipped },
-        loadingMoreInbox: false,
       });
       return;
     case "command-failed": {
@@ -147,20 +146,48 @@ export const applyServerMsg = (
     }
     case "archive-import-progress": {
       const { type: _type, ...status } = msg;
-      const wasRunning = get().archiveImport?.running;
+      const previous = get().archiveImport;
+      const wasRunning = previous?.running;
       set({ archiveImport: status });
-      // Imported rows were written without deltas; show them all at once.
-      if (wasRunning && !status.running) void get().reloadHistory();
+      // The header pass writes its rows without deltas; show them all at once
+      // when it ends. The read pass that follows sends deltas as it goes.
+      const listed = previous?.phase === "headers" && status.phase !== "headers";
+      if (wasRunning && (listed || !status.running)) void get().reloadHistory();
       // During a load from Older mail the trip scan's toast covers this.
       if (wasRunning && !status.running && !get().tripScan?.running) {
-        const count = `${status.imported.toLocaleString()} ${status.imported === 1 ? "message" : "messages"}`;
+        const done = Math.max(status.imported, status.sorted ?? 0);
+        const count = `${done.toLocaleString()} ${done === 1 ? "message" : "messages"}`;
         const message = status.error
           ? "Couldn't finish loading older mail"
           : status.cancelled
-            ? `Stopped loading older mail after ${count}`
-            : status.imported === 0
+            ? "Stopped loading older mail"
+            : done === 0
               ? "No new older mail to load"
               : `Loaded ${count} of older mail`;
+        set({ toasts: [...get().toasts, { id: nextToastId(), message }].slice(-TOAST_LIMIT) });
+      }
+      return;
+    }
+    case "inbox-import-progress": {
+      const { type: _type, ...status } = msg;
+      const previous = get().inboxImport;
+      const wasRunning = previous?.running;
+      set({ inboxImport: status });
+      // The header pass writes its rows without deltas; show them all at once
+      // when it ends. The body pass that follows sends deltas as it goes.
+      const listed = previous?.phase === "headers" && status.phase !== "headers";
+      if (wasRunning && (listed || !status.running)) void get().reloadInbox();
+      // Started from Older mail, the trip scan that follows has its own toast.
+      if (wasRunning && !status.running && !get().tripScan?.running) {
+        const done = Math.max(status.imported, status.sorted ?? 0);
+        const count = `${done.toLocaleString()} ${done === 1 ? "message" : "messages"}`;
+        const message = status.error
+          ? "Couldn't finish loading older inbox mail"
+          : status.cancelled
+            ? "Stopped loading older inbox mail"
+            : done === 0
+              ? "No older inbox mail to load"
+              : `Loaded ${count} of older inbox mail`;
         set({ toasts: [...get().toasts, { id: nextToastId(), message }].slice(-TOAST_LIMIT) });
       }
       return;

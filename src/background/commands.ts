@@ -7,9 +7,11 @@
  */
 import {
   applyMessageDetails,
+  classifyFromHeader,
   classifyMessage,
   doneMessage,
   getLiveHeader,
+  isHeaderOnly,
   loadMessageBody,
   opTbId,
   pinMessage,
@@ -19,12 +21,13 @@ import { type ArchivedCopy, findByHeaderMessageIdInFolder } from "./archiveFolde
 import { applyClassification, carryClassification } from "../classifier/version";
 import { headerToRawMessage } from "./messageMap";
 import { snoozeMessage, wakeSnoozedMessage } from "./snooze";
-import { raiseInboxScanCap, runBackfill } from "./backfill";
+import { runBackfill } from "./backfill";
 import { hydrateDetails } from "./detailsFill";
 import { getLastProgress, serialized } from "./scanQueue";
 import { scanActive } from "./scanGuard";
 import { runCompose } from "./compose";
 import { cancelArchiveImport, getArchiveImportStatus } from "./archiveImport";
+import { getInboxImportStatus } from "./inboxImport";
 import { startArchiveImport, startArchiveTripScan } from "./archiveJob";
 import { cancelTripScan, getTripScanStatus, runTripScan, writeTrips } from "./extract";
 import { pushMyEmails } from "./sync";
@@ -58,8 +61,14 @@ const reclassifyMessages = async (cached: RawMessage[]): Promise<{ scanned: numb
         continue;
       }
       const raw = headerToRawMessage(header, "inbox");
-      const body = await loadMessageBody(header.id);
-      applyClassification(raw, await classifyMessage(header, body));
+      // Older inbox mail cached from headers stays that way: a rule can match
+      // thousands of those rows, and each body would be a download.
+      const headerOnly = isHeaderOnly(cmsg);
+      const body = headerOnly ? undefined : await loadMessageBody(header.id);
+      applyClassification(
+        raw,
+        headerOnly ? await classifyFromHeader(header) : await classifyMessage(header, body),
+      );
       await applyLocalState(raw);
       await applyMessageDetails(raw, cmsg, body);
       // The live copy can sit in another folder than the row said.
@@ -123,11 +132,17 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
       if (tripScan) broadcast({ type: "trip-scan-progress", ...tripScan });
       const archiveImport = await getArchiveImportStatus();
       if (archiveImport) broadcast({ type: "archive-import-progress", ...archiveImport });
+      const inboxImport = await getInboxImportStatus();
+      if (inboxImport) broadcast({ type: "inbox-import-progress", ...inboxImport });
       return;
     }
     case "trip-scan": {
       const run = msg.archive
-        ? startArchiveTripScan({ rebuild: msg.rebuild, importSince: msg.importSince })
+        ? startArchiveTripScan({
+            rebuild: msg.rebuild,
+            importSince: msg.importSince,
+            inboxSince: msg.inboxSince,
+          })
         : runTripScan({ archive: false, rebuild: msg.rebuild });
       void run.catch((e) => log.warn("trip-extract", "trip scan failed", e));
       return;
@@ -150,12 +165,6 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
     }
     case "hydrate-details": {
       await hydrateDetails(msg.messageKeys);
-      return;
-    }
-    case "load-more-inbox": {
-      const cap = await raiseInboxScanCap();
-      log.info("backfill", `inbox window widened to ${cap}; rescanning`);
-      void runBackfill().catch((e) => log.warn("backfill", "load-more rescan failed", e));
       return;
     }
     case "pin": {

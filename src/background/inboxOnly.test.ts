@@ -184,23 +184,6 @@ describe("the inbox scan window", () => {
     expect(app.store().inboxWindow).toEqual({ cap: 5, skipped: 7 });
   });
 
-  it("widens the window on load-more and keeps the rest of the inbox", async () => {
-    app = await open(shapes.standard(many(12, promoMail)));
-    app.mail.storageData["neoinbox-inbox-cap"] = 5;
-    await app.backfill.runBackfill();
-    await settle();
-
-    const widened = await app.backfill.raiseInboxScanCap();
-    expect(widened).toBe(5 + app.backfill.INBOX_SCAN_STEP);
-
-    await app.backfill.runBackfill();
-    await settle();
-
-    const cached = (await app.db.messages.toArray()).filter((m) => m.origin === "inbox");
-    expect(cached).toHaveLength(12);
-    expect(app.store().inboxWindow).toEqual({ cap: widened, skipped: 0 });
-  });
-
   it("leaves incremental sync uncapped so new mail always lands", async () => {
     app = await open(shapes.standard(many(4, promoMail)));
     app.mail.storageData["neoinbox-inbox-cap"] = 2;

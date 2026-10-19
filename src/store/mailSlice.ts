@@ -17,7 +17,7 @@ export const mailSlice = (
   get: StoreGet,
 ): Pick<
   MailStore,
-  "pin" | "doneThread" | "snoozeThread" | "unsnoozeThread" | "trashThread" | "moveToInboxThread" | "setRouteRule" | "deleteRouteRule" | "applyCategoryLocally" | "setCustomBundle" | "deleteCustomBundle" | "hydrateThreadDetails" | "markThreadRead" | "loadMoreInbox" | "retryBackfill" | "openBundleSettings" | "closeBundleSettings" | "reclassify" | "importArchive" | "stopArchiveImport"
+  "pin" | "doneThread" | "snoozeThread" | "unsnoozeThread" | "trashThread" | "moveToInboxThread" | "setRouteRule" | "deleteRouteRule" | "applyCategoryLocally" | "setCustomBundle" | "deleteCustomBundle" | "hydrateThreadDetails" | "markThreadRead" | "retryBackfill" | "openBundleSettings" | "closeBundleSettings" | "reclassify" | "importArchive" | "stopArchiveImport"
 > => ({
   pin: (messageKey, pinned) => {
     flushDelta(set, get);
@@ -208,11 +208,6 @@ export const mailSlice = (
     }
     set({ messagesByKey: map });
     send({ type: "mark-read", messageKeys: unread });
-  },
-  loadMoreInbox: () => {
-    if (get().loadingMoreInbox) return;
-    set({ loadingMoreInbox: true });
-    send({ type: "load-more-inbox" });
   },
   retryBackfill: () => {
     const prev = get().syncProgress;

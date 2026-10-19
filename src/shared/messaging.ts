@@ -47,8 +47,6 @@ export type ClientMsg =
    * conversation is opened, which is the only time those headers matter.
    */
   | { type: "hydrate-details"; messageKeys: MessageKey[] }
-  /** Widen the inbox scan window by one step and rescan. */
-  | { type: "load-more-inbox" }
   /** Re-run the classify pipeline; all cached inbox messages when no ids given. */
   | { type: "reclassify"; messageKeys?: MessageKey[] }
   /**
@@ -58,11 +56,19 @@ export type ClientMsg =
   | { type: "compose"; requestId: string; draft: ComposeDraft; send: boolean }
   /**
    * Settings → Trips, and the Trips view's footer. `archive` reads archived
-   * mail as well as the inbox; `rebuild` deletes the auto-built trips and
-   * re-reads everything first. `importSince` (ms; null for everything) first
-   * imports the archive back that far, unless an earlier import already did.
+   * mail, and older inbox mail cached from headers, as well as the inbox;
+   * `rebuild` deletes the auto-built trips and re-reads everything first.
+   * `importSince` (ms; null for everything) first imports the archive back
+   * that far, unless an earlier import already did; `inboxSince` does the
+   * same for older inbox mail (Settings → Older mail → Inbox).
    */
-  | { type: "trip-scan"; archive: boolean; rebuild?: boolean; importSince?: number | null }
+  | {
+      type: "trip-scan";
+      archive: boolean;
+      rebuild?: boolean;
+      importSince?: number | null;
+      inboxSince?: number | null;
+    }
   | { type: "trip-scan-cancel" }
   /**
    * Settings → Advanced: cache archived mail from headers alone, back to
@@ -95,11 +101,23 @@ export interface TripScanStatus {
   scannedBackTo?: number | null;
   /** While running: importing the archive first, or reading messages. */
   phase?: "import" | "read";
+  /** This run imported older inbox mail first (`inboxSince`), not the archive. */
+  fromInbox?: boolean;
 }
 
-/** Progress of the archive import; the last finished one is persisted. */
+/**
+ * Progress of the archive import; the last finished one is persisted. The
+ * inbox import reports the same shape. Both list headers first, then read
+ * each listed message in full (see fullRead.ts); the listing fields below
+ * describe the first pass.
+ */
 export interface ArchiveImportStatus {
   running: boolean;
+  /** While running: listing headers, or reading the messages in full. */
+  phase?: "headers" | "bodies";
+  /** Messages read in full so far / to read this run. */
+  sorted?: number;
+  toSort?: number;
   /** Oldest date imported (ms); null means the whole archive. */
   since: number | null;
   /** Archived headers looked at so far. */
@@ -125,6 +143,12 @@ export interface ArchiveImportStatus {
   error?: string;
 }
 
+/**
+ * Progress of the inbox import (inboxImport.ts): `since` and `coveredSince`
+ * are how far back older inbox mail was listed, `folders` count inboxes.
+ */
+export type InboxImportStatus = ArchiveImportStatus;
+
 export type FailedCommand = "done" | "snooze" | "unsnooze" | "trash" | "move-to-inbox";
 
 export type ServerMsg =
@@ -146,8 +170,8 @@ export type ServerMsg =
   | { type: "reclassify-done"; scanned: number; moved: number }
   /**
    * How far into the inbox the last full scan reached. `skipped` counts the
-   * older messages left outside the window, so the SPA knows whether to offer
-   * Load more.
+   * inbox messages with no cached row — older than the window and not
+   * imported — so the SPA knows whether to offer Settings → Older mail.
    */
   | { type: "inbox-window"; cap: number; skipped: number }
   /**
@@ -176,4 +200,5 @@ export type ServerMsg =
     }
   | ({ type: "trip-scan-progress" } & TripScanStatus)
   | ({ type: "archive-import-progress" } & ArchiveImportStatus)
+  | ({ type: "inbox-import-progress" } & InboxImportStatus)
   | { type: "error"; message: string };

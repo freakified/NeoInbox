@@ -191,8 +191,10 @@ export const App = () => {
   const connectionState = useConnectionState();
   const retryBackfill = useMailStore((st) => st.retryBackfill);
   const inboxWindow = useMailStore((st) => st.inboxWindow);
-  const loadingMoreInbox = useMailStore((st) => st.loadingMoreInbox);
-  const loadMoreInbox = useMailStore((st) => st.loadMoreInbox);
+  const loadingOlderInbox = useMailStore(
+    (st) => !!(st.inboxImport?.running || (st.tripScan?.running && st.tripScan.fromInbox)),
+  );
+  const openBundleSettings = useMailStore((st) => st.openBundleSettings);
   const historyFrom = useMailStore((st) => st.historyFrom);
   const loadingHistory = useMailStore((st) => st.loadingHistory);
   const loadOlderHistory = useMailStore((st) => st.loadOlderHistory);
@@ -938,20 +940,21 @@ export const App = () => {
             )}
             {/*
             Only once everything already cached is on screen: the button above
-            pages what NeoInbox has, this one goes back to the mailbox for older
-            inbox mail that the scan window left alone.
+            pages what NeoInbox has, this one is for older inbox mail the scan
+            window left out. How far back is a choice, so it opens Settings →
+            Older mail, which also shows the progress.
           */}
             {!hasMoreItems && canLoadOlderMail && (
               <div className={s.loadMoreWrap}>
                 <button
                   type="button"
                   className={s.loadMoreBtn}
-                  onClick={loadMoreInbox}
-                  disabled={loadingMoreInbox}
+                  onClick={() => openBundleSettings({ pane: "archive" })}
                 >
-                  {loadingMoreInbox ? "Fetching older mail…" : "Fetch older mail"}
+                  {loadingOlderInbox ? "Loading older mail…" : "Load older mail"}
                   <span className={s.loadMoreCount}>
-                    {inboxWindow?.skipped.toLocaleString()} older in this inbox
+                    {inboxWindow?.skipped.toLocaleString()} older{" "}
+                    {inboxWindow?.skipped === 1 ? "message" : "messages"} not loaded
                   </span>
                 </button>
               </div>

@@ -2,6 +2,7 @@ import {
   applyMessageDetails,
   classifyMessage,
   DETAILS_LAZY,
+  isHeaderOnly,
   loadMessageBody,
   type MessageBody,
 } from "./ingest";
@@ -49,34 +50,27 @@ const CURSOR_OVERLAP_MS = 3 * 24 * 60 * 60 * 1000;
 const FOLDER_OP_TIMEOUT_MS = 60_000;
 
 /**
- * How many inbox messages a full scan takes on, newest first, and how much
- * "Load more" adds each time.
+ * How many inbox messages a full scan fully processes, newest first.
  *
  * Classifying a message costs a body fetch, so an uncapped scan of a large
- * inbox is thousands of them before the app is usable. The cap bounds that;
- * anything older is left alone until you ask for it. Only full scans are
- * capped — incremental ones are bounded by the folder cursor instead, so new
- * mail always arrives however far the window reaches.
+ * inbox is thousands of them before the app is usable. The cap bounds that.
+ * Anything older is left out until Settings → Older mail brings it in from
+ * headers alone (see inboxImport.ts). Only full scans are capped — incremental
+ * ones are bounded by the folder cursor instead, so new mail always arrives.
  */
-export const INBOX_SCAN_STEP = 1000;
+export const INBOX_SCAN_CAP = 1000;
+/** A stored override of the cap, for tests and debugging. */
 const INBOX_CAP_KEY = "neoinbox-inbox-cap";
 
 export const getInboxScanCap = async (): Promise<number> => {
   try {
     const stored = await messenger.storage.local.get(INBOX_CAP_KEY);
     const cap = Number(stored[INBOX_CAP_KEY]);
-    return Number.isFinite(cap) && cap > 0 ? cap : INBOX_SCAN_STEP;
+    return Number.isFinite(cap) && cap > 0 ? cap : INBOX_SCAN_CAP;
   } catch (e) {
     log.warn("backfill", "reading the inbox cap failed; using the default", e);
-    return INBOX_SCAN_STEP;
+    return INBOX_SCAN_CAP;
   }
-};
-
-/** Widens the window by one step and returns the new cap. */
-export const raiseInboxScanCap = async (): Promise<number> => {
-  const next = (await getInboxScanCap()) + INBOX_SCAN_STEP;
-  await messenger.storage.local.set({ [INBOX_CAP_KEY]: next });
-  return next;
 };
 
 const dateOf = (header: messenger.messages.MessageHeader): number =>
@@ -105,7 +99,7 @@ interface ScanCounters {
    * should have. This separates the two.
    */
   reclassified: number;
-  /** Inbox messages left outside the scan window; drives the Load more control. */
+  /** Inbox messages not cached at all; drives Settings → Older mail. */
   skippedOlder: number;
 }
 
@@ -197,7 +191,11 @@ const ingestHeader = async (
   // unchanged fast path: nothing else in a scan re-runs the pipeline, so it
   // would keep its stale category through any number of rescans.
   const outdated = origin === "inbox" && classificationOutdated(cached);
-  if (cached && !outdated && isUnchanged(cached, header, origin)) {
+  // Older inbox mail cached from headers that the window has now reached
+  // (an import that ran before the first scan, or a window that moved) gets
+  // what every message in the window gets: its body.
+  const upgrade = origin === "inbox" && !!cached && isHeaderOnly(cached);
+  if (cached && !outdated && !upgrade && isUnchanged(cached, header, origin)) {
     return { raw: null, classified: false, ranPipeline: false };
   }
   let classified = false;
@@ -208,7 +206,7 @@ const ingestHeader = async (
   // skipped, applyMessageDetails still fetches lazily — and often not at all,
   // since it reuses the cached row's details when the size matches.
   let body: MessageBody | undefined;
-  if (origin === "inbox" && (!cached || outdated)) {
+  if (origin === "inbox" && (!cached || outdated || upgrade)) {
     body = await loadMessageBody(header.id);
     const result = await classifyMessage(header, body);
     applyClassification(raw, result);
@@ -305,6 +303,9 @@ const visitFolder = async (
       await ingestOne(header);
       continue;
     }
+    // Outside the window or not, the message is in the folder: a row the
+    // inbox import cached for it is not stale.
+    liveKeys.add(keyOfHeader(header));
     window.push(header);
     // Trimming on a multiple of the cap keeps this O(n log cap) overall rather
     // than sorting on every push, while bounding what's held to 2x the window.
@@ -317,12 +318,9 @@ const visitFolder = async (
   }
   await flush();
 
-  const skipped = cap === null ? 0 : Math.max(seen - window.length, 0);
-  counters.skippedOlder += skipped;
-  if (skipped) {
+  if (cap !== null && seen > window.length) {
     log.info("backfill", `inbox window: ingested ${window.length} of ${seen} in ${folder.name}`, {
       cap,
-      skipped,
     });
   }
 
@@ -345,12 +343,74 @@ const visitFolder = async (
     }
   }
 
+  // Measured after the prune, so they describe what is cached now. A capped
+  // scan saw every key in the folder (see liveKeys above), so the missing
+  // ones are exactly the mail neither the window nor an import has loaded.
+  if (cap !== null) counters.skippedOlder += await countMissing(liveKeys);
+  const countGap = cap === null ? cursor?.countGap : await countGapIn(folder);
   const record: FolderCursorRecord = {
     folderId: folder.id,
     maxDate,
     fullScanAt: mode === "full" ? now : cursor?.fullScanAt ?? 0,
+    ...(countGap ? { countGap } : {}),
   };
   await db.folderCursors.put(record);
+};
+
+/**
+ * How many of these keys have no cached row. Counted by key rather than by
+ * comparing the folder's size with the cache: two copies of one message share
+ * a key and a row, so a size comparison would report the second copy as
+ * missing for good.
+ */
+const countMissing = async (keys: Iterable<MessageKey>): Promise<number> => {
+  const all = [...keys];
+  let missing = 0;
+  for (let i = 0; i < all.length; i += 500) {
+    const rows = await db.messages.bulkGet(all.slice(i, i + 500));
+    missing += rows.filter((row) => !row).length;
+  }
+  return missing;
+};
+
+/**
+ * How far the folder's own message count runs ahead of the cached rows in it:
+ * mail outside the scan window, duplicate copies, anything Thunderbird counts
+ * but doesn't list. The drift check adds it back. 0 if the folder won't say.
+ */
+const countGapIn = async (folder: InboxFolder): Promise<number> => {
+  try {
+    const info = await withTimeout(
+      messenger.folders.getFolderInfo(folder.id as unknown as messenger.folders.MailFolderId),
+      `folder info ${folder.name}`,
+      FOLDER_OP_TIMEOUT_MS,
+    );
+    if (typeof info.totalMessageCount !== "number") return 0;
+    const cached = await db.messages.where("folderId").equals(folder.id).count();
+    return Math.max(info.totalMessageCount - cached, 0);
+  } catch (e) {
+    log.warn("backfill", "couldn't measure the inbox's count gap", { folder: folder.name, e: String(e) });
+    return 0;
+  }
+};
+
+/**
+ * Re-counts the unloaded inbox mail after the inbox import, keeping each
+ * folder's cursor in step so the drift check doesn't read the import as
+ * missed events, and tells the SPA how much is still left out. Lists each
+ * inbox again to count by key, which is a read of Thunderbird's local index.
+ */
+export const refreshInboxWindow = async (): Promise<void> => {
+  let skipped = 0;
+  for (const folder of await collectInboxFolders()) {
+    const keys = new Set<MessageKey>();
+    for await (const header of iterateFolder(folder.id)) keys.add(keyOfHeader(header));
+    skipped += await countMissing(keys);
+    const countGap = await countGapIn(folder);
+    const cursor = await db.folderCursors.get(folder.id);
+    if (cursor) await db.folderCursors.put({ ...cursor, countGap: countGap || undefined });
+  }
+  broadcast({ type: "inbox-window", cap: await getInboxScanCap(), skipped });
 };
 
 /**
@@ -373,9 +433,13 @@ const folderDrifted = async (
     if (typeof info.totalMessageCount !== "number") return false;
     // count() off the index rather than toArray(): this runs for every folder
     // on every incremental sync, and it only ever needed the number.
+    // A capped inbox, or one holding two copies of a message, has fewer rows
+    // than the folder counts by design; the last full scan recorded by how many.
+    const cursor = await db.folderCursors.get(folder.id);
     const cachedCount =
       (await db.messages.where("folderId").equals(folder.id).count()) -
-      (snoozedByFolder.get(folder.id) ?? 0);
+      (snoozedByFolder.get(folder.id) ?? 0) +
+      (cursor?.countGap ?? 0);
     if (cachedCount === info.totalMessageCount) return false;
     log.info("backfill", "folder drift detected", {
       folder: folder.name,
@@ -475,7 +539,7 @@ const runScan = (mode: ScanMode): Promise<ScanCounters> => {
       }
       if (mode === "full") {
         await pruneUnknownFolders(scheduled.map(([f]) => f.id));
-        // Tells the SPA whether older inbox mail is waiting behind Load more.
+        // Tells the SPA how much older inbox mail is left to load.
         broadcast({
           type: "inbox-window",
           cap: await getInboxScanCap(),

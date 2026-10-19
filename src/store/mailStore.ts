@@ -4,7 +4,7 @@ import { db } from "./db";
 import { deriveStream, type Stream, type StreamView } from "./stream";
 import { composeSlice } from "./composeSlice";
 import { getDefaultAccount } from "../spa/lib/accountPrefs";
-import { loadHistoryPage, loadStartupMessages } from "./history";
+import { loadHistoryPage, loadInbox, loadStartupMessages } from "./history";
 import { mailSlice } from "./mailSlice";
 import { connectPort } from "./portClient";
 import { searchCachedMail } from "./search";
@@ -47,7 +47,6 @@ export const useMailStore = create<MailStore>((set, get) => ({
   hydrated: false,
   syncProgress: null,
   inboxWindow: null,
-  loadingMoreInbox: false,
   customBundles: [],
   routeRules: [],
   connectionState: "connected",
@@ -64,6 +63,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   reclassifying: false,
   tripScan: null,
   archiveImport: null,
+  inboxImport: null,
   historyFrom: 0,
   loadingHistory: false,
   search: null,
@@ -141,6 +141,14 @@ export const useMailStore = create<MailStore>((set, get) => ({
     const map = { ...get().messagesByKey };
     for (const m of rows) map[m.key] ??= m;
     set({ messagesByKey: map, historyFrom: historyFrom === 0 ? 0 : Math.max(current, historyFrom) });
+  },
+
+  reloadInbox: async () => {
+    const rows = await loadInbox();
+    // Rows already in memory are newer than Dexie's copy or the same.
+    const map = { ...get().messagesByKey };
+    for (const m of rows) map[m.key] ??= m;
+    set({ messagesByKey: map });
   },
 
   searchMail: async (query) => {

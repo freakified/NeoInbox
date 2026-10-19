@@ -19,6 +19,9 @@ const allOf = (origin: MessageOrigin): Promise<RawMessage[]> =>
     .between([origin, Dexie.minKey], [origin, Dexie.maxKey])
     .toArray();
 
+/** Every cached inbox row, for a reload after the inbox import. */
+export const loadInbox = (): Promise<RawMessage[]> => allOf("inbox");
+
 /**
  * The newest page of Sent and of Done dated at or before `before`.
  * `historyFrom` is the date every Sent and Done row from then on is loaded

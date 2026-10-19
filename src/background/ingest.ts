@@ -149,6 +149,27 @@ export const classifyMessage = async (
 }
 
 /**
+ * Inbox rows cached from their headers alone: older inbox mail brought in by
+ * the inbox import rather than the scan. They are classified from headers,
+ * and nothing in the background fetches their bodies — not the details fill,
+ * the incomplete-classification retry, the version sweep, a reclassify or the
+ * automatic trip sweep. A message gets its body when it is opened, or when a
+ * full scan finds it inside the scan window.
+ */
+export const isHeaderOnly = (m: RawMessage): boolean => m.detailsVersion === DETAILS_LAZY;
+
+/**
+ * Classifies from the header alone, for rows that must not cost a body fetch.
+ * Always incomplete: the body's headers (List-Id and the like) were never read.
+ */
+export const classifyFromHeader = async (
+  header: messenger.messages.MessageHeader,
+): Promise<ClassificationResult> => ({
+  category: (await classify(extractFeatures(header, {}))) ?? null,
+  incomplete: true,
+});
+
+/**
  * Fetches the live header for a cached row, re-resolving by Message-ID when
  * Thunderbird has remapped the id (moves, compaction, a rebuilt .msf). Returns
  * null when the message can't be found — callers should skip the row rather
@@ -534,7 +555,9 @@ export const applyMessageDetails = async (
     raw.snoozeExpired = cached.snoozeExpired;
   }
 
-  if (canReuseMessageDetails(cached, raw)) {
+  // A header-only row's empty details are reused only while nothing has the
+  // body: once a caller fetched it anyway, the real details cost nothing more.
+  if (canReuseMessageDetails(cached, raw) && !(body && isHeaderOnly(cached))) {
     raw.attachments = cached.attachments;
     raw.references = cached.references;
     raw.inReplyTo = cached.inReplyTo;

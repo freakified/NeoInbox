@@ -1,25 +1,20 @@
 /**
- * Settings → Advanced: brings mail archived before NeoInbox was installed into
- * the cache, as Done rows, so Done, bundle views, threading and the trip scan
- * can see it.
+ * Settings → Older mail → Archived mail: brings mail archived before NeoInbox
+ * was installed into the cache, as Done rows, so Done, bundle views,
+ * threading and the trip scan can see it. Two passes, like the inbox import:
  *
- * Headers only, by design. On IMAP an archive can hold tens of thousands of
- * messages Thunderbird has never downloaded, and a getFull() per message
- * would pull all of them down. So rows are bundled by the header-based rules
- * alone and cached at DETAILS_LAZY, which keeps every background sweep off
- * them; a body is fetched only when the user opens the conversation, or runs
- * the trip scan over archived mail (which says so).
+ * 1. Headers. Listing is a read of Thunderbird's local index, so even a large
+ *    archive is minutes, not hours. Rows are cached header-only (DETAILS_LAZY)
+ *    and not broadcast as they land; the SPA reloads Done when this pass ends.
+ * 2. Bodies. Each listed row in range is read in full, newest first, so it is
+ *    bundled from the whole message (see fullRead.ts). On IMAP that can mean
+ *    downloading mail Thunderbird never had, which is why it only happens
+ *    here, for a range the user picked, with progress and a Stop button.
  *
- * Rows are not broadcast as they land; the SPA reloads Done when the
- * import's final progress message arrives.
- *
- * Listing headers is a read of Thunderbird's local index, so even a large
- * archive is minutes, not hours. Re-running skips rows already cached, which
- * is what makes a stopped import resumable.
+ * Re-running skips the first pass if it already reached that far and picks
+ * the second up where it stopped.
  */
-import { classify } from "../classifier/pipeline";
-import { extractFeatures } from "../classifier/features";
-import { CLASSIFIER_VERSION } from "../classifier/version";
+import { applyClassification } from "../classifier/version";
 import { DETAILS_LAZY } from "../shared/details";
 import {
   collectArchiveFolders,
@@ -32,6 +27,8 @@ import type { ArchiveImportStatus } from "../shared/messaging";
 import type { RawMessage } from "../shared/types";
 import { db } from "../store/db";
 import { iterateFolder } from "./backfill";
+import { readAllInFull, unreadRows } from "./fullRead";
+import { classifyFromHeader } from "./ingest";
 import { applyLocalState } from "./localState";
 import { headerToRawMessage, keyOfHeader } from "./messageMap";
 import { broadcast } from "./port";
@@ -70,10 +67,10 @@ export const cancelArchiveImport = (): void => {
 };
 
 /** The older of two coverage dates; null (everything) beats any date. */
-const widest = (a: number | null | undefined, b: number | null): number | null =>
+export const widest = (a: number | null | undefined, b: number | null): number | null =>
   a === null || b === null ? null : a === undefined ? b : Math.min(a, b);
 
-/** Whether finished imports already reach back to `since` (null: everything). */
+/** Whether finished header passes already reach back to `since` (null: everything). */
 export const archiveCovers = async (since: number | null): Promise<boolean> => {
   const covered = (await getArchiveImportStatus())?.coveredSince;
   if (covered === undefined) return false;
@@ -102,14 +99,19 @@ const liveElsewhere = async (): Promise<Set<string>> => {
   return ids;
 };
 
-/** A header-only Done row: bundled by header rules, details fetched on open. */
-const importedRow = async (header: messenger.messages.MessageHeader): Promise<RawMessage> => {
-  const raw = headerToRawMessage(header, "done");
-  raw.category = await classify(extractFeatures(header, {}));
-  // Decided without the body. Retries are inbox-only, so this only matters if
-  // the message is ever moved back to the inbox — then it gets a proper look.
-  raw.classifiedIncomplete = true;
-  raw.classifierVersion = CLASSIFIER_VERSION;
+/**
+ * A header-only row: bundled by header rules, details fetched on open. Shared
+ * with the inbox import, whose rows are the same thing with an inbox origin.
+ */
+export const headerOnlyRow = async (
+  header: messenger.messages.MessageHeader,
+  origin: "done" | "inbox",
+): Promise<RawMessage> => {
+  const raw = headerToRawMessage(header, origin);
+  applyClassification(raw, await classifyFromHeader(header));
+  // Decided without the body (applyClassification marks it incomplete). The
+  // retry skips header-only rows, so this matters once the row has its body:
+  // opened, moved back to the inbox, or reached by the scan window.
   raw.attachments = [];
   raw.references = [];
   raw.inReplyTo = [];
@@ -119,8 +121,7 @@ const importedRow = async (header: messenger.messages.MessageHeader): Promise<Ra
 
 /**
  * Import back to `since`. While an import is already running this returns
- * that one instead of starting another; callers that need a particular range
- * check archiveCovers() once it settles.
+ * that one instead of starting another.
  */
 export const runArchiveImport = (since: number | null): Promise<ArchiveImportStatus> => {
   running ??= importArchive(since).finally(() => {
@@ -130,7 +131,7 @@ export const runArchiveImport = (since: number | null): Promise<ArchiveImportSta
 };
 
 /** How many messages the folders hold, for a progress bar; undefined if any won't say. */
-const countMessages = async (folders: readonly { id: string }[]): Promise<number | undefined> => {
+export const countMessages = async (folders: readonly { id: string }[]): Promise<number | undefined> => {
   let total = 0;
   for (const folder of folders) {
     try {
@@ -152,6 +153,7 @@ const importArchive = async (since: number | null): Promise<ArchiveImportStatus>
   const coveredSince = (await getArchiveImportStatus())?.coveredSince;
   let current: ArchiveImportStatus = {
     running: true,
+    phase: "headers",
     since,
     scanned: 0,
     imported: 0,
@@ -172,49 +174,69 @@ const importArchive = async (since: number | null): Promise<ArchiveImportStatus>
   };
 
   try {
-    const archives = await collectArchiveFolders();
-    current = {
-      ...current,
-      totalFolders: archives.length,
-      total: since === null ? await countMessages(archives) : undefined,
-    };
-    publish(current, true);
-    const skip = await liveElsewhere();
+    // Pass 1: headers, unless an earlier run already listed this far.
+    let reached = coveredSince;
+    if (!(await archiveCovers(since))) {
+      const archives = await collectArchiveFolders();
+      current = {
+        ...current,
+        totalFolders: archives.length,
+        total: since === null ? await countMessages(archives) : undefined,
+      };
+      publish(current, true);
+      const skip = await liveElsewhere();
 
-    for (const folder of archives) {
-      if (stopRequested) break;
-      for await (const header of iterateFolder(folder.id, since ?? undefined)) {
+      for (const folder of archives) {
         if (stopRequested) break;
-        current = { ...current, scanned: current.scanned + 1 };
-        const mid = header.headerMessageId ?? "";
-        // One row per Message-ID: a message filed in two archive folders, or
-        // still in the inbox, is not imported twice.
-        if (mid && skip.has(mid)) continue;
-        if (mid) skip.add(mid);
-        if (await db.messages.get(keyOfHeader(header))) continue;
-        batch.push(await importedRow(header));
-        current = { ...current, imported: current.imported + 1 };
-        if (batch.length >= BATCH) await flush();
+        for await (const header of iterateFolder(folder.id, since ?? undefined)) {
+          if (stopRequested) break;
+          current = { ...current, scanned: current.scanned + 1 };
+          const mid = header.headerMessageId ?? "";
+          // One row per Message-ID: a message filed in two archive folders, or
+          // still in the inbox, is not imported twice.
+          if (mid && skip.has(mid)) continue;
+          if (mid) skip.add(mid);
+          if (await db.messages.get(keyOfHeader(header))) continue;
+          batch.push(await headerOnlyRow(header, "done"));
+          current = { ...current, imported: current.imported + 1 };
+          if (batch.length >= BATCH) await flush();
+          publish(current);
+        }
+        current = { ...current, folders: current.folders + 1 };
         publish(current);
       }
-      current = { ...current, folders: current.folders + 1 };
-      publish(current);
+      await flush();
+      if (!stopRequested) reached = widest(coveredSince, since);
     }
-    await flush();
+
+    // Pass 2: bodies. The phase change is the SPA's cue to load pass 1's rows.
+    const todo = stopRequested ? [] : await unreadRows("done", since);
+    current = { ...current, phase: "bodies", coveredSince: reached, sorted: 0, toSort: todo.length };
+    publish(current, true);
+    await readAllInFull(todo, "done", {
+      shouldStop: () => stopRequested,
+      onRead: () => {
+        current = { ...current, sorted: (current.sorted ?? 0) + 1 };
+        publish(current);
+      },
+    });
 
     current = {
       ...current,
       running: false,
+      phase: undefined,
       finishedAt: Date.now(),
       cancelled: stopRequested || undefined,
-      coveredSince: stopRequested ? coveredSince : widest(coveredSince, since),
     };
     await messenger.storage.local.set({ [LAST_IMPORT_KEY]: current });
-    log.info("archive-import", `imported ${current.imported} of ${current.scanned} archived messages`);
+    log.info(
+      "archive-import",
+      `listed ${current.imported} archived messages, read ${current.sorted} of ${current.toSort} in full`,
+    );
   } catch (e) {
     await flush().catch(() => undefined);
     log.warn("archive-import", "import failed", e);
-    current = { ...current, running: false, error: String(e) };
+    current = { ...current, running: false, phase: undefined, error: String(e) };
   } finally {
     publish(current, true);
   }

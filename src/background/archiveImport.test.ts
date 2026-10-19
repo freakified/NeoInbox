@@ -1,12 +1,14 @@
 /**
- * The archive import caches old archived mail as Done rows from headers
- * alone. The contract that matters most is what it must not do: fetch a
- * body, which on IMAP downloads mail the user never asked for.
+ * The archive import caches old archived mail as Done rows: listed from
+ * headers first, then each message read in full so it is bundled right. The
+ * reads are the user's to start — nothing else may fetch an archived body —
+ * and a second run must not list or read anything twice.
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { boot, type Booted } from "../test/boot";
-import { ARCHIVE, INBOX, personalMail, shapes } from "../test/fixtures";
+import { ARCHIVE, headerOnlyPromoMail, INBOX, personalMail, shapes } from "../test/fixtures";
 import { settle, type FakeMessengerOptions } from "../test/fakeMessenger";
+import { DETAILS_LAZY, MESSAGE_DETAILS_VERSION } from "../shared/details";
 
 const DAY = 24 * 60 * 60 * 1000;
 const YEAR = 365 * DAY;
@@ -35,11 +37,13 @@ const doneRows = async (a: Booted) =>
   (await a.db.messages.toArray()).filter((m) => m.origin === "done");
 
 describe("importing archived mail", () => {
-  it("caches archived mail as Done without fetching a single body", async () => {
+  it("reads each archived message once, and bundles it from the whole message", async () => {
     app = await open(
       shapes.withArchive([], [
         personalMail({ author: "Shop <orders@shop.example>", subject: "Your order shipped" }),
         personalMail({ subject: "Old conversation" }),
+        // Promos only by List-Unsubscribe, which the header alone doesn't carry.
+        headerOnlyPromoMail({ subject: "50% off everything" }),
       ]),
     );
     await app.db.routeRules.put({
@@ -53,25 +57,20 @@ describe("importing archived mail", () => {
     await app.backfill.retryIncompleteClassifications();
 
     const rows = await doneRows(app);
-    expect(rows.map((m) => m.subject).sort()).toEqual(["Old conversation", "Your order shipped"]);
+    expect(rows.map((m) => m.subject).sort()).toEqual(["50% off everything", "Old conversation", "Your order shipped"]);
     expect(rows.find((m) => m.subject === "Your order shipped")?.category).toBe("purchases");
-    expect(app.mail.calls.getFull.length).toBe(bodies);
-    expect(app.store().archiveImport).toMatchObject({ running: false, imported: 2 });
+    expect(rows.find((m) => m.subject === "50% off everything")?.category).toBe("promos");
+    expect(rows.every((m) => m.detailsVersion === MESSAGE_DETAILS_VERSION)).toBe(true);
+    expect(app.mail.calls.getFull.length - bodies).toBe(3);
+    expect(app.store().archiveImport).toMatchObject({ running: false, imported: 3, sorted: 3 });
   });
 
-  it("shows imported mail all at once when the import ends, not row by row", async () => {
-    app = await open(shapes.withArchive([], [personalMail({ subject: "Old conversation" })]));
-    const doneInStore = () =>
-      Object.values(app!.store().messagesByKey).filter((m) => m.origin === "done");
-    const reloadHistory = app.store().reloadHistory;
-    // With the end-of-import reload switched off, nothing may arrive at all.
-    app.useMailStore.setState({ reloadHistory: async () => {} });
+  it("leaves a message whose body can't be had for the next run", async () => {
+    app = await open(shapes.withArchive([], [personalMail({ subject: "Not synced", bodyUnavailable: true })]));
 
     await importArchive(app, null);
-    expect(doneInStore()).toEqual([]);
 
-    await reloadHistory();
-    expect(doneInStore().map((m) => m.subject)).toEqual(["Old conversation"]);
+    expect((await doneRows(app))[0]?.detailsVersion).toBe(DETAILS_LAZY);
   });
 
   it("reloads Done once the import finishes", async () => {
@@ -120,10 +119,14 @@ describe("importing archived mail", () => {
     app = await open(shapes.withArchive([], [personalMail(), personalMail()]));
     await importArchive(app, null);
 
+    app.mail.calls.enumeratedFolders.length = 0;
+
     await importArchive(app, null);
 
     expect(await doneRows(app)).toHaveLength(2);
-    expect(app.store().archiveImport).toMatchObject({ imported: 0, scanned: 2 });
+    expect(app.store().archiveImport).toMatchObject({ imported: 0, sorted: 0 });
+    // Already listed that far, so the archive isn't walked again.
+    expect(app.mail.calls.enumeratedFolders).not.toContain(ARCHIVE);
   });
 
   it("reads the dated subfolders Thunderbird archives into", async () => {

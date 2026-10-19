@@ -6,8 +6,10 @@
 import {
   anyIncompleteClassifications,
   applyMessageDetails,
+  classifyFromHeader,
   classifyMessage,
   getLiveHeader,
+  isHeaderOnly,
   liveHeaderWithinBudget,
   loadMessageBody,
   OVER_BUDGET,
@@ -159,9 +161,11 @@ export const runClassifierVersionSweep = async (): Promise<{
           // but takes the current stamp anyway. Leaving it outdated would put
           // it at the front of every later pass, spending the budget again and
           // never draining — the sweep would run forever.
-          const result = header
-            ? await classifyMessage(header)
-            : { category: msg.category, incomplete: msg.classifiedIncomplete ?? false };
+          const result = !header
+            ? { category: msg.category, incomplete: msg.classifiedIncomplete ?? false }
+            : isHeaderOnly(msg)
+              ? await classifyFromHeader(header)
+              : await classifyMessage(header);
           const row = await db.transaction("rw", db.messages, async () => {
             const fresh = await db.messages.get(msg.key);
             if (!fresh) return null;
@@ -261,8 +265,10 @@ export const retryIncompleteClassifications = async (limit = DETAILS_FILL_LIMIT)
   if (!(await anyIncompleteClassifications())) return;
   retryingClassifications = true;
   try {
+    // Header-only rows are incomplete by design, not because a fetch failed;
+    // retrying them would download the older inbox a pass at a time.
     const matching = (await db.messages.toArray()).filter(
-      (m) => m.origin === "inbox" && m.classifiedIncomplete,
+      (m) => m.origin === "inbox" && m.classifiedIncomplete && !isHeaderOnly(m),
     );
     const pending = matching.slice(0, limit);
     // Anything past this pass's limit, plus anything the pass fails to fix,
@@ -359,8 +365,11 @@ export const reclassifyAll = (): Promise<{ scanned: number; updated: number }> =
             `reclassify message ${cachedMsg.key}`,
           );
           if (!header) continue;
-          const body = await loadMessageBody(header.id);
-          const result = await classifyMessage(header, body);
+          const headerOnly = isHeaderOnly(cachedMsg);
+          const body = headerOnly ? undefined : await loadMessageBody(header.id);
+          const result = headerOnly
+            ? await classifyFromHeader(header)
+            : await classifyMessage(header, body);
           if (result.category !== cachedMsg.category) updated++;
           const raw = headerToRawMessage(header, "inbox");
           applyClassification(raw, result);

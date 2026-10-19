@@ -1,7 +1,12 @@
 import type { ComposeDraft } from "../shared/compose";
 import type { MessageKey } from "../shared/messageKey";
 import type { ThreadRef } from "../shared/threading";
-import type { ArchiveImportStatus, FailedCommand, TripScanStatus } from "../shared/messaging";
+import type {
+  ArchiveImportStatus,
+  FailedCommand,
+  InboxImportStatus,
+  TripScanStatus,
+} from "../shared/messaging";
 import type { ComposerValue } from "../spa/components/ComposerForm";
 import type {
   Category,
@@ -83,10 +88,10 @@ export interface MailStore {
   syncProgress: SyncProgress | null;
   /**
    * How far the last full scan reached into the inbox. Null until a full scan
-   * reports; `skipped: 0` means the whole inbox is in the window.
+   * reports; `skipped` counts inbox mail not loaded at all — 0 means every
+   * message is either in the window or imported from Settings → Older mail.
    */
   inboxWindow: { cap: number; skipped: number } | null;
-  loadingMoreInbox: boolean;
   customBundles: CustomBundleRecord[];
   routeRules: RouteRuleRecord[];
   connectionState: ConnectionState;
@@ -103,6 +108,8 @@ export interface MailStore {
   tripScan: TripScanStatus | null;
   /** Settings → Advanced: the running import, else the last one. */
   archiveImport: ArchiveImportStatus | null;
+  /** Settings → Older mail → Inbox: the running import, else the last one. */
+  inboxImport: InboxImportStatus | null;
   /**
    * Every Sent and Done row dated from here on is in messagesByKey; older ones
    * stay in Dexie until a view asks for them. 0 means all of them are loaded.
@@ -120,6 +127,8 @@ export interface MailStore {
   loadOlderHistory: () => Promise<void>;
   /** Re-read the newest Sent/Done page, e.g. after an archive import. */
   reloadHistory: () => Promise<void>;
+  /** Re-read every cached inbox row, e.g. after the inbox import. */
+  reloadInbox: () => Promise<void>;
   /** Load every cached message matching `query` into memory, however old. */
   searchMail: (query: string) => Promise<void>;
   pin: (messageKey: MessageKey, pinned: boolean) => void;
@@ -158,7 +167,6 @@ export interface MailStore {
   /** Mark a conversation's unread messages read as it opens. */
   markThreadRead: (messageKeys: MessageKey[]) => void;
   /** Widen the inbox scan window by one step and rescan. */
-  loadMoreInbox: () => void;
   retryToast: (toastId: string) => void;
   undoToast: (toastId: string) => void;
   dismissToast: (toastId: string) => void;
@@ -169,7 +177,12 @@ export interface MailStore {
   reclassify: (messageKeys?: MessageKey[]) => void;
   /** Find trips (in archived mail too when `archive`); `rebuild` starts over. */
   /** `importSince` imports the archive back that far first (null: everything). */
-  scanTrips: (options: { archive: boolean; rebuild?: boolean; importSince?: number | null }) => void;
+  scanTrips: (options: {
+    archive: boolean;
+    rebuild?: boolean;
+    importSince?: number | null;
+    inboxSince?: number | null;
+  }) => void;
   stopTripScan: () => void;
   /** Cache archived mail from headers alone, back to `since` (null: all of it). */
   importArchive: (since: number | null) => void;

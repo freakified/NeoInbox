@@ -324,6 +324,13 @@ export interface FolderCursorRecord {
   maxDate: number;
   /** When the last full scan of this folder completed (ms); 0 = never. */
   fullScanAt: number;
+  /**
+   * Inbox only: how far the folder's message count ran ahead of its cached
+   * rows at the last full scan or inbox import — mail outside the scan
+   * window, and duplicate copies sharing one row. The drift check adds it
+   * back, or such an inbox would read as drifted on every sync.
+   */
+  countGap?: number;
 }
 
 export interface TranslationRecord {

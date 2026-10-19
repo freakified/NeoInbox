@@ -161,12 +161,24 @@ export const tripsSlice = (
       },
     ]);
   },
-  scanTrips: ({ archive, rebuild, importSince }) => {
+  scanTrips: ({ archive, rebuild, importSince, inboxSince }) => {
     if (get().tripScan?.running) return;
     // Optimistic, so the button flips at once; the background confirms.
-    const phase = importSince === undefined ? "read" : "import";
-    set({ tripScan: { ...get().tripScan, running: true, archive, rebuild, processed: 0, total: 0, phase } });
-    send({ type: "trip-scan", archive, rebuild, importSince });
+    const phase = importSince === undefined && inboxSince === undefined ? "read" : "import";
+    const fromInbox = inboxSince !== undefined || undefined;
+    set({
+      tripScan: {
+        ...get().tripScan,
+        running: true,
+        archive,
+        rebuild,
+        processed: 0,
+        total: 0,
+        phase,
+        fromInbox,
+      },
+    });
+    send({ type: "trip-scan", archive, rebuild, importSince, inboxSince });
   },
   stopTripScan: () => send({ type: "trip-scan-cancel" }),
 });

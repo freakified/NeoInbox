@@ -12,7 +12,9 @@ export const MESSAGE_DETAILS_VERSION = 2;
 
 /**
  * detailsVersion for a row whose details are fetched on demand rather than in
- * the background — sent and draft mail.
+ * the background — sent and draft mail, archived mail brought in by the
+ * archive import, and inbox mail older than the scan window brought in by the
+ * inbox import (see isHeaderOnly in background/ingest.ts).
  *
  * Their References/In-Reply-To headers only sharpen threading, and getting
  * them costs a body fetch each, so a year of Sent used to be downloaded a
