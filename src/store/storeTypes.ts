@@ -155,6 +155,8 @@ export interface MailStore {
   retryBackfill: () => void;
   /** Fetch details for a conversation's headers-only rows as it opens. */
   hydrateThreadDetails: (messageKeys: MessageKey[]) => void;
+  /** Mark a conversation's unread messages read as it opens. */
+  markThreadRead: (messageKeys: MessageKey[]) => void;
   /** Widen the inbox scan window by one step and rescan. */
   loadMoreInbox: () => void;
   retryToast: (toastId: string) => void;

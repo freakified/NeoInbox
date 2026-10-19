@@ -216,3 +216,51 @@ describe("the inbox scan window", () => {
     expect(await app.db.messages.get(app.mail.keyOf(fresh))).toBeDefined();
   });
 });
+
+/**
+ * Thunderbird pages event payloads like it pages list(): `messages` is the
+ * first page and `id` leads to the rest. These pin down that no listener
+ * stops at the first page.
+ */
+describe("event lists longer than a page", () => {
+  const inboxRows = async (app: Booted) =>
+    (await app.db.messages.toArray()).filter((m) => m.origin === "inbox");
+
+  it("takes a big arrival through the inbox window, newest first", async () => {
+    app = await open(shapes.paginated([], 3));
+    app.mail.storageData["neoinbox-inbox-cap"] = 5;
+    await app.backfill.runBackfill();
+    await settle();
+
+    const ids = await app.mail.deliverMany(INBOX, many(12, promoMail));
+    await settle();
+
+    // The newest five of the twelve, not the first page of three.
+    const cached = await inboxRows(app);
+    expect(cached.map((m) => m.tbId).sort((a, b) => a - b)).toEqual(ids.slice(-5));
+    expect(app.store().inboxWindow).toEqual({ cap: 5, skipped: 7 });
+  });
+
+  it("caches every page of an arrival that fits the window", async () => {
+    app = await open(shapes.paginated([], 3));
+    await app.backfill.runBackfill();
+    await settle();
+
+    await app.mail.deliverMany(INBOX, many(8, promoMail));
+    await settle();
+
+    expect(await inboxRows(app)).toHaveLength(8);
+  });
+
+  it("removes every page of a bulk delete", async () => {
+    app = await open(shapes.paginated(many(8, promoMail), 3));
+    await app.backfill.runBackfill();
+    await settle();
+    expect(await inboxRows(app)).toHaveLength(8);
+
+    await app.mail.messagesApi.delete(app.mail.idsIn(INBOX));
+    await settle();
+
+    expect(await inboxRows(app)).toHaveLength(0);
+  });
+});

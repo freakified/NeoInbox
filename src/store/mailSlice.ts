@@ -17,7 +17,7 @@ export const mailSlice = (
   get: StoreGet,
 ): Pick<
   MailStore,
-  "pin" | "doneThread" | "snoozeThread" | "unsnoozeThread" | "trashThread" | "moveToInboxThread" | "setRouteRule" | "deleteRouteRule" | "applyCategoryLocally" | "setCustomBundle" | "deleteCustomBundle" | "hydrateThreadDetails" | "loadMoreInbox" | "retryBackfill" | "openBundleSettings" | "closeBundleSettings" | "reclassify" | "importArchive" | "stopArchiveImport"
+  "pin" | "doneThread" | "snoozeThread" | "unsnoozeThread" | "trashThread" | "moveToInboxThread" | "setRouteRule" | "deleteRouteRule" | "applyCategoryLocally" | "setCustomBundle" | "deleteCustomBundle" | "hydrateThreadDetails" | "markThreadRead" | "loadMoreInbox" | "retryBackfill" | "openBundleSettings" | "closeBundleSettings" | "reclassify" | "importArchive" | "stopArchiveImport"
 > => ({
   pin: (messageKey, pinned) => {
     flushDelta(set, get);
@@ -193,6 +193,21 @@ export const mailSlice = (
       return m && (m.detailsVersion ?? 0) < MESSAGE_DETAILS_VERSION;
     });
     if (pending.length) send({ type: "hydrate-details", messageKeys: pending });
+  },
+  markThreadRead: (messageKeys) => {
+    const unread = messageKeys.filter((key) => {
+      const m = get().messagesByKey[key];
+      return m && !m.read;
+    });
+    if (unread.length === 0) return;
+    flushDelta(set, get);
+    const map = { ...get().messagesByKey };
+    for (const key of unread) {
+      const m = map[key];
+      if (m) map[key] = { ...m, read: true };
+    }
+    set({ messagesByKey: map });
+    send({ type: "mark-read", messageKeys: unread });
   },
   loadMoreInbox: () => {
     if (get().loadingMoreInbox) return;

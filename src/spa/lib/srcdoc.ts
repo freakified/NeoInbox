@@ -268,7 +268,10 @@ const renderTextWithQuoteToggle = (raw: string): string => {
   );
 };
 
+// The frame is auto-sized to its content (useIframeAutoHeight), so a vertical
+// scrollbar inside it is only ever a sub-pixel measuring artifact.
 const BASE_CSS = `<style>
+  html{overflow-y:hidden!important}
   body{font-family:Roboto,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
        font-size:14px;margin:0!important;padding:8px 0!important;
        box-sizing:border-box;color:#111;word-break:break-word}

@@ -29,6 +29,7 @@
     "compose.send",
     "messagesRead",
     "messagesMove",
+    "messagesUpdate",
     "messagesDelete",
     "accountsRead",
     "addressBooks",

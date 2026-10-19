@@ -34,6 +34,7 @@ import { pinKeyOf } from "../shared/pinKey";
 import { broadcast } from "./port";
 import { invalidateRouteRules } from "../classifier/routeRules";
 import { db } from "../store/db";
+import { liveTbId } from "../shared/liveMessage";
 import { collectInboxFolders } from "../shared/folders";
 import { ruleMatchesMessage } from "../shared/routeRules";
 import { log } from "../shared/log";
@@ -171,6 +172,29 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
       const raw = await applyLocalState({ ...cached });
       await db.messages.put(raw);
       broadcast({ type: "delta", updated: [raw] });
+      return;
+    }
+    case "mark-read": {
+      const updated: RawMessage[] = [];
+      for (const key of msg.messageKeys) {
+        const cached = await db.messages.get(key);
+        if (!cached || cached.read) continue;
+        try {
+          const id = await liveTbId(cached);
+          if (id === null) throw new Error("Message no longer exists");
+          await messenger.messages.update(id, { read: true });
+          // onUpdated reports this too; writing it now means a reload before
+          // that event lands doesn't show the row unread again.
+          const row: RawMessage = { ...cached, tbId: id, read: true };
+          await db.messages.put(row);
+          updated.push(row);
+        } catch (e) {
+          // Echo the real state, reverting the UI's optimistic flip.
+          log.warn("command", "mark-read failed", { key, e: String(e) });
+          updated.push(cached);
+        }
+      }
+      if (updated.length) broadcast({ type: "delta", updated });
       return;
     }
     case "done": {

@@ -31,6 +31,11 @@ export type ClientMsg =
   | { type: "unsnooze"; messageKey: MessageKey }
   | { type: "trash"; messageKey: MessageKey }
   | { type: "move-to-inbox"; messageKey: MessageKey }
+  /**
+   * Set Thunderbird's read flag, which syncs to the server like any client's.
+   * Sent when a conversation is opened; like Inbox, there is no way back.
+   */
+  | { type: "mark-read"; messageKeys: MessageKey[] }
   | { type: "set-route-rule"; rule: RouteRuleRecord }
   | { type: "delete-route-rule"; id: string }
   | { type: "set-custom-bundle"; bundle: CustomBundleRecord }

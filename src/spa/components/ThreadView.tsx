@@ -25,6 +25,7 @@ export const ThreadView = ({
   const actions = useThreadActions(t);
   const account = useAccountMarker(t.accountId);
   const hydrateThreadDetails = useMailStore((st) => st.hydrateThreadDetails);
+  const markThreadRead = useMailStore((st) => st.markThreadRead);
   const allPendingReplies = useMailStore((st) => st.pendingReplies);
   const settlePendingReply = useMailStore((st) => st.settlePendingReply);
   const latestInbox = useMemo(() => {
@@ -89,6 +90,13 @@ export const ThreadView = ({
   useEffect(() => {
     hydrateThreadDetails(threadMessageKeys);
   }, [hydrateThreadDetails, threadMessageKeys]);
+  // Opening a conversation reads it, including mail that arrives while it
+  // stays open. Keyed on the key list, not the thread: a failed mark-read
+  // reverts the row, and re-firing on that would retry it forever.
+  const threadKeyList = threadMessageKeys.join("\n");
+  useEffect(() => {
+    markThreadRead(threadKeyList.split("\n"));
+  }, [markThreadRead, threadKeyList]);
 
   if (!latestInbox || !latestMessage) return null;
 

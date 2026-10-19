@@ -209,7 +209,7 @@ export class FakeMessenger {
   private messages = new Map<number, StoredMessage>();
   private folderOwner = new Map<string, string>();
   private folderSpecs = new Map<string, FakeFolderSpec>();
-  private pages = new Map<string, StoredMessage[]>();
+  private pages = new Map<string, messenger.messages.MessageHeader[]>();
   private nextId = 1;
   private nextPage = 1;
   private hanging = new Set<HangableCall>();
@@ -390,12 +390,20 @@ export class FakeMessenger {
 
   /** Adds a message and fires onNewMailReceived, as a delivery would. */
   async deliver(folderId: string, spec: FakeMessageSpec = {}): Promise<number> {
-    const id = this.insert(folderId, spec);
-    await this.messagesApi.onNewMailReceived.emit(this.folderRef(folderId), {
-      id: null,
-      messages: [{ id }],
-    });
-    return id;
+    return (await this.deliverMany(folderId, [spec]))[0]!;
+  }
+
+  /**
+   * Adds several messages under one onNewMailReceived, the way a new
+   * account's first download or a long-offline backlog arrives.
+   */
+  async deliverMany(folderId: string, specs: FakeMessageSpec[]): Promise<number[]> {
+    const ids = specs.map((spec) => this.insert(folderId, spec));
+    await this.messagesApi.onNewMailReceived.emit(
+      this.folderRef(folderId),
+      this.paginateHeaders(ids.map((id) => this.header(this.require(id)))),
+    );
+    return ids;
   }
 
   /**
@@ -510,15 +518,22 @@ export class FakeMessenger {
   }
 
   private paginate(rows: StoredMessage[]): { id: string | null; messages: messenger.messages.MessageHeader[] } {
+    return this.paginateHeaders(rows.map((m) => this.header(m)));
+  }
+
+  /** Event payloads page like list() does: past a page, the rest is behind continueList. */
+  private paginateHeaders(
+    headers: messenger.messages.MessageHeader[],
+  ): { id: string | null; messages: messenger.messages.MessageHeader[] } {
     const size = this.options.pageSize ?? Number.MAX_SAFE_INTEGER;
-    const head = rows.slice(0, size);
-    const tail = rows.slice(size);
+    const head = headers.slice(0, size);
+    const tail = headers.slice(size);
     let pageId: string | null = null;
     if (tail.length) {
       pageId = `page-${this.nextPage++}`;
       this.pages.set(pageId, tail);
     }
-    return { id: pageId, messages: head.map((m) => this.header(m)) };
+    return { id: pageId, messages: head };
   }
 
   private folderIdOf(ref: unknown): string {
@@ -568,8 +583,8 @@ export class FakeMessenger {
       moved.push(copy);
     }
     await this.messagesApi.onMoved.emit(
-      { id: null, messages: originals },
-      { id: null, messages: moved.map((m) => this.header(m)) },
+      this.paginateHeaders(originals),
+      this.paginateHeaders(moved.map((m) => this.header(m))),
     );
     return moved.map((m) => this.header(m));
   }
@@ -577,7 +592,7 @@ export class FakeMessenger {
   // --------------------------------------------------------------------- api
 
   readonly messagesApi = {
-    onNewMailReceived: new Event<[{ id: string; accountId: string; name: string }, { id: string | null; messages: { id: number }[] }]>(),
+    onNewMailReceived: new Event<[{ id: string; accountId: string; name: string }, { id: string | null; messages: messenger.messages.MessageHeader[] }]>(),
     onUpdated: new Event<[messenger.messages.MessageHeader, { tags?: string[]; read?: boolean }]>(),
     onDeleted: new Event<[{ id: string | null; messages: messenger.messages.MessageHeader[] }]>(),
     onMoved: new Event<[{ id: string | null; messages: messenger.messages.MessageHeader[] }, { id: string | null; messages: messenger.messages.MessageHeader[] }]>(),
@@ -618,9 +633,9 @@ export class FakeMessenger {
     continueList: async (pageId: string) => {
       const blocked = this.guard("continueList");
       if (blocked) return blocked;
-      const rows = this.pages.get(pageId) ?? [];
+      const rest = this.pages.get(pageId) ?? [];
       this.pages.delete(pageId);
-      return this.paginate(rows);
+      return this.paginateHeaders(rest);
     },
 
     query: async (q: {
@@ -674,7 +689,7 @@ export class FakeMessenger {
     delete: async (ids: number[], _options?: unknown) => {
       const headers = ids.map((id) => this.header(this.require(id)));
       for (const id of ids) this.messages.delete(id);
-      await this.messagesApi.onDeleted.emit({ id: null, messages: headers });
+      await this.messagesApi.onDeleted.emit(this.paginateHeaders(headers));
     },
 
     update: async (id: number, props: { read?: boolean; tags?: string[] }) => {

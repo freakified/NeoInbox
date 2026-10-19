@@ -21,9 +21,18 @@ export const useIframeAutoHeight = (
 
   const apply = useCallback(() => {
     frameRef.current = null;
-    const body = iframeRef.current?.contentDocument?.body;
-    if (!body) return;
-    const next = body.scrollHeight;
+    const doc = iframeRef.current?.contentDocument;
+    const body = doc?.body;
+    if (!doc || !body) return;
+    const root = doc.documentElement;
+    // scrollHeight is rounded to a whole pixel, so a 600.4px body sized the frame
+    // at 600 and left a sliver of overflow (and a scrollbar). The root's rect keeps
+    // the fraction; ceil it. A wide message's horizontal scrollbar also eats into
+    // the viewport, so add its thickness back.
+    const scrollbar = (doc.defaultView?.innerHeight ?? 0) - root.clientHeight;
+    const next =
+      Math.max(body.scrollHeight, Math.ceil(root.getBoundingClientRect().height)) +
+      Math.max(0, scrollbar);
     if (next === lastHeightRef.current) return;
     lastHeightRef.current = next;
     setHeight(next);

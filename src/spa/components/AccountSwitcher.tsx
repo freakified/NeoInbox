@@ -75,16 +75,17 @@ export const AccountSwitcher = ({
     if (accounts.length && accountFilter && !filtered) setAccountFilter(null);
   }, [accounts, accountFilter, filtered, setAccountFilter]);
 
-  const unread = useMemo(() => {
+  // Everything in each inbox, read or not; snoozed mail is out until it wakes.
+  const inboxCounts = useMemo(() => {
     const counts = new Map<string, number>();
     if (!open) return counts;
     for (const m of Object.values(messagesByKey)) {
-      if (m.origin !== "inbox" || m.snoozed || m.read) continue;
+      if (m.origin !== "inbox" || m.snoozed) continue;
       counts.set(m.accountId, (counts.get(m.accountId) ?? 0) + 1);
     }
     return counts;
   }, [open, messagesByKey]);
-  const totalUnread = [...unread.values()].reduce((sum, n) => sum + n, 0);
+  const totalInbox = [...inboxCounts.values()].reduce((sum, n) => sum + n, 0);
 
   useEffect(() => {
     if (!open) return;
@@ -163,7 +164,7 @@ export const AccountSwitcher = ({
                   <span className={s.itemName}>All accounts</span>
                   <span className={s.itemEmail}>Every inbox together</span>
                 </span>
-                {totalUnread > 0 && <span className={s.count}>{totalUnread}</span>}
+                {totalInbox > 0 && <span className={s.count}>{totalInbox}</span>}
               </button>
               <div className={s.divider} />
             </>
@@ -173,7 +174,7 @@ export const AccountSwitcher = ({
               key={account.id}
               account={account}
               active={current?.id === account.id}
-              count={multiple ? unread.get(account.id) ?? 0 : 0}
+              count={multiple ? inboxCounts.get(account.id) ?? 0 : 0}
               onChoose={multiple ? () => choose(account.id) : undefined}
             />
           ))}

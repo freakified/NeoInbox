@@ -1,3 +1,4 @@
+import { runBackfill } from "./backfill";
 import { withTimeout } from "./scanQueue";
 import { isTripCandidate, scheduleTripExtraction } from "./extract";
 import {
@@ -22,7 +23,32 @@ import { log } from "../shared/log";
 import type { MessageKey } from "../shared/messageKey";
 import type { MessageOrigin, RawMessage } from "../shared/types";
 
-type MessageList = { id?: string; messages: messenger.messages.MessageHeader[] };
+type MessageList = { id?: string | null; messages: messenger.messages.MessageHeader[] };
+
+/**
+ * Every header in an event's list, not just the first page.
+ *
+ * Thunderbird pages event payloads the way it pages list(): past 100
+ * messages, `messages` holds the first page and `id` leads to the rest. A
+ * listener that reads only `messages` silently drops everything after it —
+ * a 2,600-message inbox arriving with a new account came through as its
+ * oldest 100.
+ */
+const drainList = async (
+  list: MessageList | undefined,
+): Promise<messenger.messages.MessageHeader[]> => {
+  const out = [...(list?.messages ?? [])];
+  let pageId = list?.id;
+  while (pageId) {
+    const page: MessageList = await withTimeout(
+      messenger.messages.continueList(pageId),
+      `continue event list ${pageId}`,
+    );
+    out.push(...(page.messages ?? []));
+    pageId = page.id;
+  }
+  return out;
+};
 
 type OnUpdatedApi = {
   addListener: (
@@ -52,7 +78,7 @@ const sendingDraftByTabId = new Map<number, number>();
  */
 const cachedKeysOf = async (list: MessageList | undefined): Promise<MessageKey[]> => {
   const keys: MessageKey[] = [];
-  for (const header of list?.messages ?? []) {
+  for (const header of await drainList(list)) {
     const key = await cachedKeyOf(header);
     if (key) keys.push(key);
   }
@@ -212,6 +238,35 @@ const removeSentDraft = async (draftId: number): Promise<void> => {
   }
 };
 
+/**
+ * A delivery too big to classify message by message: more than a page, or a
+ * folder no full scan has visited yet (a freshly added account, whose whole
+ * inbox arrives as "new mail"). Each message here would cost a body fetch.
+ */
+const isBulkArrival = async (
+  folderId: string | undefined,
+  list: MessageList,
+): Promise<boolean> => {
+  if (list.id) return true;
+  if (!folderId) return false;
+  return !(await db.folderCursors.get(folderId))?.fullScanAt;
+};
+
+/**
+ * Hands a bulk arrival to the full scan, which takes the newest messages up
+ * to the inbox window and leaves the rest behind Load more, then does the
+ * new-mail follow-ups for whatever of it was cached.
+ */
+const ingestBulkArrival = async (list: MessageList): Promise<void> => {
+  const headers = await drainList(list);
+  log.info("sync", `bulk arrival of ${headers.length}; running a full scan`);
+  await runBackfill();
+  const rows = await db.messages.bulkGet(headers.map((h) => keyOfHeader(h)));
+  const added = rows.filter((r): r is RawMessage => r !== undefined);
+  if (added.some((m) => isTripCandidate(m))) scheduleTripExtraction();
+  await wakeSnoozesForNewMail(added);
+};
+
 export const wireSyncEngine = (): void => {
   messenger.messages.onNewMailReceived.addListener(async (folder, list) => {
     try {
@@ -221,6 +276,10 @@ export const wireSyncEngine = (): void => {
       // scan prune it as stranded, since its folder isn't in the scanned set.
       const inboxIds = await getFolderIds(collectInboxFolders);
       if (folder?.id && !inboxIds.has(folder.id)) return;
+      if (await isBulkArrival(folder?.id, list)) {
+        await ingestBulkArrival(list);
+        return;
+      }
       const added = await cacheMessages(list.messages, "inbox");
       if (!added.length) return;
       broadcast({ type: "delta", added });
@@ -383,15 +442,16 @@ export const wireSyncEngine = (): void => {
   if (onMoved) {
     onMoved.addListener(async (originalMessages, movedMessages) => {
       try {
-        const originals = originalMessages.messages ?? [];
+        const originals = await drainList(originalMessages);
         if (!originals.length) return;
+        const movedHeaders = await drainList(movedMessages);
         const originalKeys: MessageKey[] = [];
         const byOrigin = new Map<MessageOrigin, messenger.messages.MessageHeader[]>();
         const snoozedOriginalKeys = new Set<MessageKey>();
         /** Rows re-keyed into the archive; already written, just need announcing. */
         const archived: RawMessage[] = [];
-        for (let idx = 0; idx < (movedMessages.messages ?? []).length; idx++) {
-          const moved = movedMessages.messages[idx]!;
+        for (let idx = 0; idx < movedHeaders.length; idx++) {
+          const moved = movedHeaders[idx]!;
           const original = originals[idx];
           const originalKey = original ? await cachedKeyOf(original) : null;
           if (originalKey) originalKeys.push(originalKey);
