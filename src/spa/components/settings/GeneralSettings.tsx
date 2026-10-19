@@ -1,6 +1,5 @@
 import { Icon } from "../Icon";
 import { OpenModeSection } from "./OpenModeSettings";
-import { TranslationSection } from "./TranslationSettings";
 import s from "../BundleManagerModal.module.css";
 
 export const GeneralSettings = () => (
@@ -10,6 +9,5 @@ export const GeneralSettings = () => (
       <h3 className={s.editorTitle}>General</h3>
     </div>
     <OpenModeSection />
-    <TranslationSection />
   </div>
 );

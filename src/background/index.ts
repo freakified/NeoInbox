@@ -12,20 +12,46 @@ import { installSampleDump } from "./sampleDump";
 import { db } from "../store/db";
 import { invalidateFolderCache } from "../shared/folders";
 import { log } from "../shared/log";
-import { getOpenMode, getOpenOnStartup, getWindowBounds } from "../shared/openMode";
+import { getOpenMode, getOpenOnStartup, getWindowBounds, OPEN_MODE_KEY } from "../shared/openMode";
 
 const INBOX_URL = "inbox.html";
 
 const isInboxTab = (tab: messenger.tabs.Tab): boolean => !!tab.url?.endsWith(`/${INBOX_URL}`);
 
+const focusWindow = async (win: messenger.windows.Window): Promise<void> => {
+  if (win.id === undefined) return;
+  await messenger.windows.update(win.id, {
+    focused: true,
+    ...(win.state === "minimized" ? { state: "normal" as const } : {}),
+  });
+}
+
+/**
+ * Tab mode: NeoInbox lives in a main window. Any NeoInbox popup left over
+ * from window mode is closed, mirroring openInboxWindow.
+ */
 const openInboxTab = async (): Promise<void> => {
-  const tabs = await messenger.tabs.query({});
-  const existing = tabs.find(isInboxTab);
-  if (existing?.id !== undefined) {
+  const windows = await messenger.windows.getAll({ populate: true });
+  const normal = windows.filter((w) => w.type === "normal");
+  const existingWindow = normal.find((w) => w.tabs?.some(isInboxTab));
+  const existing = existingWindow?.tabs?.find(isInboxTab);
+
+  if (existingWindow && existing?.id !== undefined) {
     await messenger.tabs.update(existing.id, { active: true });
+    await focusWindow(existingWindow);
     return;
   }
-  await messenger.tabs.create({ url: INBOX_URL });
+  // Window mode lets the user close the main window, so there may be none.
+  const mainWindow = normal.find((w) => w.focused) ?? normal[0];
+  if (mainWindow?.id !== undefined) {
+    await messenger.tabs.create({ url: INBOX_URL, windowId: mainWindow.id });
+    await focusWindow(mainWindow);
+  } else {
+    await messenger.windows.create({ type: "normal", url: INBOX_URL });
+  }
+  for (const popup of windows.filter((w) => w.type === "popup" && w.tabs?.some(isInboxTab))) {
+    if (popup.id !== undefined) await messenger.windows.remove(popup.id).catch(() => undefined);
+  }
 }
 
 /**
@@ -38,11 +64,8 @@ const openInboxWindow = async (): Promise<void> => {
   const windows = await messenger.windows.getAll({ populate: true });
   const popup = windows.find((w) => w.type === "popup" && w.tabs?.some(isInboxTab));
 
-  if (popup?.id !== undefined) {
-    await messenger.windows.update(popup.id, {
-      focused: true,
-      ...(popup.state === "minimized" ? { state: "normal" as const } : {}),
-    });
+  if (popup) {
+    await focusWindow(popup);
   } else {
     const bounds = await getWindowBounds();
     await messenger.windows.create({
@@ -88,6 +111,16 @@ const ensureSnoozeAlarmsRestored = (): Promise<void> => {
 
 messenger.browserAction.onClicked.addListener(() => {
   void openOrFocusInbox();
+});
+
+// Changing tab/window in Settings moves an open NeoInbox over right away
+// (the Settings page itself is what gets closed and reopened).
+messenger.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !(OPEN_MODE_KEY in changes)) return;
+  void (async () => {
+    const windows = await messenger.windows.getAll({ populate: true });
+    if (windows.some((w) => w.tabs?.some(isInboxTab))) await openOrFocusInbox();
+  })().catch((e) => log.warn("background", "reopening inbox failed", e));
 });
 
 messenger.runtime.onInstalled.addListener((details) => {

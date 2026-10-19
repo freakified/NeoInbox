@@ -26,6 +26,9 @@ import { AccountSettings } from "./settings/AccountSettings";
 import { useAccounts } from "../lib/accounts";
 import { ArchiveSettings } from "./settings/ArchiveSettings";
 import { PrivacySettings } from "./settings/PrivacySettings";
+import { TranslationSettings } from "./settings/TranslationSettings";
+import { TripSettings } from "./settings/TripSettings";
+import { TRIP_COLOR } from "./TripSliceRow";
 import { BuiltinBundleEditor, CustomBundleEditor, ThreadRouteSummary } from "./settings/BundleEditors";
 
 export const BundleManagerModal = ({
@@ -37,7 +40,7 @@ export const BundleManagerModal = ({
   initialPane,
 }: {
   onClose: () => void;
-  initialPane?: "general" | "privacy" | "advanced" | "accounts" | "archive";
+  initialPane?: "general" | "privacy" | "translation" | "advanced" | "accounts" | "archive" | "trips";
   thread?: Thread;
   initialCategory?: Category | null;
   startNewBundle?: boolean;
@@ -294,6 +297,14 @@ export const BundleManagerModal = ({
               <Icon name="shield" className={s.navIcon} />
               <span className={s.navName}>Privacy</span>
             </button>
+            <button
+              type="button"
+              className={clsx(s.bundleNavItem, paneKey(selected) === "translation" && s.bundleNavItemActive)}
+              onClick={() => choose({ kind: "translation" })}
+            >
+              <Icon name="translate" className={s.navIcon} />
+              <span className={s.navName}>Translation</span>
+            </button>
             {accounts.length > 1 && (
               <button
                 type="button"
@@ -342,6 +353,14 @@ export const BundleManagerModal = ({
                 </button>
               );
             })}
+            <button
+              type="button"
+              className={clsx(s.bundleNavItem, paneKey(selected) === "trips" && s.bundleNavItemActive)}
+              onClick={() => choose({ kind: "trips" })}
+            >
+              <Icon name="travel" className={s.navIcon} style={{ color: TRIP_COLOR }} />
+              <span className={s.navName}>Trips</span>
+            </button>
             {customBundles.map((bundle) => {
               const meta = getCategoryMeta(bundle.id, customBundles);
               return (
@@ -387,8 +406,12 @@ export const BundleManagerModal = ({
               <AccountSettings />
             ) : selected.kind === "privacy" ? (
               <PrivacySettings />
+            ) : selected.kind === "translation" ? (
+              <TranslationSettings />
             ) : selected.kind === "archive" ? (
               <ArchiveSettings />
+            ) : selected.kind === "trips" ? (
+              <TripSettings />
             ) : (
               <>
                 {thread && (

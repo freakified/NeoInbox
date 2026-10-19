@@ -13,6 +13,8 @@ export type SelectedPane =
   | { kind: "advanced" }
   | { kind: "accounts" }
   | { kind: "privacy" }
+  | { kind: "translation" }
+  | { kind: "trips" }
   | { kind: "archive" }
   | SelectedBundle;
 
@@ -161,6 +163,8 @@ export const paneKey = (selected: SelectedPane): string =>
   selected.kind === "advanced" ||
   selected.kind === "accounts" ||
   selected.kind === "privacy" ||
+  selected.kind === "translation" ||
+  selected.kind === "trips" ||
   selected.kind === "archive"
     ? selected.kind
     : bundleKey(selected);

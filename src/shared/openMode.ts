@@ -13,7 +13,7 @@ export interface WindowBounds {
   height: number;
 }
 
-const OPEN_MODE_KEY = "openMode";
+export const OPEN_MODE_KEY = "openMode";
 const OPEN_ON_STARTUP_KEY = "openOnStartup";
 const WINDOW_BOUNDS_KEY = "inboxWindowBounds";
 

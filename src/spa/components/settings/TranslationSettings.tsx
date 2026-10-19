@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Icon } from "../Icon";
 import { useMailStore } from "../../../store/mailStore";
 import {
   DEFAULT_TRANSLATION_CONFIG,
@@ -18,7 +19,7 @@ const sameTranslationConfig = (a: TranslationConfig, b: TranslationConfig): bool
   a.region === b.region &&
   a.model === b.model;
 
-export const TranslationSection = () => {
+const TranslationSection = () => {
   const notify = useMailStore((st) => st.notify);
   const [config, setConfig] = useState<TranslationConfig>(() => getTranslationConfig());
 
@@ -72,7 +73,6 @@ export const TranslationSection = () => {
 
   return (
     <section className={s.section}>
-      <h4 className={s.sectionTitle}>Translation</h4>
       <p className={s.helpText}>Text is only sent when you click Translate.</p>
       <label className={s.fieldBlock}>
         <span className={s.label}>Service</span>
@@ -170,3 +170,13 @@ export const TranslationSection = () => {
     </section>
   );
 };
+
+export const TranslationSettings = () => (
+  <div className={s.editor}>
+    <div className={s.editorHeader}>
+      <Icon name="translate" className={s.editorIcon} />
+      <h3 className={s.editorTitle}>Translation</h3>
+    </div>
+    <TranslationSection />
+  </div>
+);

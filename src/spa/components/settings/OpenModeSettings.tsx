@@ -14,26 +14,37 @@ const CHOICES: { mode: OpenMode; label: string }[] = [
   { mode: "window", label: "In its own window" },
 ];
 
+interface OpenSettings {
+  mode: OpenMode;
+  onStartup: boolean;
+}
+
 export const OpenModeSection = () => {
   const notify = useMailStore((st) => st.notify);
-  const [mode, setMode] = useState<OpenMode | null>(null);
-  const [onStartup, setOnStartup] = useState<boolean | null>(null);
+  const [saved, setSaved] = useState<OpenSettings | null>(null);
+  const [draft, setDraft] = useState<OpenSettings | null>(null);
 
   useEffect(() => {
-    void getOpenMode().then(setMode);
-    void getOpenOnStartup().then(setOnStartup);
+    void Promise.all([getOpenMode(), getOpenOnStartup()]).then(([mode, onStartup]) => {
+      setSaved({ mode, onStartup });
+      setDraft({ mode, onStartup });
+    });
   }, []);
 
-  const choose = (next: OpenMode) => {
-    setMode(next);
-    void setOpenMode(next).then(() =>
-      notify("Takes effect next time NeoInbox opens from the toolbar or Thunderbird starts"),
-    );
-  };
+  const hasChanges =
+    !!saved && !!draft && (saved.mode !== draft.mode || saved.onStartup !== draft.onStartup);
 
-  const toggleStartup = (next: boolean) => {
-    setOnStartup(next);
-    void setOpenOnStartup(next);
+  const save = () => {
+    if (!draft) return;
+    // Startup first: a mode change makes the background move NeoInbox,
+    // closing this page.
+    void setOpenOnStartup(draft.onStartup)
+      .then(() => setOpenMode(draft.mode))
+      .then(() => {
+        setSaved(draft);
+        notify("Settings saved");
+      })
+      .catch(() => notify("Couldn't save that setting"));
   };
 
   return (
@@ -45,8 +56,8 @@ export const OpenModeSection = () => {
             <input
               type="radio"
               name="open-mode"
-              checked={mode === c.mode}
-              onChange={() => choose(c.mode)}
+              checked={draft?.mode === c.mode}
+              onChange={() => setDraft((d) => d && { ...d, mode: c.mode })}
               className={s.policyInput}
             />
             <span>{c.label}</span>
@@ -55,12 +66,20 @@ export const OpenModeSection = () => {
         <label className={s.policyChoice}>
           <input
             type="checkbox"
-            checked={onStartup === true}
-            onChange={(e) => toggleStartup(e.target.checked)}
+            checked={draft?.onStartup === true}
+            onChange={(e) => {
+              const onStartup = e.target.checked;
+              setDraft((d) => d && { ...d, onStartup });
+            }}
             className={s.checkInput}
           />
           <span>Automatically open NeoInbox when Thunderbird starts</span>
         </label>
+      </div>
+      <div className={s.formActions}>
+        <button type="button" className={s.saveBtn} disabled={!hasChanges} onClick={save}>
+          Save
+        </button>
       </div>
     </section>
   );
