@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { log } from "../../shared/log";
 import type { Carrier, Parcel, RawMessage, Thread } from "../../shared/types";
 import { senderName } from "../lib/avatar";
@@ -117,9 +117,10 @@ const CARD_STEP = 380 + 8;
 /**
  * The cards in a row, side by side and scrolling sideways when they overflow,
  * like Inbox's bundle highlights. Arrows appear on whichever side has more,
- * for anyone without a sideways-scrolling trackpad.
+ * for anyone without a sideways-scrolling trackpad. Children (the row's
+ * attachment chips) ride along after the cards, at their height.
  */
-export const ParcelCards = ({ parcels }: { parcels: readonly ParcelRef[] }) => {
+export const ParcelCards = ({ parcels, children }: { parcels: readonly ParcelRef[]; children?: ReactNode }) => {
   const strip = useRef<HTMLDivElement>(null);
   const [more, setMore] = useState({ left: false, right: false });
 
@@ -158,6 +159,7 @@ export const ParcelCards = ({ parcels }: { parcels: readonly ParcelRef[] }) => {
           const nth = unnumbered.length > 1 ? ` ${unnumbered.indexOf(ref) + 1}` : "";
           return <ParcelCard key={`${ref.parcel.number ?? ref.parcel.url ?? ref.parcel.carrier}:${i}`} {...ref} nth={nth} />;
         })}
+        {children && <div className={s.extra}>{children}</div>}
       </div>
       {more.left && (
         <button type="button" className={`${s.arrow} ${s.arrowLeft}`} title="Previous packages" onClick={() => page(-1)}>

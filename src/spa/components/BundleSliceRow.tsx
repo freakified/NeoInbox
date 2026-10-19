@@ -55,6 +55,9 @@ export const BundleSliceRow = ({
 
   const preview = <span className={s.previewList}>{previewContent}</span>;
   const attachmentRefs = collectAttachments(threads.flatMap((t) => t.messages));
+  const attachments = attachmentRefs.length > 0 && (
+    <MessageAttachments attachments={attachmentRefs} compact limit={3} />
+  );
   const highlights = bundleHighlights(threads);
 
   const [localOpenThreadId, setLocalOpenThreadId] = useState<string | null>(null);
@@ -122,13 +125,13 @@ export const BundleSliceRow = ({
           trailing={
             highlights.length > 0 || attachmentRefs.length > 0 ? (
               <>
-                {highlights.length > 0 && <ParcelCards parcels={highlights} />}
-                {attachmentRefs.length > 0 && (
-                  <MessageAttachments
-                    attachments={attachmentRefs}
-                    compact
-                    limit={3}
-                  />
+                {highlights.length > 0 ? (
+                  // Attachments share the cards' line rather than wrapping below.
+                  <ParcelCards parcels={highlights}>
+                    {attachments}
+                  </ParcelCards>
+                ) : (
+                  attachments
                 )}
               </>
             ) : undefined

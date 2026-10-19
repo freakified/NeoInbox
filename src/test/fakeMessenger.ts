@@ -795,6 +795,7 @@ export class FakeMessenger {
             delete self.storageData[key];
           },
         },
+        onChanged: new Event<[Record<string, unknown>, string]>(),
       },
       tabs: {
         query: async () => [],

@@ -67,6 +67,9 @@ export const ThreadRow = ({
   const avatarBg = avatarColor(name);
   const initial = avatarAddress ? senderInitial(avatarAddress) : "?";
   const attachmentRefs = collectAttachments(t.messages);
+  const attachments = attachmentRefs.length > 0 && (
+    <MessageAttachments attachments={attachmentRefs} compact limit={2} />
+  );
   const parcels = collectParcels(t.messages);
   const hasDraft = t.messages.some((m) => m.origin === "draft");
   // Inbox's grey text after the subject: the newest message's own words.
@@ -149,13 +152,13 @@ export const ThreadRow = ({
           trailing={
             parcels.length > 0 || attachmentRefs.length > 0 ? (
               <>
-                {parcels.length > 0 && <ParcelCards parcels={parcels} />}
-                {attachmentRefs.length > 0 && (
-                  <MessageAttachments
-                    attachments={attachmentRefs}
-                    compact
-                    limit={2}
-                  />
+                {parcels.length > 0 ? (
+                  // Attachments share the cards' line rather than wrapping below.
+                  <ParcelCards parcels={parcels}>
+                    {attachments}
+                  </ParcelCards>
+                ) : (
+                  attachments
                 )}
               </>
             ) : undefined
