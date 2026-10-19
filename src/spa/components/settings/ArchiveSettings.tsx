@@ -66,7 +66,7 @@ export const ArchiveSettings = () => {
       <section className={s.section}>
         <h4 className={s.sectionTitle}>Archived mail</h4>
         <p className={s.helpText}>
-          You can stop and resume anytime.
+          By default, NeoInbox only processes the emails in your inbox. But, for a more complete experience, you can bring in your archive! Depending on how many messages you have, this might take a minute or two.
         </p>
         {progress ? (
           <div className={s.scanProgress}>

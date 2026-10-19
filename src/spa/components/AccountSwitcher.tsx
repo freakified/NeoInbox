@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { useMailStore } from "../../store/mailStore";
 import { type MailAccount, useAccounts } from "../lib/accounts";
 import { useSelfProfile } from "../lib/contactCards";
-import { NEW_ISSUE_URL, openExternal } from "../lib/external";
+import { openNewIssue } from "../lib/external";
 import { useAnchoredMenu } from "../lib/useAnchoredMenu";
 import { Icon } from "./Icon";
 import { ContactPhoto } from "./ContactPhoto";
@@ -197,11 +197,11 @@ export const AccountSwitcher = ({
             className={s.item}
             onClick={() => {
               setOpen(false);
-              onShowShortcuts();
+              void openNewIssue("bug");
             }}
           >
-            <Icon name="keyboard" className={s.footerIcon} />
-            <span className={s.itemName}>Keyboard shortcuts</span>
+            <Icon name="bug_report" className={s.footerIcon} />
+            <span className={s.itemName}>Report a bug</span>
           </button>
           <button
             type="button"
@@ -209,11 +209,24 @@ export const AccountSwitcher = ({
             className={s.item}
             onClick={() => {
               setOpen(false);
-              openExternal(NEW_ISSUE_URL);
+              void openNewIssue("feature");
             }}
           >
-            <Icon name="bug_report" className={s.footerIcon} />
-            <span className={s.itemName}>Report a bug</span>
+            <Icon name="lightbulb" className={s.footerIcon} />
+            <span className={s.itemName}>Request a feature</span>
+          </button>
+          <div className={s.divider} />
+          <button
+            type="button"
+            role="menuitem"
+            className={s.item}
+            onClick={() => {
+              setOpen(false);
+              onShowShortcuts();
+            }}
+          >
+            <Icon name="keyboard" className={s.footerIcon} />
+            <span className={s.itemName}>Keyboard shortcuts</span>
           </button>
           <button
             type="button"

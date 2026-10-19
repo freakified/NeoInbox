@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import manifest from "../../../public/manifest.json";
-import { NEW_ISSUE_URL, REPO_URL, openExternal } from "../lib/external";
+import { REPO_URL, openExternal, openNewIssue } from "../lib/external";
 import s from "./AboutDialog.module.css";
 
 export const AboutDialog = ({ onClose }: { onClose: () => void }) => {
@@ -31,7 +31,7 @@ export const AboutDialog = ({ onClose }: { onClose: () => void }) => {
           <button type="button" className={s.link} onClick={() => openExternal(REPO_URL)}>
             Source code
           </button>
-          <button type="button" className={s.link} onClick={() => openExternal(NEW_ISSUE_URL)}>
+          <button type="button" className={s.link} onClick={() => void openNewIssue("bug")}>
             Report a bug
           </button>
         </div>

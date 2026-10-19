@@ -11,11 +11,6 @@
   cursor: pointer;
 }
 
-.trigger:hover,
-.trigger[aria-expanded="true"] {
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
-}
 
 .avatar {
   display: inline-flex;
@@ -47,9 +42,11 @@
   border-radius: 6px;
   background: #fff;
   box-shadow: var(--shadow-elevation-2);
+  overflow-x: hidden;
 }
 
 .item {
+  box-sizing: border-box;
   width: 100%;
   display: flex;
   align-items: center;
