@@ -4,6 +4,7 @@ import type { Category, Thread } from "../../shared/types";
 import { getCategoryMeta } from "../../shared/categories";
 import { useCustomBundles, useMailStore } from "../../store/mailStore";
 import { senderName } from "../lib/avatar";
+import { countNewThreads, getBundleSeenAt, markBundleSeen, useBundleSeenAt } from "../lib/bundleSeen";
 import { groupByBucket } from "../lib/dateBucket";
 import { useBulkActions } from "./BulkActionConfirm";
 import { Icon } from "./Icon";
@@ -36,6 +37,18 @@ export const BundleSliceRow = ({
   const meta = getCategoryMeta(category, customBundles);
   const { doneMessages, trashMessages } = useBulkActions();
   const openBundleSettings = useMailStore((st) => st.openBundleSettings);
+
+  const seenAt = useBundleSeenAt(bundleKey);
+  const newCount = countNewThreads(threads, seenAt);
+
+  // Opening the bundle sees what's in it, as does closing it again, so mail
+  // that lands while it's open isn't flagged afterwards. A bundle never seen
+  // before starts from now rather than calling its whole backlog new.
+  useEffect(() => {
+    if (isOpen || getBundleSeenAt(bundleKey) === null) markBundleSeen(bundleKey);
+    if (!isOpen) return;
+    return () => markBundleSeen(bundleKey);
+  }, [isOpen, bundleKey]);
 
   const threadCountLabel = threads.length > 25 ? "(25+)" : `(${threads.length})`;
   const previewContent = threads
@@ -119,6 +132,14 @@ export const BundleSliceRow = ({
                 {meta.name}
               </span>
               <span className={s.threadCount}>{threadCountLabel}</span>
+              {newCount > 0 && (
+                <span
+                  className={s.newTag}
+                  style={{ "--bundle-color": meta.color } as React.CSSProperties}
+                >
+                  {newCount} new
+                </span>
+              )}
             </>
           }
           secondary={preview}

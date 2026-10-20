@@ -36,6 +36,18 @@
   margin-left: 4px;
 }
 
+/* Inbox's "N new" chip: the bundle color on a pale wash of itself. */
+.newTag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--bundle-color);
+  background: color-mix(in srgb, var(--bundle-color) 14%, transparent);
+  border-radius: 2px;
+}
+
 .openHeader {
   width: var(--bundle-inner-width);
   margin: 0 auto;
