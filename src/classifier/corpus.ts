@@ -633,7 +633,7 @@ export const corpus: CorpusCase[] = [
   // -------------------------------------------------------------- personal
   {
     name: "a message from a person",
-    author: "Alex Rivera <alex@example.com>",
+    author: "Alex Inboxley <alex@example.com>",
     subject: "Lunch on Thursday?",
     expect: null,
   },

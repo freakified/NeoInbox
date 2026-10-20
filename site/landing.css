@@ -32,19 +32,19 @@ a {
   padding: 32px 24px 160px;
 }
 
-.brand {
+.hero h1 {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  font-size: 22px;
-  font-weight: 500;
+  gap: 0.3em;
+  font-size: clamp(40px, 7vw, 64px);
+  font-weight: 700;
+  margin: 24px 0 12px;
+  letter-spacing: -0.5px;
 }
 
-.hero h1 {
-  font-size: clamp(36px, 6vw, 56px);
-  font-weight: 700;
-  margin: 48px 0 12px;
-  letter-spacing: -0.5px;
+.hero h1 img {
+  width: 1.1em;
+  height: 1.1em;
 }
 
 .lede {
@@ -87,25 +87,130 @@ a {
   padding: 0 24px;
 }
 
+/* The demo window and the dock it closes or minimizes into (landing.ts).
+   The stage's height is pinned while it animates between the two. */
+.stage {
+  position: relative;
+  transition: height 400ms ease;
+}
+
+/* An OS X Mavericks window: brushed-gray titlebar, glossy traffic lights,
+   rounded top corners and a deep, soft shadow. Scaled up ~1.25x from the
+   real thing so it doesn't look tiny on today's screens. */
 .window {
   background: #fff;
-  border-radius: 10px;
+  border-radius: 6px 6px 0 0;
   overflow: hidden;
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.25), 0 10px 10px rgba(0, 0, 0, 0.22);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.23),
+    0 22px 50px rgba(0, 0, 0, 0.45),
+    0 6px 14px rgba(0, 0, 0, 0.2);
+  /* The dock icon's spot, so minimizing shrinks the window into it. */
+  transform-origin: 50% 48px;
+  /* Coming back: these timings apply when .closed/.minimized come off. */
+  transition:
+    transform 450ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 250ms ease-out;
+}
+
+.window.closed {
+  transform: scale(0.97);
+  opacity: 0;
+  transition: transform 200ms ease, opacity 200ms ease;
+}
+
+/* Sucked into the dock, fading only at the very end. */
+.window.minimized {
+  transform: scale(0.04);
+  opacity: 0;
+  transition:
+    transform 500ms cubic-bezier(0.5, 0, 0.75, 0),
+    opacity 150ms ease-in 350ms;
+}
+
+.window.gone {
+  visibility: hidden;
 }
 
 .window-bar {
-  display: flex;
-  gap: 8px;
-  padding: 12px 14px;
-  background: #e8eaed;
+  position: relative;
+  height: 28px;
+  background: linear-gradient(#ececec, #d6d6d6);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  border-bottom: 1px solid #a8a8a8;
 }
 
-.window-bar span {
-  width: 12px;
-  height: 12px;
+.lights {
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  display: flex;
+  gap: 9px;
+}
+
+.lights > * {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
   border-radius: 50%;
-  background: #bdc1c6;
+  cursor: default;
+  /* A highlight bubble on top, a glow at the bottom, over the base color. */
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.9) 0, rgba(255, 255, 255, 0) 38%),
+    radial-gradient(circle at 50% 100%, var(--glow) 0, transparent 55%),
+    radial-gradient(circle at 50% 50%, var(--base) 0, var(--rim) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.32),
+    0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* The ×, − and + that show while the pointer is over any of the three. */
+.lights > *::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--glyph) center / 8px 8px no-repeat;
+  opacity: 0;
+}
+
+.lights:hover > *::after,
+.lights:focus-within > *::after {
+  opacity: 1;
+}
+
+.lights > :active {
+  filter: brightness(0.85);
+}
+
+.lights .close {
+  --base: #f9625a;
+  --rim: #b01e10;
+  --glow: #ffb39c;
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath d='M1 1l6 6M7 1L1 7' stroke='%234d0000' stroke-width='1.4'/%3E%3C/svg%3E");
+}
+
+.lights .minimize {
+  --base: #fcc33c;
+  --rim: #b0730a;
+  --glow: #ffeca0;
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath d='M0.5 4h7' stroke='%23995700' stroke-width='1.6'/%3E%3C/svg%3E");
+}
+
+.lights .zoom {
+  --base: #73d24c;
+  --rim: #2a7f12;
+  --glow: #d4f7a6;
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath d='M0.5 4h7M4 0.5v7' stroke='%23006500' stroke-width='1.6'/%3E%3C/svg%3E");
+}
+
+.window-title {
+  display: block;
+  text-align: center;
+  font: 15px/28px "Lucida Grande", "Helvetica Neue", Helvetica, sans-serif;
+  color: #4d4d4d;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .window iframe {
@@ -113,6 +218,118 @@ a {
   width: 100%;
   height: 720px;
   border: 0;
+}
+
+/* A Mavericks dock: one app standing on a glass shelf, with the glowing
+   "running" dot while the window is only minimized. It sits on the blue band
+   the window used to cover, like a dock on a desktop. */
+.dock {
+  position: absolute;
+  left: 50%;
+  top: 20px;
+  transform: translate(-50%, 16px);
+  opacity: 0;
+  text-align: center;
+  transition: transform 300ms ease-out, opacity 300ms ease-out;
+}
+
+.dock.shown {
+  transform: translate(-50%, 0);
+  opacity: 1;
+}
+
+.dock-shelf {
+  position: relative;
+  display: inline-block;
+  padding: 0 36px 10px;
+}
+
+.dock-shelf::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 28px;
+  background: linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.85));
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-bottom-color: rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transform: perspective(80px) rotateX(40deg);
+  transform-origin: bottom;
+}
+
+.dock-app {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  transition: transform 150ms ease-out;
+}
+
+.dock-app img {
+  display: block;
+  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.3));
+}
+
+.dock-app:hover,
+.dock-app:focus-visible {
+  transform: translateY(-4px);
+}
+
+.dock-tip {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 12px;
+  border-radius: 12px;
+  background: rgba(30, 30, 30, 0.8);
+  color: #fff;
+  font: 14px/20px "Lucida Grande", "Helvetica Neue", Helvetica, sans-serif;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 150ms;
+}
+
+.dock-app:hover .dock-tip,
+.dock-app:focus-visible .dock-tip {
+  opacity: 1;
+}
+
+.dock-dot {
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background: radial-gradient(#fff 0, #b8e2ff 50%, rgba(120, 190, 255, 0) 100%);
+  box-shadow: 0 0 6px 2px rgba(120, 190, 255, 0.8);
+  display: none;
+}
+
+.dock[data-mode="minimized"] .dock-dot {
+  display: block;
+}
+
+/* Down past the blue band, on the page background. */
+.dock-status {
+  margin: 44px 0 0;
+  color: var(--secondary);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage,
+  .window,
+  .dock {
+    transition: none !important;
+  }
 }
 
 .caption {
@@ -141,8 +358,7 @@ a {
 
 .features article {
   background: #fff;
-  border-radius: 4px;
-  border-top: 4px solid var(--accent);
+  border-radius: 2px;
   box-shadow: var(--card-shadow);
   padding: 20px 24px;
 }
@@ -159,28 +375,84 @@ a {
   color: var(--secondary);
 }
 
-.get {
-  text-align: center;
+.install,
+.faq {
   max-width: 640px;
   margin: 0 auto 72px;
   padding: 0 24px;
 }
 
-.get h2 {
+.install {
+  text-align: center;
+}
+
+.install h2,
+.faq h2 {
   font-size: 32px;
   font-weight: 500;
   margin: 0 0 12px;
 }
 
-.get p {
+.install p {
   color: var(--secondary);
   margin: 0 0 24px;
 }
 
-.get .button.primary {
+/* Numbered cards, one per step, like the feature cards above. */
+.steps {
+  list-style: none;
+  counter-reset: step;
+  padding: 0;
+  margin: 0 0 24px;
+  text-align: left;
+  display: grid;
+  gap: 8px;
+}
+
+.steps li {
+  counter-increment: step;
+  position: relative;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: var(--card-shadow);
+  padding: 14px 20px 14px 64px;
+}
+
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 500;
+  text-align: center;
+  line-height: 28px;
+}
+
+.install .note {
+  font-size: 14px;
+}
+
+.install .button.primary {
   background: var(--primary-dark);
   color: #fff;
   border-color: var(--primary-dark);
+}
+
+.faq h3 {
+  font-size: 18px;
+  font-weight: 500;
+  margin: 28px 0 8px;
+}
+
+.faq p {
+  color: var(--secondary);
+  margin: 0;
 }
 
 footer {
@@ -201,8 +473,7 @@ footer {
     margin-top: 32px;
   }
 
-  .window,
-  .wide-only {
+  .window {
     display: none;
   }
 

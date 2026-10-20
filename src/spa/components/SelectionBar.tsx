@@ -27,7 +27,7 @@ export const SelectionBar = ({
   const unsnoozeThread = useMailStore((st) => st.unsnoozeThread);
   const moveToInboxThread = useMailStore((st) => st.moveToInboxThread);
   const notify = useMailStore((st) => st.notify);
-  const { doneMessages, trashMessages, spamMessages } = useBulkActions();
+  const { doneMessages, trashMessages } = useBulkActions();
 
   const messages = threads.flatMap((t) => t.messages);
   const inboxIds = messages.filter((m) => m.origin === "inbox").map((m) => m.key);
@@ -109,17 +109,6 @@ export const SelectionBar = ({
             })}
           >
             <Icon name="move_to_inbox" className={s.icon} />
-          </button>
-        )}
-        {inboxIds.length + doneIds.length > 0 && (
-          <button
-            type="button"
-            className={s.btn}
-            title="Report spam"
-            aria-label="Report spam"
-            onClick={act(() => spamMessages([...inboxIds, ...doneIds]))}
-          >
-            <Icon name="report" className={s.icon} />
           </button>
         )}
         <button

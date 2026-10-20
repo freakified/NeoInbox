@@ -118,6 +118,15 @@ const linkPorts = (name: string): { client: FakePort; server: FakePort } => {
   return { client, server };
 };
 
+/**
+ * A file the fake serves: the bytes, or a URL to fetch them from when first
+ * asked (the demo's photos, which would bloat the bundle as inline blobs).
+ */
+export type FakeFile = Blob | string;
+
+const served = async (file: FakeFile | undefined): Promise<Blob | undefined> =>
+  typeof file === "string" ? (await fetch(file)).blob() : file;
+
 export interface FakeMessageSpec {
   id?: number;
   headerMessageId?: string;
@@ -140,7 +149,7 @@ export interface FakeMessageSpec {
    * What listAttachments() reports. getAttachmentFile() serves `file`, or an
    * empty blob without one.
    */
-  attachments?: { name: string; contentType: string; size: number; file?: Blob }[];
+  attachments?: { name: string; contentType: string; size: number; file?: FakeFile }[];
   /**
    * When true getFull() rejects, reproducing an IMAP message whose body has
    * not been synced yet. This is the state a backlog arrives in, and the
@@ -181,7 +190,7 @@ export interface FakeMessengerOptions {
   /** Page size for list()/query(); small values exercise continueList paging. */
   pageSize?: number;
   /** Address-book cards, all in one local book. */
-  contacts?: { emails: string[]; name?: string; photo?: Blob }[];
+  contacts?: { emails: string[]; name?: string; photo?: FakeFile }[];
 }
 
 interface StoredMessage {
@@ -201,7 +210,7 @@ interface StoredMessage {
   headers: Record<string, string[]>;
   html?: string;
   text?: string;
-  attachments: { name: string; contentType: string; size: number; file?: Blob }[];
+  attachments: { name: string; contentType: string; size: number; file?: FakeFile }[];
   bodyUnavailable: boolean;
 }
 
@@ -263,6 +272,8 @@ export class FakeMessenger {
     focusedWindows: [] as number[],
     /** URLs handed to the system browser through windows.openDefaultBrowser. */
     openedUrls: [] as string[],
+    /** Windows opened through windows.create, e.g. NeoInbox's own in window mode. */
+    createdWindows: [] as messenger.windows._CreateCreateData[],
     quickFilters: [] as { tabId: number; properties: messenger.mailTabs._SetQuickFilterProperties }[],
     /** Folders shown in a new mail tab through mailTabs.create, by id. */
     mailTabFolders: [] as (string | undefined)[],
@@ -730,7 +741,7 @@ export class FakeMessenger {
     },
 
     getAttachmentFile: async (id: number, partName: string) =>
-      this.require(id).attachments.find((_, i) => `1.${i + 2}` === partName)?.file ?? new Blob([]),
+      served(this.require(id).attachments.find((_, i) => `1.${i + 2}` === partName)?.file) ?? new Blob([]),
   };
 
   readonly foldersApi = {
@@ -827,6 +838,7 @@ export class FakeMessenger {
         query: async () => [],
         create: async () => ({ id: 1 }),
         update: async () => ({ id: 1 }),
+        remove: async () => {},
       },
       mailTabs: {
         query: async () => [],
@@ -866,11 +878,27 @@ export class FakeMessenger {
         ],
       },
       contacts: {
-        getPhoto: async (id: string) => self.options.contacts?.[Number(id.slice(4))]?.photo ?? null,
+        getPhoto: async (id: string) => (await served(self.options.contacts?.[Number(id.slice(4))]?.photo)) ?? null,
       },
       permissions: { contains: async () => true, request: async () => true },
       browserAction: { onClicked: new Event<[]>() },
       windows: {
+        // One main window, already showing NeoInbox: the page the fake runs
+        // in is the inbox, so opening it finds this tab instead of adding one.
+        getAll: async () => [
+          {
+            id: 1,
+            type: "normal",
+            state: "normal",
+            focused: true,
+            tabs: [{ id: 1, windowId: 1, index: 0, active: true, url: `${location.origin}/inbox.html` }],
+          },
+        ],
+        create: async (data: messenger.windows._CreateCreateData = {}) => {
+          self.calls.createdWindows.push(data);
+          return { id: 200 + self.calls.createdWindows.length, type: data.type ?? "normal" };
+        },
+        remove: async () => {},
         getLastFocused: async () => ({ id: 1, type: "normal" }),
         getCurrent: async () => ({ id: 1, type: "normal" }),
         get: async (windowId: number) => ({ id: windowId, type: "normal", state: "normal" }),

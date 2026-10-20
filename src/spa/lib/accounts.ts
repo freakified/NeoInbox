@@ -13,16 +13,20 @@ export interface MailAccount {
   color: string;
 }
 
-/** Assigned by account order, so each account keeps its color across reloads. */
+/**
+ * Assigned by account order, so each account keeps its color across reloads.
+ * Light tones with a dark initial, so the avatar stands out on every header
+ * color the app bar takes (the Inbox blue, Done's green, a bundle's color).
+ */
 const ACCOUNT_COLORS = [
-  "#4285F4",
-  "#0F9D58",
-  "#DB4437",
-  "#F4B400",
-  "#AB47BC",
-  "#00ACC1",
-  "#FF7043",
-  "#5C6BC0",
+  "#FFE082",
+  "#A5D6A7",
+  "#F48FB1",
+  "#CE93D8",
+  "#80DEEA",
+  "#FFAB91",
+  "#9FA8DA",
+  "#C5E1A5",
 ];
 
 type BareAccount = Omit<MailAccount, "color">;

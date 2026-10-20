@@ -22,9 +22,9 @@ describe("contact cards", () => {
   });
 
   it("reads a card's name and photo, matching the address in any case", async () => {
-    await boot(mailbox([{ emails: ["Priya@Example.com"], name: "Priya Raman", photo }]), { wireBackground: false });
+    await boot(mailbox([{ emails: ["Tessa@Example.com"], name: "Tessa Testington", photo }]), { wireBackground: false });
     const { contactFor } = await import("./contactCards");
-    expect(await contactFor("priya@EXAMPLE.com")).toEqual({ name: "Priya Raman", photo: "blob:photo0" });
+    expect(await contactFor("tessa@EXAMPLE.com")).toEqual({ name: "Tessa Testington", photo: "blob:photo0" });
   });
 
   it("finds a card by any of its addresses, past the first two", async () => {

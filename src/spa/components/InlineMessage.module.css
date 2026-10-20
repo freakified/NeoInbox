@@ -10,16 +10,8 @@
   cursor: pointer;
 }
 
-.header:hover {
-  background: #fafafa;
-}
-
 .headerLocked {
   cursor: default;
-}
-
-.headerLocked:hover {
-  background: transparent;
 }
 
 .avatar {

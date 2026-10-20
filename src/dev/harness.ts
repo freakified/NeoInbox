@@ -81,6 +81,17 @@ const start = async (): Promise<void> => {
   };
   (window as unknown as { neo: typeof neo }).neo = neo;
 
+  if (demo && fresh) {
+    // Let the archive job finish before the app mounts. The SPA then learns
+    // of the finished scan through hello rather than watching it end, so the
+    // "Older mail loaded" toast, which no demo visitor asked for, never shows.
+    const { getLastArchiveScan } = await import("../background/extract");
+    const giveUpAt = Date.now() + 10_000;
+    while (!(await getLastArchiveScan()) && Date.now() < giveUpAt) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
   await import("../spa/main");
 };
 

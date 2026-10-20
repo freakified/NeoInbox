@@ -4,39 +4,51 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>NeoInbox: Google Inbox, reborn for Thunderbird</title>
-    <meta name="description" content="Bundles, trips, pins, snoozes and reminders. Inbox by Gmail, rebuilt as a Thunderbird add-on for any email account." />
+    <meta name="description" content="Recreating the classic Google Inbox experience, fully local and for any email account. A Thunderbird add-on with bundles, trips, pins, snoozes and reminders." />
     <meta property="og:title" content="NeoInbox: Google Inbox, reborn for Thunderbird" />
-    <meta property="og:description" content="Bundles, trips, pins, snoozes and reminders, for any email account." />
+    <meta property="og:description" content="Recreating the classic Google Inbox experience, fully local and for any email account." />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <script type="module" src="./landing.ts"></script>
   </head>
   <body>
     <header class="hero">
-      <div class="brand">
-        <img src="/icon.svg" alt="" width="40" height="40" />
-        <span>NeoInbox</span>
-      </div>
-      <h1>Google Inbox is back.</h1>
+      <h1>
+        <img src="/icon.svg" alt="" width="64" height="64" />
+        NeoInbox
+      </h1>
       <p class="lede">
-        Bundles, trips, pins, snoozes and reminders: Inbox by Gmail, rebuilt as a
-        Thunderbird add-on that works with any email account.
+        Recreating the classic Google™ Inbox experience, fully local and for any email account.
       </p>
       <div class="actions">
-        <a class="button primary" href="/demo">Try the live demo</a>
-        <a class="button" href="https://github.com/freakified/NeoInbox">View on GitHub</a>
+        <a class="button primary" href="#install">Install</a>
+        <a class="button" href="/demo">Try the live demo</a>
       </div>
     </header>
 
     <section class="live" aria-label="Live demo">
-      <div class="window">
-        <div class="window-bar"><span></span><span></span><span></span></div>
-        <iframe src="/demo" title="NeoInbox live demo"></iframe>
+      <div class="stage">
+        <div class="window">
+          <div class="window-bar">
+            <div class="lights">
+              <button class="close" type="button" aria-label="Close the demo"></button>
+              <button class="minimize" type="button" aria-label="Minimize the demo"></button>
+              <a class="zoom" href="/demo" aria-label="Open the demo full screen"></a>
+            </div>
+            <span class="window-title" aria-hidden="true">NeoInbox Live Demo</span>
+          </div>
+          <iframe src="/demo" title="NeoInbox live demo"></iframe>
+        </div>
+        <div class="dock" hidden>
+          <div class="dock-shelf">
+            <button class="dock-app" type="button" aria-label="Reopen the demo">
+              <img src="/icon.svg" alt="" width="56" height="56" />
+              <span class="dock-tip" aria-hidden="true">NeoInbox</span>
+            </button>
+            <span class="dock-dot"></span>
+          </div>
+          <p class="dock-status" aria-live="polite"></p>
+        </div>
       </div>
-      <p class="caption wide-only">
-        That's the real app, running on a sample mailbox right in your browser. Go ahead: open a
-        bundle, mark something done, pin a message.
-        <a href="/demo">Open it full screen</a>
-      </p>
       <p class="caption narrow-only">
         The live demo runs the real app on a sample mailbox, and it's made for a bigger screen.
         Try it on a computer, or <a href="/demo">open it here anyway</a>.
@@ -44,61 +56,97 @@
     </section>
 
     <section class="features">
+      <article style="--accent: #3f51b5">
+        <h2>Unified Mail Stream</h2>
+        <p>
+          All emails seamlessly flow into one another, with smooth animations!
+        </p>
+      </article>
       <article style="--accent: #795548">
         <h2>Bundles</h2>
         <p>
-          Receipts, statements, newsletters and notifications gather into bundles you can clear
-          in one click. Make your own bundles, and teach them by moving mail.
+          Forget about like folders or whatever; emails are "bundled" as part of the mail stream, cleanly grouping things in logical categories. 
         </p>
       </article>
       <article style="--accent: #3f51b5">
         <h2>Trips</h2>
         <p>
-          Flight, hotel, train and dinner confirmations come together as one trip, whether it's
-          next week or last year.
+          Flight, hotel, train and dinner confirmations are automatically parsed and bundled together as trip!
         </p>
       </article>
       <article style="--accent: #5ca46f">
         <h2>Done, pin, snooze</h2>
         <p>
-          Mark mail done to clear it. Pin what matters. Snooze the rest until tomorrow, the
-          weekend, or whenever you need it.
+          Achive the mythical state of Inbox Zero by marking completed messages as done, or just snooze them until later!
         </p>
       </article>
       <article style="--accent: #4285f4">
         <h2>Reminders</h2>
-        <p>Jot down to-dos right in your inbox, next to the mail they're about.</p>
-      </article>
-      <article style="--accent: #df742c">
-        <h2>Package tracking</h2>
-        <p>
-          Shipping emails get a card with a tracking link. UPS, USPS, FedEx, Yamato and more are
-          recognised automatically.
-        </p>
+        <p>Instead of emailing yourself, you can just directly input reminders into the inbox!</p>
       </article>
       <article style="--accent: #212121">
-        <h2>Private by design</h2>
+        <h2>Fully local</h2>
         <p>
-          Sorting happens on your computer. No servers, no telemetry, no account to sign up for.
-          Your mail stays in Thunderbird.
+          All sorting happens on your computer, with telemetry, subscriptions, or other unpleasantries!
         </p>
       </article>
     </section>
 
-    <section class="get">
-      <h2>Get NeoInbox</h2>
+    <section class="install" id="install">
+      <h2>Install NeoInbox</h2>
       <p>
-        NeoInbox needs Thunderbird 115 or newer and works with any account Thunderbird can open:
-        Gmail, Outlook, Fastmail, or your own server.
+        NeoInbox should work with any account Thunderbird can open:
+        Gmail, Outlook, Yahoo! Mail, or even your own server.
       </p>
-      <a class="button primary" href="https://github.com/freakified/NeoInbox#install">Install instructions</a>
+      <ol class="steps">
+        <li>
+          Download <strong>neoinbox.xpi</strong> from the
+          <a href="https://github.com/freakified/NeoInbox/releases/latest">latest release on GitHub</a>.
+        </li>
+        <li>In Thunderbird, open <strong>Add-ons and Themes</strong> from the ≡ menu.</li>
+        <li>
+          Click the gear icon, choose <strong>Install Add-on From File…</strong> and pick the
+          file you downloaded.
+        </li>
+        <li>
+          NeoInbox opens in a new tab. Later, open it from the <strong>NeoInbox</strong> button
+          in the toolbar.
+        </li>
+      </ol>
+      <p class="note">
+        NeoInbox is coming to addons.thunderbird.net, which will keep it up to date
+        automatically. Until then, you can install new versions directly from GitHub.
+      </p>
+      <a class="button primary" href="https://github.com/freakified/NeoInbox/releases/latest">Download from GitHub</a>
+    </section>
+
+    <section class="faq">
+      <h2>FAQ</h2>
+      <h3>Why a Thunderbird extension? Why not just vibecode an entire email client?</h3>
+      <p>
+        Email is a pile of legacy cruft and strange workarounds. There’s a reason why basically
+        every fancy email frontend tends to just call the Gmail API instead of doing things the
+        standards-compliant email way (via IMAP). By using Thunderbird (an ancient and highly
+        proven open source email client) as the basis, we can conveniently sidestep all the
+        backend craziness and focus on what matters: building the ultimate email UX.
+      </p>
+      <h3>Why is there no “mark as unread”?</h3>
+      <p>
+        Short answer: the real Inbox didn’t have one! Longer answer: Inbox was designed around
+        the concept of task-based email: an email is either “done” or “not done”. Whether or
+        not you’ve read it is fundamentally irrelevant to its “done”-ness. Also, if you think
+        about it, “unreading” a message makes no sense, conceptually; it’s just a convenient
+        workaround we tend to use for “I should probably do something with this email later”,
+        which is better served by keeping the email not done.
+      </p>
     </section>
 
     <footer>
       <p>
         NeoInbox is free and open source under the
-        <a href="https://github.com/freakified/NeoInbox/blob/master/LICENSE">MPL-2.0</a>. It is not
-        affiliated with Google.
+        <a href="https://github.com/freakified/NeoInbox/blob/master/LICENSE">MPL-2.0</a>, and
+        <a href="https://github.com/freakified/NeoInbox">on GitHub</a>. It is not affiliated
+        with, endorsed by, or sponsored by Google. Google is a trademark of Google LLC.
       </p>
     </footer>
   </body>

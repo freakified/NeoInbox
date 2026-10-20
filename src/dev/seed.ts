@@ -45,6 +45,24 @@ export interface ThreadStep {
   read?: boolean;
 }
 
+interface Quoted {
+  author: string;
+  date: Date;
+  text: string;
+}
+
+/** Paragraphs as plain text, then the previous message quoted the way Gmail does. */
+const plainBody = (body: string[], quoted: Quoted | null): string => {
+  const own = body.join("\n\n");
+  if (!quoted) return own;
+  const when = quoted.date.toLocaleString("en-US", {
+    weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+  });
+  const name = quoted.author.replace(/\s*<.*>$/, "");
+  const lines = quoted.text.split("\n").map((l) => (l.startsWith(">") ? `>${l}` : l ? `> ${l}` : ">"));
+  return `${own}\n\nOn ${when}, ${name} wrote:\n${lines.join("\n")}`;
+};
+
 /**
  * A conversation as Thunderbird stores it: their messages in the inbox, mine
  * in Sent, every reply carrying In-Reply-To/References back up the chain.
@@ -54,10 +72,13 @@ export const thread = (
   steps: ThreadStep[],
   now: number,
   me = ME,
+  /** Send text/plain, each reply quoting the one before, as people's mail mostly is. */
+  { plain = false }: { plain?: boolean } = {},
 ): { inbox: FakeMessageSpec[]; sent: FakeMessageSpec[] } => {
   const inbox: FakeMessageSpec[] = [];
   const sent: FakeMessageSpec[] = [];
   const chain: string[] = [];
+  let quoted: Quoted | null = null;
   const correspondent = steps.find((s) => s.from !== "me")?.from ?? "Someone <someone@example.com>";
   steps.forEach((step, i) => {
     const headerMessageId = mid();
@@ -75,10 +96,11 @@ export const thread = (
       date: new Date(now - step.hoursAgo * HOUR),
       read: mine || (step.read ?? false),
       headers,
-      html: paragraphs(...step.body),
+      ...(plain ? { text: plainBody(step.body, quoted) } : { html: paragraphs(...step.body) }),
     };
     (mine ? sent : inbox).push(spec);
     chain.push(headerMessageId);
+    quoted = { author: spec.author!, date: spec.date as Date, text: spec.text ?? "" };
   });
   return { inbox, sent };
 };
@@ -180,9 +202,9 @@ export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
   const hike = thread(
     "Hike this weekend?",
     [
-      { from: "Priya Raman <priya@example.com>", hoursAgo: 30, body: ["Mt. Tam on Saturday? Thinking an 8am start."] },
+      { from: "Tessa Testington <tessa.testington@example.com>", hoursAgo: 30, body: ["Mt. Tam on Saturday? Thinking an 8am start."] },
       { from: "me", hoursAgo: 28, body: ["I'm in. Steep Ravine loop?"] },
-      { from: "Priya Raman <priya@example.com>", hoursAgo: 1.5, body: ["Perfect. I'll grab coffee on the way — oat latte?"] },
+      { from: "Tessa Testington <tessa.testington@example.com>", hoursAgo: 1.5, body: ["Perfect. I'll grab coffee on the way — oat latte?"] },
     ],
     now,
   );
@@ -190,7 +212,7 @@ export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
     "Q4 planning notes",
     [
       {
-        from: "Sam Okafor <sam@work.example>",
+        from: "Sam Sampleton <sam@work.example>",
         hoursAgo: 5,
         body: [
           "Hi all — rough notes from today:",
@@ -199,14 +221,14 @@ export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
         ],
       },
       { from: "me", hoursAgo: 4, body: ["Thanks Sam — I'll take the sync rewrite."] },
-      { from: "Sam Okafor <sam@work.example>", hoursAgo: 2, body: ["Great, I'll put you down for it."] },
+      { from: "Sam Sampleton <sam@work.example>", hoursAgo: 2, body: ["Great, I'll put you down for it."] },
     ],
     now,
     WORK_ME,
   );
   const review = thread(
     "Design review moved to Thursday",
-    [{ from: "Lena Park <lena@work.example>", hoursAgo: 26, body: ["Room 4B, 2pm. Bring the onboarding mocks."] }],
+    [{ from: "Mary Meetingsworth <mary@work.example>", hoursAgo: 26, body: ["Room 4B, 2pm. Bring the onboarding mocks."] }],
     now,
     WORK_ME,
   );
@@ -278,7 +300,7 @@ export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
         id: "dev",
         // Thunderbird's default: an account named after its address.
         name: ME,
-        identities: [{ email: ME, name: "Alex Rivera" }],
+        identities: [{ email: ME, name: "Alex Inboxley" }],
         folders: [
           { id: INBOX, name: "Inbox", specialUse: ["inbox"], messages: inbox },
           { id: SENT, name: "Sent", specialUse: ["sent"], messages: [...hike.sent, ...lease.sent] },
@@ -307,9 +329,9 @@ export const seedMailbox = (now = Date.now()): FakeMessengerOptions => {
     // Your own card (photo on the second of two, as Thunderbird merges
     // them), and cards for some correspondents; Sam and Lena have none.
     contacts: [
-      { emails: [ME], name: "Alex Rivera" },
-      { emails: [WORK_ME, ME], name: "Alex Rivera", photo: portrait("#8ab4f8", "#f3d2b6", "#1a73e8") },
-      { emails: ["priya@example.com"], name: "Priya Raman", photo: portrait("#fdd663", "#c68863", "#d93025") },
+      { emails: [ME], name: "Alex Inboxley" },
+      { emails: [WORK_ME, ME], name: "Alex Inboxley", photo: portrait("#8ab4f8", "#f3d2b6", "#1a73e8") },
+      { emails: ["tessa.testington@example.com"], name: "Tessa Testington", photo: portrait("#fdd663", "#c68863", "#d93025") },
       { emails: ["mom@family.example"], name: "Mom", photo: portrait("#a8dab5", "#e8b896", "#7e57c2") },
     ],
   };

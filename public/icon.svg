@@ -1,1 +1,89 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -1.5 44 44"><path fill="#2A56C6" d="M42.8 14.6l-7.7-5.7L23.8.6C23.3.2 22.7 0 22 0s-1.3.2-1.8.6l-19 14c-.6.4-1 1-1.1 1.7-.1.2-.1.5-.1.7h44c0-1-.5-1.9-1.2-2.4z"/><path fill="#1C3AA9" d="M42.8 14.6l-7.7-5.7L23.8.6C23.3.2 22.7 0 22 0s-1.3.2-1.8.6l-19 14c-.6.4-1 1-1.1 1.7-.1.2-.1.5-.1.7h44c0-1-.5-1.9-1.2-2.4z" opacity=".4"/><path fill="#FFF" fill-opacity=".2" d="M1.2 14.8l19-14c.5-.4 1.1-.6 1.8-.6s1.3.2 1.8.6l19 14c.7.5 1.1 1.3 1.2 2.2 0-1-.5-1.9-1.2-2.4l-19-14C23.3.2 22.7 0 22 0s-1.3.2-1.8.6l-19 14c-.2.1-.4.3-.5.5-.4.5-.7 1.2-.7 1.9.1-.9.5-1.7 1.2-2.2z"/><path fill="#3B78E7" d="M0 17v21c0 1.7 1.3 3 3 3h38c1.7 0 3-1.3 3-3V17H0z"/><path fill="#3367D6" d="M0 17v21c0 1.7 1.3 3 3 3h38c1.7 0 3-1.3 3-3V17H0z" opacity=".4"/><linearGradient id="a" x1="11498.8184" x2="11532.6172" y1="8522.3193" y2="8556.1172" gradientTransform="matrix(.25 0 0 .25 -2845.5 -2115.5)" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1c3aa9" stop-opacity=".2"/><stop offset="1" stop-color="#1c3aa9" stop-opacity=".02"/></linearGradient><path fill="url(#a)" d="M42.8 14.6l-7.7-5.7L22 17v5l19 19c1.7 0 3-1.3 3-3V17c0-1-.5-1.9-1.2-2.4z"/><linearGradient id="b" x1="11514" x2="11514" y1="8497.5996" y2="8530.8398" gradientTransform="matrix(.25 0 0 .25 -2845.5 -2115.5)" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1c3aa9" stop-opacity=".2"/><stop offset="1" stop-color="#1c3aa9" stop-opacity=".02"/></linearGradient><path fill="url(#b)" d="M42.8 14.6l-7.7-5.7L22 17v5l19 19c1.7 0 3-1.3 3-3V17c0-1-.5-1.9-1.2-2.4z"/><path fill="#FFF" fill-opacity=".05" d="M0 17h44v.2H0z"/><path fill="#1A237E" fill-opacity=".05" d="M44 17v-.2H0v.2h44z"/><path fill="#03A9F4" d="M0 38c0 1.7 1.3 3 3 3h38L0 17v21z"/><path fill="#1A237E" fill-opacity=".1" d="M41 40.8L.4 17H0l40.6 23.8z"/><path fill="#4FC3F7" d="M3 41h38c1.7 0 3-1.3 3-3V17L3 41z"/><path fill="#262626" fill-opacity=".2" d="M41 40.8H3c-1.7 0-3-1.3-3-3v.2c0 1.7 1.3 3 3 3h38c1.7 0 3-1.3 3-3v-.2c0 1.6-1.3 3-3 3z"/><path fill="#E1E1E1" d="M16.5 11.5L14 14l8 8L35.1 8.9l3.4-3.4L36 3l-3.8 3.8L22 17z"/><path fill="#FFF" fill-opacity=".4" d="M16.5 11.5L14 14l.1.1 2.4-2.3 5.5 5.4L36 3.3l2.2 2.2h.3L36 3l-3.8 3.8L22 17z"/><path fill="#262626" fill-opacity=".1" d="M22 21.8l-7.9-7.9-.1.1 8 8L35.1 8.9l3.4-3.4h-.3z"/><path fill="#262626" fill-opacity=".1" d="M35.1 8.9L22 22l-7.9-7.9-.1.1 8 8L35.2 9z"/><path fill="#FFF" fill-opacity=".1" d="M44 17L3 41h.4L44 17.2z"/><path fill="#1A237E" fill-opacity=".1" d="M21.8 29.8l.2.1L44 17h-.4z"/><radialGradient id="c" cx="11417.4297" cy="8497.4131" r="185.7808" gradientTransform="matrix(.25 0 0 .25 -2845.5 -2115.5)" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient><path fill="url(#c)" d="M42.8 14.6l-7.7-5.7 3.4-3.4L36 3l-3.8 3.8L23.8.6C23.3.2 22.7 0 22 0s-1.3.2-1.8.6l-19 14C.5 15.1 0 16 0 17v21c0 1.7 1.3 3 3 3h38c1.7 0 3-1.3 3-3V17c0-1-.5-1.9-1.2-2.4z"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1.5 -2.5 48 48">
+  <!-- viewBox is offset by half a unit so 1-unit strokes on integer coords land on whole pixels at 48px -->
+  <defs>
+    <!-- envelope silhouette: roof + body -->
+    <path id="env" d="M1.2 14.6l19-14C20.7.2 21.3 0 22 0s1.3.2 1.8.6l19 14c.7.5 1.2 1.4 1.2 2.4v21c0 1.7-1.3 3-3 3H3c-1.7 0-3-1.3-3-3V17c0-1 .5-1.9 1.2-2.4z"/>
+    <path id="check" d="M16.5 11.5L14 14l8 8L38.5 5.5 36 3 22 17z"/>
+    <clipPath id="envClip"><use href="#env"/></clipPath>
+
+    <filter id="shadow" filterUnits="userSpaceOnUse" x="-1.5" y="-2.5" width="48" height="48">
+      <feGaussianBlur in="SourceAlpha" stdDeviation=".5"/>
+      <feOffset dx=".7" dy="1"/>
+      <feComponentTransfer><feFuncA type="linear" slope=".45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- inside of the envelope: deep, shadowed blue -->
+    <linearGradient id="inside" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4f8ef0"/>
+      <stop offset=".55" stop-color="#2459c9"/>
+      <stop offset="1" stop-color="#123a9c"/>
+    </linearGradient>
+    <!-- front pocket flaps: bright Luna sky blue -->
+    <linearGradient id="flapL" x1="0" y1="17" x2="0" y2="41" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7fd6ff"/>
+      <stop offset=".5" stop-color="#2aa8f2"/>
+      <stop offset="1" stop-color="#0a6fcc"/>
+    </linearGradient>
+    <linearGradient id="flapR" x1="0" y1="17" x2="0" y2="41" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#c4efff"/>
+      <stop offset=".5" stop-color="#62c6fa"/>
+      <stop offset="1" stop-color="#2493e0"/>
+    </linearGradient>
+    <!-- glossy white check with a cool grey underside -->
+    <linearGradient id="checkFill" x1="0" y1="3" x2="0" y2="22" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset=".5" stop-color="#f1f4f9"/>
+      <stop offset="1" stop-color="#c9d1de"/>
+    </linearGradient>
+    <!-- top-down gloss sheen -->
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".75"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".05"/>
+    </linearGradient>
+    <!-- inner bevel: bright along the top, fading out toward the bottom -->
+    <linearGradient id="bevel" x1="0" y1="0" x2="0" y2="41" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff" stop-opacity=".8"/>
+      <stop offset=".45" stop-color="#fff" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".15"/>
+    </linearGradient>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <!-- envelope interior (roof + back wall) -->
+    <use href="#env" fill="url(#inside)"/>
+
+    <g clip-path="url(#envClip)">
+      <!-- soft sheen on the roof -->
+      <path d="M2 15.2L21 1.4c.6-.4 1.4-.4 2 0l19 13.8c-6 1.6-13 2.4-20 2.4S8 16.8 2 15.2z" fill="url(#gloss)" opacity=".55"/>
+
+      <!-- roof fold behind the check: dark crease with a light bevel just below -->
+      <path d="M0 17h44" stroke="#0a2f80" stroke-width="1"/>
+      <path d="M0 18h44" stroke="#fff" stroke-opacity=".45" stroke-width="1"/>
+
+      <!-- front pocket -->
+      <path d="M0 17v21c0 1.7 1.3 3 3 3h38z" fill="url(#flapL)"/>
+      <path d="M44 17v21c0 1.7-1.3 3-3 3H3z" fill="url(#flapR)"/>
+      <!-- top fold: dark crease with a light bevel just below -->
+      <path d="M0 17l22 13L44 17" fill="none" stroke="#0b3f8f" stroke-width="1" stroke-linejoin="round"/>
+      <path d="M0 18l22 13L44 18" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="1" stroke-linejoin="round"/>
+      <!-- lower crease: edge of the right flap, which overlaps the left -->
+      <path d="M3 41l19-11" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1" transform="translate(0 1)"/>
+      <path d="M3 41l19-11" fill="none" stroke="#0b4a9a" stroke-opacity=".85" stroke-width="1"/>
+
+      <!-- glassy highlight across the upper half of the pocket -->
+      <path d="M-1 18.5l23 13 23-13V26c-7 3.5-15 5-23 5S6 29.5-1 26z" fill="#fff" opacity=".18"/>
+      <!-- inner bevel: double-width stroke clipped to the silhouette, so exactly 1 unit shows inside the edge -->
+      <use href="#env" fill="none" stroke="url(#bevel)" stroke-width="3"/>
+    </g>
+
+    <!-- crisp dark navy outline -->
+    <use href="#env" fill="none" stroke="#0a2a6e" stroke-width="1" stroke-linejoin="round"/>
+
+    <!-- checkmark, scaled up 15% around its centre; stroke compensated to stay 1 unit -->
+    <g transform="translate(26.25 12.5) scale(1.15) translate(-26.25 -12.5)">
+      <use href="#check" fill="url(#checkFill)" stroke="#3f5378" stroke-width=".87" stroke-linejoin="round"/>
+      <path d="M15.2 14l1.3-1.3 5.5 5.5L36 4.2l1.2 1.2L36 4.6 22 18.6z" fill="#fff" opacity=".9"/>
+    </g>
+  </g>
+</svg>

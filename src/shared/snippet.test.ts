@@ -32,7 +32,7 @@ describe("snippetFromPart", () => {
   });
 
   it("cuts at a signature and skips quoted lines", () => {
-    const body = "> earlier\nThanks!\n-- \nSam Okafor\nVP Ops";
+    const body = "> earlier\nThanks!\n-- \nSam Sampleton\nVP Ops";
     expect(snippetFromPart(part("text/plain", body))).toBe("Thanks!");
   });
 
