@@ -1,4 +1,4 @@
-import manifest from "../../../public/manifest.json";
+import { version } from "../../../package.json";
 import { log } from "../../shared/log";
 
 export const REPO_URL = "https://github.com/freakified/NeoInbox";
@@ -21,7 +21,7 @@ const environment = async (): Promise<string> => {
     messenger.runtime.getPlatformInfo().catch(() => null),
   ]);
   return [
-    `- NeoInbox: ${manifest.version}`,
+    `- NeoInbox: ${version}`,
     browser && `- ${browser.name}: ${browser.version}`,
     platform && `- OS: ${platform.os} (${platform.arch})`,
   ].filter(Boolean).join("\n");

@@ -16,7 +16,7 @@ Press <kbd>?</kbd> in the app to see the keyboard shortcuts.
 
 ## Install
 
-Requires Thunderbird 115+.
+Requires Thunderbird 128+.
 
 ```sh
 pnpm install

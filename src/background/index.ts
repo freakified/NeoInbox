@@ -199,7 +199,8 @@ startPortServer();
 installTripScan();
 installTripExtract();
 installClassifyDump();
-installSampleDump();
+// Posts real mail to a local receiver for `pnpm eval`; never in a release.
+if (import.meta.env.MODE === "development") installSampleDump();
 // Carries a classifier rules change to mail that is already cached. Runs in
 // chunks behind whatever scan onInstalled/onStartup kicked off, and no-ops
 // entirely when the stored version already matches.

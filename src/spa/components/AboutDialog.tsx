@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import manifest from "../../../public/manifest.json";
+import { version } from "../../../package.json";
 import { REPO_URL, openExternal, openNewIssue } from "../lib/external";
 import { Icon } from "./Icon";
 import s from "./AboutDialog.module.css";
@@ -27,7 +27,7 @@ export const AboutDialog = ({ onClose }: { onClose: () => void }) => {
         </button>
         <img className={s.logo} src="icon.svg" alt="" />
         <h2 id="about-title" className={s.title}>NeoInbox</h2>
-        <p className={s.version}>Version {manifest.version}</p>
+        <p className={s.version}>Version {version}</p>
         <p className={s.blurb}>
           The Google Inbox experience, reimplemented as a Thunderbird extension. Finally relive the glory days, with any email account!
         </p>
@@ -43,7 +43,7 @@ export const AboutDialog = ({ onClose }: { onClose: () => void }) => {
           Free software under the Mozilla Public License 2.0.
         </p>
         <p className={s.fine}>
-          Not affiliated with Google.
+          NeoInbox is an independent project and is not affiliated with, endorsed by, or sponsored by Google. Google and Gmail are trademarks of Google LLC.
         </p>
         <button type="button" className={s.close} onClick={onClose}>
           Close
