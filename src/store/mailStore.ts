@@ -10,6 +10,7 @@ import { mailSlice } from "./mailSlice";
 import { connectPort } from "./portClient";
 import { searchCachedMail } from "./search";
 import { log } from "../shared/log";
+import { getTripsEnabled, TRIPS_ENABLED_KEY } from "../shared/tripsSetting";
 import { remindersSlice, startReminderWakeTimer } from "./remindersSlice";
 import { applyServerMsg } from "./serverMsg";
 import type {
@@ -56,6 +57,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   remindersById: {},
   tripsById: {},
   tripMembershipByKey: {},
+  tripsEnabled: true,
   toasts: [],
   pendingReplies: [],
   newMessageRequest: null,
@@ -75,7 +77,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
 
   init: async () => {
     if (get().hydrated) return;
-    const [rawBundles, routeRules, snoozes, reminders, trips, tripMemberships, accounts] =
+    const [rawBundles, routeRules, snoozes, reminders, trips, tripMemberships, accounts, tripsEnabled] =
       await Promise.all([
         db.customBundles.toArray(),
         db.routeRules.toArray(),
@@ -84,6 +86,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
         db.trips.toArray(),
         db.tripMemberships.toArray(),
         listAccounts(),
+        getTripsEnabled(),
       ]);
     const { rows, historyFrom } = await loadStartupMessages(tripMemberships);
     const customBundles = rawBundles.sort((a, b) => a.order - b.order);
@@ -107,7 +110,13 @@ export const useMailStore = create<MailStore>((set, get) => ({
       remindersById,
       tripsById,
       tripMembershipByKey,
+      tripsEnabled,
       accountFilter: startingAccountFilter(accounts),
+    });
+
+    messenger.storage.onChanged.addListener((changes, area) => {
+      const change = (changes as Record<string, { newValue?: unknown }>)[TRIPS_ENABLED_KEY];
+      if (area === "local" && change) set({ tripsEnabled: change.newValue !== false });
     });
 
     startReminderWakeTimer(get);
@@ -190,6 +199,9 @@ export const useStream = (): Stream => {
   );
 }
 
+const NO_TRIPS: Record<string, TripRecord> = {};
+const NO_MEMBERSHIPS: Record<string, TripMembershipRecord> = {};
+
 export const useStreamForView = (view: StreamView, pinnedOnly = false): Stream => {
   const messagesByKey = useMailStore((s) => s.messagesByKey);
   const myEmails = useMailStore((s) => s.myEmails);
@@ -197,6 +209,7 @@ export const useStreamForView = (view: StreamView, pinnedOnly = false): Stream =
   const remindersById = useMailStore((s) => s.remindersById);
   const tripsById = useMailStore((s) => s.tripsById);
   const tripMembershipByKey = useMailStore((s) => s.tripMembershipByKey);
+  const tripsEnabled = useMailStore((s) => s.tripsEnabled);
   const accountFilter = useMailStore((s) => s.accountFilter);
   return useMemo(
     () =>
@@ -207,8 +220,9 @@ export const useStreamForView = (view: StreamView, pinnedOnly = false): Stream =
         snoozesByKey,
         pinnedOnly,
         remindersById,
-        tripsById,
-        tripMembershipByKey,
+        // Turned off, trips are kept but not shown: their mail is in Travel.
+        tripsEnabled ? tripsById : NO_TRIPS,
+        tripsEnabled ? tripMembershipByKey : NO_MEMBERSHIPS,
         accountFilter,
       ),
     [
@@ -220,6 +234,7 @@ export const useStreamForView = (view: StreamView, pinnedOnly = false): Stream =
       remindersById,
       tripsById,
       tripMembershipByKey,
+      tripsEnabled,
       accountFilter,
     ],
   );

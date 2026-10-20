@@ -644,6 +644,19 @@
   padding: 4px 0;
 }
 
+/* A choice's name over a line explaining it. */
+.choiceText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.choiceHint {
+  color: var(--color-md-secondary-text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .policyInput {
   appearance: none;
   flex: 0 0 auto;

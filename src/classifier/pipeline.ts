@@ -10,12 +10,13 @@ import { matchesFinance } from "./rules/finance";
 import { matchesSocial } from "./rules/social";
 import { matchesPromos } from "./rules/promos";
 import { matchesUpdates } from "./rules/updates";
+import { getTripsEnabled } from "../shared/tripsSetting";
 
 /**
  * Changing any rule below means bumping CLASSIFIER_VERSION in ./version.
  *
- * Travel goes to Updates, as Google Inbox filed travel mail no trip had
- * claimed. A booking that is in a trip still shows there: the stream groups
+ * With trips on, travel goes to Updates, as Google Inbox filed travel mail no
+ * trip had claimed; with trips off it has its own Travel bundle. A booking that is in a trip still shows there: the stream groups
  * by trip membership before category. Airline marketing never gets here —
  * matchesTravel steps aside for a promotional subject, and Promos takes it.
  * It is an explicit early return so purchases and finance, whose wording
@@ -36,11 +37,11 @@ import { matchesUpdates } from "./rules/updates";
  * Notification" and "Mail delivery failed" read like parcel notices to every
  * rule behind it.
  */
-export const classifyByRules = (f: Features): Category | null => {
+export const classifyByRules = (f: Features, tripsEnabled = true): Category | null => {
   if (matchesForums(f)) return "forums";
   if (isBounce(f)) return "updates";
   if (matchesPersonal(f)) return null;
-  if (matchesTravel(f)) return "updates";
+  if (matchesTravel(f)) return tripsEnabled ? "updates" : "travel";
   if (matchesPurchases(f)) return "purchases";
   if (matchesFinance(f)) return "finance";
   if (matchesSocial(f)) return "social";
@@ -50,9 +51,11 @@ export const classifyByRules = (f: Features): Category | null => {
 }
 
 export const classify = async (f: Features): Promise<Category | null> => {
-  const routed = await matchRouteRules(f);
+  const [routed, tripsEnabled] = await Promise.all([matchRouteRules(f), getTripsEnabled()]);
   // "personal" is an explicit route to the unbundled inbox; it also suppresses
-  // the heuristics below.
+  // the heuristics below. A rule into Travel files where travel goes with
+  // trips on, and comes back into force if they're turned off again.
+  if (routed === "travel" && tripsEnabled) return "updates";
   if (routed) return routed === "personal" ? null : routed;
-  return classifyByRules(f);
+  return classifyByRules(f, tripsEnabled);
 }

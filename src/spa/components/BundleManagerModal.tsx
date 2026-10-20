@@ -25,9 +25,16 @@ import { AdvancedSettings } from "./settings/AdvancedSettings";
 import { ArchiveSettings } from "./settings/ArchiveSettings";
 import { PrivacySettings } from "./settings/PrivacySettings";
 import { TranslationSettings } from "./settings/TranslationSettings";
-import { TripSettings } from "./settings/TripSettings";
+import { TripSettings, TripsToggle } from "./settings/TripSettings";
 import { TRIP_COLOR } from "./TripSliceRow";
 import { BuiltinBundleEditor, CustomBundleEditor, ThreadRouteSummary } from "./settings/BundleEditors";
+
+/** Trips and Travel are one slot; open whichever the setting shows. */
+const paneForTrips = (pane: SelectedPane, tripsEnabled: boolean): SelectedPane => {
+  if (tripsEnabled && pane.kind === "builtin" && pane.id === "travel") return { kind: "trips" };
+  if (!tripsEnabled && pane.kind === "trips") return { kind: "builtin", id: "travel" };
+  return pane;
+};
 
 export const BundleManagerModal = ({
   onClose,
@@ -50,6 +57,7 @@ export const BundleManagerModal = ({
   const setCustomBundle = useMailStore((st) => st.setCustomBundle);
   const deleteCustomBundle = useMailStore((st) => st.deleteCustomBundle);
   const notify = useMailStore((st) => st.notify);
+  const tripsEnabled = useMailStore((st) => st.tripsEnabled);
 
   const sender = useMemo(
     () => parseSender(thread?.messages[0]?.author ?? ""),
@@ -91,11 +99,12 @@ export const BundleManagerModal = ({
     return { kind: "builtin", id: thread ? "personal" : "updates" };
   };
 
-  const selectedAtOpen: SelectedPane = initialPane
+  const requestedPane: SelectedPane = initialPane
     ? { kind: initialPane }
     : thread || initialCategory || startNewBundle
       ? initialSelected()
       : { kind: "general" };
+  const selectedAtOpen = paneForTrips(requestedPane, tripsEnabled);
   const initialForm = (): BundleFormState => {
     if (selectedAtOpen.kind === "custom") {
       const bundle = customBundles.find((b) => b.id === selectedAtOpen.id);
@@ -237,6 +246,11 @@ export const BundleManagerModal = ({
     setRuleValue(thread ? threadRuleDefaults[type] : "");
   };
 
+  // The Trips pane and the Travel bundle swap places as trips turn on and off.
+  const onTripsToggle = (enabled: boolean) =>
+    setSelected(enabled ? { kind: "trips" } : { kind: "builtin", id: "travel" });
+  const travelRuleCount = routeRules.filter((r) => r.target === "travel").length;
+
   const exclusionCount = routeRules.filter((r) => r.target === "personal").length;
 
   // Escape closes Settings, but only while it's the topmost dialog: one
@@ -323,7 +337,28 @@ export const BundleManagerModal = ({
                 <Icon name="add" className={s.sideAddIcon} />
               </button>
             </div>
-            {BUNDLE_CATEGORIES.filter((cat) => cat !== "personal").map((cat) => {
+            {/* First, as in the drawer. */}
+            {tripsEnabled ? (
+              <button
+                type="button"
+                className={clsx(s.bundleNavItem, paneKey(selected) === "trips" && s.bundleNavItemActive)}
+                onClick={() => choose({ kind: "trips" })}
+              >
+                <Icon name="travel" className={s.navIcon} style={{ color: TRIP_COLOR }} />
+                <span className={s.navName}>Trips</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={clsx(s.bundleNavItem, paneKey(selected) === "builtin:travel" && s.bundleNavItemActive)}
+                onClick={() => choose({ kind: "builtin", id: "travel" })}
+              >
+                <Icon name={CATEGORIES.travel.icon} className={s.navIcon} style={{ color: CATEGORIES.travel.color }} />
+                <span className={s.navName}>{CATEGORIES.travel.name}</span>
+                {travelRuleCount > 0 && <span className={s.navCount}>{travelRuleCount}</span>}
+              </button>
+            )}
+            {BUNDLE_CATEGORIES.filter((cat) => cat !== "personal" && cat !== "travel").map((cat) => {
               const meta = CATEGORIES[cat];
               const selectedKey = paneKey(selected);
               const count = routeRules.filter((r) => r.target === cat).length;
@@ -340,14 +375,6 @@ export const BundleManagerModal = ({
                 </button>
               );
             })}
-            <button
-              type="button"
-              className={clsx(s.bundleNavItem, paneKey(selected) === "trips" && s.bundleNavItemActive)}
-              onClick={() => choose({ kind: "trips" })}
-            >
-              <Icon name="travel" className={s.navIcon} style={{ color: TRIP_COLOR }} />
-              <span className={s.navName}>Trips</span>
-            </button>
             {customBundles.map((bundle) => {
               const meta = getCategoryMeta(bundle.id, customBundles);
               return (
@@ -396,7 +423,7 @@ export const BundleManagerModal = ({
             ) : selected.kind === "archive" ? (
               <ArchiveSettings />
             ) : selected.kind === "trips" ? (
-              <TripSettings />
+              <TripSettings onToggle={onTripsToggle} />
             ) : (
               <>
                 {thread && (
@@ -419,6 +446,9 @@ export const BundleManagerModal = ({
                     onRuleValueChange={setRuleValue}
                     onAddRule={addRule}
                     conflict={conflictNote}
+                    settings={
+                      selected.id === "travel" ? <TripsToggle onChange={onTripsToggle} /> : undefined
+                    }
                   />
                 ) : (
                   <CustomBundleEditor

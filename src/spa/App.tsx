@@ -11,7 +11,7 @@ import {
   type StreamSection,
   type StreamView,
 } from "../store/mailStore";
-import { CATEGORIES, getCategoryMeta } from "../shared/categories";
+import { CATEGORIES, getCategoryMeta, visibleCategories } from "../shared/categories";
 import { resolveThread } from "../shared/threading";
 import type { MessageKey } from "../shared/messageKey";
 import { scrollKeeper } from "./lib/scrollKeeper";
@@ -43,7 +43,7 @@ import { moveRowFocus } from "./lib/rowNavigation";
 import { useSelection, visibleThreadIds } from "./lib/selection";
 import { TRIP_COLOR, TripSliceRow } from "./components/TripSliceRow";
 import { useKnownContacts } from "./lib/contacts";
-import { isSameView, parseHashView, viewHash } from "./lib/routing";
+import { isSameView, parseHashView, viewForTrips, viewHash } from "./lib/routing";
 import {
   recentSearches,
   rememberSearch,
@@ -218,7 +218,9 @@ export const App = () => {
   const contentRef = useRef<HTMLElement | null>(null);
   const bundleSettings = useBundleSettings();
   const closeBundleSettings = useMailStore((st) => st.closeBundleSettings);
-  const [activeView, setActiveView] = useState<StreamView>(parseHashView);
+  const [hashView, setHashView] = useState<StreamView>(parseHashView);
+  const tripsEnabled = useMailStore((st) => st.tripsEnabled);
+  const activeView = useMemo(() => viewForTrips(hashView, tripsEnabled), [hashView, tripsEnabled]);
   const [pinnedOnly, setPinnedOnly] = useState(false);
   const stream = useStreamForView(activeView, pinnedOnly);
   const [visibleItemLimit, setVisibleItemLimit] = useState(STREAM_PAGE_SIZE);
@@ -274,7 +276,7 @@ export const App = () => {
   useEffect(() => {
     const onHashChange = () => {
       const view = parseHashView();
-      setActiveView(view);
+      setHashView(view);
       setSearchText(view.type === "search" ? view.query : "");
       useSelection.getState().clear();
       scrollKeeper.release();
@@ -336,15 +338,18 @@ export const App = () => {
   const reconnecting = connectionState === "reconnecting";
   // Trips isn't listed with the bundles: like Google Inbox, it gets a
   // top-level drawer entry (each trip also rows up in the inbox on its own).
+  // Turned off, Travel is listed as a bundle in its place.
   const bundles = useMemo(
     () => [
-      ...Object.keys(CATEGORIES).filter((category) => category !== "personal"),
+      ...visibleCategories(Object.keys(CATEGORIES), tripsEnabled).filter(
+        (category) => category !== "personal",
+      ),
       ...customBundles.map((bundle) => bundle.id),
     ].map((category) => ({
       id: category,
       meta: getCategoryMeta(category, customBundles),
     })),
-    [customBundles],
+    [customBundles, tripsEnabled],
   );
   // Stable so the global key listener below isn't torn down and re-added on
   // every render of the stream.
@@ -354,11 +359,11 @@ export const App = () => {
     setOpenBundleThreadId(null);
     if (typeof window !== "undefined") {
       const nextHash = viewHash(view);
-      if (window.location.hash === nextHash) setActiveView(view);
+      if (window.location.hash === nextHash) setHashView(view);
       else window.location.hash = nextHash;
       if (window.matchMedia("(max-width: 979px)").matches) setDrawerOpen(false);
     } else {
-      setActiveView(view);
+      setHashView(view);
     }
   }, []);
   /** Empty the box, and leave the results for wherever search was started from. */
@@ -610,7 +615,7 @@ export const App = () => {
                   if (activeView.type !== "search" || !query) return;
                   const view: StreamView = { type: "search", query };
                   window.history.replaceState(null, "", viewHash(view));
-                  setActiveView(view);
+                  setHashView(view);
                 }}
                 onKeyDown={(e) => {
                   if (showSuggestions && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
@@ -754,14 +759,16 @@ export const App = () => {
               <div className={s.drawerLabel}>Bundled in the inbox</div>
               {/* Trips lived in this list in real Inbox, even though each
                   trip bundles individually rather than as one slice. */}
-              <button
-                type="button"
-                className={navClass({ type: "trips" })}
-                onClick={() => navigate({ type: "trips" })}
-              >
-                <Icon name="travel" className={s.navIcon} style={{ color: TRIP_COLOR }} />
-                <span>Trips</span>
-              </button>
+              {tripsEnabled && (
+                <button
+                  type="button"
+                  className={navClass({ type: "trips" })}
+                  onClick={() => navigate({ type: "trips" })}
+                >
+                  <Icon name="travel" className={s.navIcon} style={{ color: TRIP_COLOR }} />
+                  <span>Trips</span>
+                </button>
+              )}
               {bundles.map(({ id, meta }) => (
                 <button
                   type="button"

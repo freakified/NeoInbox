@@ -60,7 +60,7 @@ export const tripsSlice = (
   get: StoreGet,
 ): Pick<
   MailStore,
-  "createTrip" | "renameTrip" | "setTripMembership" | "scanTrips" | "stopTripScan"
+  "createTrip" | "renameTrip" | "setTripMembership" | "scanTrips" | "stopTripScan" | "setTripsEnabled"
 > => ({
   createTrip: (name) => {
     const record: TripRecord = {
@@ -181,4 +181,11 @@ export const tripsSlice = (
     send({ type: "trip-scan", archive, rebuild, importSince, inboxSince });
   },
   stopTripScan: () => send({ type: "trip-scan-cancel" }),
+  // The background stores the setting and re-files travel mail; other open
+  // NeoInbox pages hear of it through storage.onChanged (see mailStore init).
+  setTripsEnabled: (enabled) => {
+    if (get().tripsEnabled === enabled) return;
+    set({ tripsEnabled: enabled });
+    send({ type: "set-trips-enabled", enabled });
+  },
 });

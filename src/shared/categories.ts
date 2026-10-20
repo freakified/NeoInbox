@@ -9,6 +9,14 @@ export interface CategoryMeta {
 }
 
 export const CATEGORIES: Record<BuiltinCategory, CategoryMeta> = {
+  // Only a bundle while trips are off; see visibleCategories.
+  travel: {
+    key: "neoinbox-travel",
+    name: "Travel",
+    color: "#9C27B0",
+    icon: "travel",
+    order: 1,
+  },
   finance: {
     key: "neoinbox-finance",
     name: "Finance",
@@ -67,20 +75,22 @@ export const CATEGORIES: Record<BuiltinCategory, CategoryMeta> = {
  */
 export const LEGACY_PINNED_KEY = "neoinbox-pinned";
 export const LEGACY_SNOOZED_KEY = "neoinbox-snoozed";
-/**
- * The Travel bundle is gone (trips replaced it), so its key no longer comes
- * from CATEGORIES — but mailboxes tagged by older versions still carry it.
- */
-export const LEGACY_TRAVEL_KEY = "neoinbox-travel";
-
 export const NEO_TAG_KEYS: ReadonlySet<string> = new Set(
   [
     ...Object.values(CATEGORIES).map((m) => m.key).filter(Boolean),
     LEGACY_PINNED_KEY,
     LEGACY_SNOOZED_KEY,
-    LEGACY_TRAVEL_KEY,
   ],
 );
+
+/**
+ * Built-in categories as listed in the UI: Travel is a bundle only while
+ * trips are off, since with trips on it would always be empty.
+ */
+export const visibleCategories = <T extends string>(
+  categories: readonly T[],
+  tripsEnabled: boolean,
+): T[] => (tripsEnabled ? categories.filter((c) => c !== "travel") : [...categories]);
 
 /** Drops NeoInbox's legacy tag keys, leaving only the user's real tags. */
 export const sanitizeTags = (tags: readonly string[] | undefined): string[] =>

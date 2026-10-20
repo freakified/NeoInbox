@@ -259,6 +259,7 @@ export const ArchiveSettings = () => {
   const importingInbox = useMailStore((st) => !!st.inboxImport?.running);
   const importingArchive = useMailStore((st) => !!st.archiveImport?.running);
   const busy = scanning || importingInbox || importingArchive;
+  const tripsEnabled = useMailStore((st) => st.tripsEnabled);
 
   return (
     <div className={s.editor}>
@@ -267,7 +268,7 @@ export const ArchiveSettings = () => {
         <div>
           <h3 className={s.editorTitle}>Older mail</h3>
           <p className={s.editorDesc}>
-            Bring older inbox and archived mail into bundles, Done, and trips.
+            Bring older inbox and archived mail into {tripsEnabled ? "bundles, Done, and trips" : "bundles and Done"}.
           </p>
         </div>
       </div>

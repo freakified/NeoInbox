@@ -49,6 +49,11 @@ export type ClientMsg =
    * conversation is opened, which is the only time those headers matter.
    */
   | { type: "hydrate-details"; messageKeys: MessageKey[] }
+  /**
+   * Settings → Trips: turn trips on or off. Travel mail moves between
+   * Updates and the Travel bundle, and trips are swept again when turned on.
+   */
+  | { type: "set-trips-enabled"; enabled: boolean }
   /** Re-run the classify pipeline; all cached inbox messages when no ids given. */
   | { type: "reclassify"; messageKeys?: MessageKey[] }
   /**

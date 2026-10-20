@@ -103,6 +103,8 @@ export interface MailStore {
   remindersById: Record<string, ReminderRecord>;
   tripsById: Record<string, TripRecord>;
   tripMembershipByKey: Record<string, TripMembershipRecord>;
+  /** Off files travel mail in a Travel bundle instead; see tripsSetting.ts. */
+  tripsEnabled: boolean;
   toasts: ToastRecord[];
   pendingReplies: PendingReply[];
   bundleSettings: BundleSettingsRequest | null;
@@ -189,6 +191,7 @@ export interface MailStore {
     inboxSince?: number | null;
   }) => void;
   stopTripScan: () => void;
+  setTripsEnabled: (enabled: boolean) => void;
   /** Cache archived mail from headers alone, back to `since` (null: all of it). */
   importArchive: (since: number | null) => void;
   stopArchiveImport: () => void;

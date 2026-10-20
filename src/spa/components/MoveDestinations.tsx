@@ -1,12 +1,13 @@
-import { CATEGORIES } from "../../shared/categories";
+import { CATEGORIES, visibleCategories } from "../../shared/categories";
 import type { BuiltinCategory, Category, TripRecord } from "../../shared/types";
-import { useCustomBundles } from "../../store/mailStore";
+import { useCustomBundles, useMailStore } from "../../store/mailStore";
 import { Icon } from "./Icon";
 import { TRIP_COLOR } from "./TripSliceRow";
 import s from "./BundleMenu.module.css";
 
 // Trips aren't in this list because they aren't categories — they're appended
-// separately below, from the live trip records.
+// separately below, from the live trip records. Travel is, for when trips are
+// off.
 const MOVE_DESTINATIONS: BuiltinCategory[] = [
   "personal",
   ...(Object.entries(CATEGORIES)
@@ -47,11 +48,12 @@ export const MoveDestinations = ({
   onNewBundle: () => void;
 }) => {
   const customBundles = useCustomBundles();
+  const tripsEnabled = useMailStore((st) => st.tripsEnabled);
 
   return (
     <>
       <div className={s.menuScroll}>
-        {MOVE_DESTINATIONS.map((cat) => (
+        {visibleCategories(MOVE_DESTINATIONS, tripsEnabled).map((cat) => (
           <DestinationItem
             key={cat}
             name={CATEGORIES[cat].name}
@@ -71,7 +73,7 @@ export const MoveDestinations = ({
             onClick={() => onCategory(bundle.id)}
           />
         ))}
-        {suggestedTrips.map((trip) => (
+        {tripsEnabled && suggestedTrips.map((trip) => (
           <DestinationItem
             key={trip.id}
             name={trip.name}
@@ -82,22 +84,24 @@ export const MoveDestinations = ({
           />
         ))}
       </div>
-      {moreTrips && (
+      {tripsEnabled && moreTrips && (
         <button type="button" className={s.menuItem} role="menuitem" onClick={onMoreTrips}>
           <Icon name="travel_explore" className={s.menuIcon} />
           <span className={s.menuItemLabel}>More trips…</span>
         </button>
       )}
-      {canRemoveFromTrip && (
+      {tripsEnabled && canRemoveFromTrip && (
         <button type="button" className={s.menuItem} role="menuitem" onClick={onRemoveFromTrip}>
           <Icon name="close" className={s.menuIcon} />
           <span className={s.menuItemLabel}>Remove from trip</span>
         </button>
       )}
-      <button type="button" className={s.menuItem} role="menuitem" onClick={onNewTrip}>
-        <Icon name="travel" className={s.menuIcon} />
-        <span className={s.menuItemLabel}>New trip…</span>
-      </button>
+      {tripsEnabled && (
+        <button type="button" className={s.menuItem} role="menuitem" onClick={onNewTrip}>
+          <Icon name="travel" className={s.menuIcon} />
+          <span className={s.menuItemLabel}>New trip…</span>
+        </button>
+      )}
       <button type="button" className={s.menuItem} role="menuitem" onClick={onNewBundle}>
         <Icon name="add" className={s.menuIcon} />
         <span className={s.menuItemLabel}>New bundle…</span>

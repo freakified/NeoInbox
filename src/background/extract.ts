@@ -44,6 +44,7 @@ import { liveTbId } from "../shared/liveMessage";
 import { log } from "../shared/log";
 import { pinKeyOf } from "../shared/pinKey";
 import { parseSender } from "../shared/senders";
+import { getTripsEnabled } from "../shared/tripsSetting";
 import { clusterTrips } from "../shared/tripCluster";
 import type { TripScanStatus, TripWrite } from "../shared/messaging";
 import type {
@@ -475,11 +476,16 @@ export const runTripExtraction = async (
 
 let scheduleTimer: ReturnType<typeof setTimeout> | undefined;
 
-/** Debounced trigger for after scans / new travel mail. */
+/**
+ * Debounced trigger for after scans / new travel mail. A no-op while trips
+ * are turned off: nothing would show them, so no bodies are read for them.
+ */
 export const scheduleTripExtraction = (): void => {
   clearTimeout(scheduleTimer);
   scheduleTimer = setTimeout(() => {
-    void runTripExtraction();
+    void getTripsEnabled().then((enabled) => {
+      if (enabled) void runTripExtraction();
+    });
   }, 3_000);
 };
 
@@ -588,6 +594,20 @@ export const runTripScan = async ({
       await publish(stopped);
       return stopped;
     }
+  }
+  // With trips off, loading older mail is the import alone.
+  if (!(await getTripsEnabled())) {
+    const imported: TripScanStatus = {
+      running: false,
+      archive,
+      rebuild,
+      processed,
+      total,
+      finishedAt: Date.now(),
+      fromInbox,
+    };
+    await publish(imported);
+    return imported;
   }
   await publish({ running: true, archive, rebuild, processed, total, phase: "read", fromInbox });
   // An automatic inbox sweep may hold the lock; it's short, so wait it out.

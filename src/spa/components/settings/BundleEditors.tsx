@@ -160,6 +160,7 @@ export const BuiltinBundleEditor = ({
   onAddRule,
   conflict,
   saveHint,
+  settings,
 }: {
   category: BuiltinCategory;
   ruleType: RuleType;
@@ -173,6 +174,8 @@ export const BuiltinBundleEditor = ({
   onAddRule: () => void;
   conflict?: string;
   saveHint?: string;
+  /** This bundle's own settings, shown between its header and its rules. */
+  settings?: React.ReactNode;
 }) => {
   const meta = category === "personal" ? { ...CATEGORIES.personal, ...EXCLUSIONS } : CATEGORIES[category];
   const routeRules = useRouteRules();
@@ -192,6 +195,7 @@ export const BuiltinBundleEditor = ({
           </p>
         </div>
       </div>
+      {settings}
 
       <section className={s.section}>
         <h4 className={s.sectionTitle}>Rules</h4>

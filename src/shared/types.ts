@@ -1,9 +1,10 @@
 import type { MessageKey } from "./messageKey";
 
-// No "travel": travel mail is either in a trip (its own layer, see TripRecord)
-// or loose in the inbox, exactly as in Google Inbox. The classifier's travel
-// heuristic survives as a trip-candidacy predicate only — see matchesTravel.
+// "travel" is only used with trips turned off (see tripsSetting.ts). With
+// trips on, travel mail is in a trip (its own layer, see TripRecord) or files
+// under Updates, exactly as in Google Inbox.
 export type BuiltinCategory =
+  | "travel"
   | "finance"
   | "purchases"
   | "social"

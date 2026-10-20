@@ -30,7 +30,16 @@ import { runCompose } from "./compose";
 import { cancelArchiveImport, getArchiveImportStatus } from "./archiveImport";
 import { getInboxImportStatus } from "./inboxImport";
 import { startArchiveImport, startArchiveTripScan } from "./archiveJob";
-import { cancelTripScan, getTripScanStatus, runTripScan, writeTrips } from "./extract";
+import {
+  cancelTripScan,
+  getTripScanStatus,
+  runTripScan,
+  scheduleTripExtraction,
+  writeTrips,
+} from "./extract";
+import { extractFeatures } from "../classifier/features";
+import { matchesTravel } from "../classifier/rules/travel";
+import { setTripsEnabled } from "../shared/tripsSetting";
 import { pushMyEmails } from "./sync";
 import { applyLocalState, clearResurfaced } from "./localState";
 import { messageKeyOf, type MessageKey } from "../shared/messageKey";
@@ -408,6 +417,23 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
         (m) => m.origin === "inbox" && m.category === msg.id,
       );
       await reclassifyMessages(affected);
+      return;
+    }
+    case "set-trips-enabled": {
+      await setTripsEnabled(msg.enabled);
+      // Only travel mail changes hands: whatever is in Travel, and travel in
+      // Updates (where it goes with trips on, a rule into Travel included).
+      const travelRules = (await db.routeRules.toArray()).filter((r) => r.target === "travel");
+      const affected = (await db.messages.toArray()).filter(
+        (m) =>
+          m.origin === "inbox" &&
+          (m.category === "travel" ||
+            (m.category === "updates" &&
+              (matchesTravel(extractFeatures(m, {})) ||
+                travelRules.some((r) => ruleMatchesMessage(r, m))))),
+      );
+      await reclassifyMessages(affected);
+      if (msg.enabled) scheduleTripExtraction();
       return;
     }
     case "reclassify": {

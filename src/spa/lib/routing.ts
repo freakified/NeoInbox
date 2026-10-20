@@ -15,15 +15,23 @@ export const parseHashView = (): StreamView => {
   if (raw === "done") return { type: "done" };
   if (raw === "reminders") return { type: "reminders" };
   if (raw === "trips") return { type: "trips" };
-  // Trips used to ride on the retired "travel" category. Old hashes are still
-  // in tab history and bookmarks, so keep honouring them.
-  if (raw === "bundle/travel") return { type: "trips" };
   if (raw.startsWith("search/")) return { type: "search", query: raw.slice("search/".length) };
   if (raw.startsWith("bundle/")) {
     const category = raw.slice("bundle/".length);
     if (category) return { type: "bundle", category };
   }
   return { type: "inbox" };
+};
+
+/**
+ * Trips and the Travel bundle stand in for each other: only one exists at a
+ * time (see tripsSetting.ts), and a bookmark or tab history can name the
+ * other — #bundle/travel also predates trips being optional.
+ */
+export const viewForTrips = (view: StreamView, tripsEnabled: boolean): StreamView => {
+  if (tripsEnabled && view.type === "bundle" && view.category === "travel") return { type: "trips" };
+  if (!tripsEnabled && view.type === "trips") return { type: "bundle", category: "travel" };
+  return view;
 };
 
 export const viewHash = (view: StreamView): string => {

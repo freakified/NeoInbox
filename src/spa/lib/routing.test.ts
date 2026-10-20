@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseHashView, viewHash } from "./routing";
+import { parseHashView, viewForTrips, viewHash } from "./routing";
 
 const at = (hash: string) => {
   window.location.hash = hash;
@@ -23,11 +23,14 @@ describe("hash routing", () => {
     }
   });
 
-  it("still honours the old #bundle/travel hash", () => {
-    // Trips used to ride on the retired "travel" category, and that hash is
-    // sitting in tab history and bookmarks. Without this it would resolve to a
-    // bundle view for a category that no longer exists — an empty page.
-    expect(at("#bundle/travel")).toEqual({ type: "trips" });
+  it("swaps trips and the Travel bundle for whichever the setting shows", () => {
+    // #bundle/travel is in tab history and bookmarks from before trips, and
+    // #trips from before they were turned off. Either would otherwise open an
+    // empty page.
+    expect(viewForTrips(at("#bundle/travel"), true)).toEqual({ type: "trips" });
+    expect(viewForTrips(at("#trips"), false)).toEqual({ type: "bundle", category: "travel" });
+    expect(viewForTrips(at("#trips"), true)).toEqual({ type: "trips" });
+    expect(viewForTrips(at("#bundle/travel"), false)).toEqual({ type: "bundle", category: "travel" });
   });
 
   it("encodes custom bundle ids that need escaping", () => {

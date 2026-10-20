@@ -10,6 +10,7 @@
  */
 import { liveTbId } from "../shared/liveMessage";
 import { classifyByRules } from "../classifier/pipeline";
+import { getTripsEnabled } from "../shared/tripsSetting";
 import { CAMPAIGN_HEADER_PREFIXES, extractFeatures } from "../classifier/features";
 import {
   isPersonLocalPart,
@@ -151,7 +152,7 @@ export const installClassifyDump = (): void => {
       }
 
       const header = await messenger.messages.get(tbId);
-      const now = classifyByRules(extractFeatures(header, headers));
+      const now = classifyByRules(extractFeatures(header, headers), await getTripsEnabled());
       const cached = row.category ?? null;
 
       const cachedKey = cached ?? "none";

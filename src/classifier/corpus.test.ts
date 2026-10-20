@@ -60,6 +60,13 @@ describe("trip candidacy", () => {
       expect(classifyByRules(extractFeatures(header, {}))).toBe("updates");
     }
   });
+
+  it("files them under Travel when trips are turned off", () => {
+    for (const entry of tripCandidacy.filter((c) => c.expect)) {
+      const header = { author: entry.author, subject: entry.subject };
+      expect(classifyByRules(extractFeatures(header, {}), false)).toBe("travel");
+    }
+  });
 });
 
 describe("known limitations", () => {
