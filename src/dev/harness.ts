@@ -9,6 +9,10 @@
  * ?keep to skip the wipe anyway (useful for checking migrations or persisted
  * UI state, as long as you don't mind stale rows).
  *
+ * ?demo swaps in the public demo's mailbox (demoSeed.ts), pins and reminders
+ * included, in place of the dev seed's edge cases. The website's build
+ * (`--mode site`) always runs it.
+ *
  * Poke it from the console (or a Playwright script) through `window.neo`:
  *   await neo.deliver("promo")              // new mail lands, fires events
  *   await neo.deliver({ subject: "Hi", author: "Bo <bo@x.example>" })
@@ -20,6 +24,8 @@
  */
 import { installFakeMessenger, settle, type FakeMessageSpec } from "../test/fakeMessenger";
 import { forumMail, personalMail, promoMail } from "../test/fixtures";
+import type { ArchiveJob } from "../background/archiveJob";
+import { demoSeed } from "./demoSeed";
 import { INBOX, seedMailbox } from "./seed";
 
 const KINDS = { promo: promoMail, forum: forumMail, personal: personalMail } as const;
@@ -35,9 +41,24 @@ const deleteDatabase = (name: string): Promise<void> =>
 
 const start = async (): Promise<void> => {
   const params = new URLSearchParams(location.search);
-  if (!params.has("keep")) await deleteDatabase("neoinbox");
+  const fresh = !params.has("keep");
+  if (fresh) await deleteDatabase("neoinbox");
 
-  const mail = installFakeMessenger(seedMailbox());
+  const demo = params.has("demo") || import.meta.env.MODE === "site" ? demoSeed() : null;
+  const mail = installFakeMessenger(demo?.mailbox ?? seedMailbox());
+  if (demo && fresh) {
+    // Before the background loads: it caches pins on first read.
+    const { db } = await import("../store/db");
+    await db.pins.bulkPut(demo.pins);
+    await db.reminders.bulkPut(demo.reminders);
+    // The demo's archive is small, so load all of it the way Trips' "Load
+    // older mail" would: left as an interrupted job, it resumes right after
+    // the first backfill. Done gets its mail, past trips show, and the
+    // footers offering older mail have nothing left to offer.
+    const { JOB_KEY } = await import("../background/archiveJob");
+    const job: ArchiveJob = { kind: "trips", importSince: null };
+    mail.storageData[JOB_KEY] = job;
+  }
 
   // index.ts wires the port server at import, so it has to be listening
   // before the SPA store connects. onInstalled kicks off the first backfill,

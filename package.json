@@ -14,6 +14,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.eval.json",
     "harness": "vite --port 5199 --strictPort",
+    "site": "vite --mode site --port 5200 --strictPort",
+    "build:site": "vite build --mode site",
     "shot": "node scripts/shot.mjs",
     "eval": "vitest run --config vitest.eval.config.ts",
     "samples:receive": "node scripts/sample-server.mjs"

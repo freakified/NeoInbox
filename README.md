@@ -35,6 +35,8 @@ pnpm test
 pnpm typecheck
 pnpm harness     # run the UI in a browser against a fake Thunderbird: http://localhost:5199/dev.html
 pnpm shot        # headless screenshot of the harness, see scripts/shot.mjs
+pnpm site        # the website (landing page + live demo): http://localhost:5200
+pnpm build:site  # build the website into dist-site/ (CI deploys it to Cloudflare Pages)
 pnpm eval        # trip-extraction eval against real-mail fixtures
 ```
 
@@ -45,7 +47,8 @@ pnpm eval        # trip-extraction eval against real-mail fixtures
 | `src/shared/` | Threading, trip clustering, shared types |
 | `src/spa/` | React UI shown in the NeoInbox tab |
 | `src/store/` | Zustand store and IndexedDB (Dexie) cache |
-| `src/dev/` | Browser harness and seed mailbox |
+| `src/dev/` | Browser harness, dev seed and demo mailbox |
+| `site/` | The website: landing page and live demo |
 
 ## License
 

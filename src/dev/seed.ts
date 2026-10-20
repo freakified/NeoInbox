@@ -15,7 +15,7 @@ export const WORK_ME = "you@work.example";
 export const INBOX = "inbox";
 
 /** A stand-in contact photo: a head and shoulders on a colored ground. */
-const portrait = (ground: string, skin: string, shirt: string): Blob =>
+export const portrait = (ground: string, skin: string, shirt: string): Blob =>
   new Blob(
     [
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
@@ -29,16 +29,16 @@ const portrait = (ground: string, skin: string, shirt: string): Blob =>
 export const SENT = "sent";
 export const ARCHIVE = "archive";
 
-const HOUR = 3_600_000;
-const DAY = 24 * HOUR;
+export const HOUR = 3_600_000;
+export const DAY = 24 * HOUR;
 
-const paragraphs = (...lines: string[]): string =>
+export const paragraphs = (...lines: string[]): string =>
   `<html><body style="font-family: sans-serif">${lines.map((l) => `<p>${l}</p>`).join("")}</body></html>`;
 
 let nextMid = 1;
-const mid = (): string => `<seed-${nextMid++}@neoinbox.test>`;
+export const mid = (): string => `<seed-${nextMid++}@neoinbox.test>`;
 
-interface ThreadStep {
+export interface ThreadStep {
   from: "me" | string;
   hoursAgo: number;
   body: string[];
@@ -49,7 +49,7 @@ interface ThreadStep {
  * A conversation as Thunderbird stores it: their messages in the inbox, mine
  * in Sent, every reply carrying In-Reply-To/References back up the chain.
  */
-const thread = (
+export const thread = (
   subject: string,
   steps: ThreadStep[],
   now: number,
@@ -83,7 +83,7 @@ const thread = (
   return { inbox, sent };
 };
 
-const ldScript = (data: unknown): string =>
+export const ldScript = (data: unknown): string =>
   `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
 
 /** Flight out, hotel, flight back: one trip to Lisbon three weeks from now. */

@@ -136,8 +136,11 @@ export interface FakeMessageSpec {
   html?: string;
   /** Plain-text body, served as a text/plain part alongside any HTML. */
   text?: string;
-  /** What listAttachments() reports; the files themselves are empty. */
-  attachments?: { name: string; contentType: string; size: number }[];
+  /**
+   * What listAttachments() reports. getAttachmentFile() serves `file`, or an
+   * empty blob without one.
+   */
+  attachments?: { name: string; contentType: string; size: number; file?: Blob }[];
   /**
    * When true getFull() rejects, reproducing an IMAP message whose body has
    * not been synced yet. This is the state a backlog arrives in, and the
@@ -198,7 +201,7 @@ interface StoredMessage {
   headers: Record<string, string[]>;
   html?: string;
   text?: string;
-  attachments: { name: string; contentType: string; size: number }[];
+  attachments: { name: string; contentType: string; size: number; file?: Blob }[];
   bodyUnavailable: boolean;
 }
 
@@ -723,10 +726,11 @@ export class FakeMessenger {
     listAttachments: async (id: number) => {
       const msg = this.require(id);
       this.calls.listAttachments.push(id);
-      return msg.attachments.map((a, i) => ({ ...a, partName: `1.${i + 2}` }));
+      return msg.attachments.map(({ file: _file, ...a }, i) => ({ ...a, partName: `1.${i + 2}` }));
     },
 
-    getAttachmentFile: async () => new Blob([]),
+    getAttachmentFile: async (id: number, partName: string) =>
+      this.require(id).attachments.find((_, i) => `1.${i + 2}` === partName)?.file ?? new Blob([]),
   };
 
   readonly foldersApi = {

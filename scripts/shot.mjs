@@ -7,6 +7,7 @@
  *   pnpm shot --click "text=Promos" --shot promos
  *   pnpm shot --eval "neo.deliver('promo')" --wait 500 --shot after-delivery
  *   pnpm shot --width 420 --height 860 --shot narrow
+ *   pnpm shot --query demo --shot demo             # the public demo's mailbox
  *
  * Steps run in the order given. --click takes any Playwright selector
  * ("text=Promos", "[aria-label=Done]", "css=.foo"), --hover moves the pointer
@@ -30,6 +31,7 @@ const OUT = resolve(ROOT, "shots");
 const args = process.argv.slice(2);
 let width = 1280;
 let height = 900;
+let query = "";
 const steps = [];
 for (let i = 0; i < args.length; i++) {
   const flag = args[i];
@@ -37,6 +39,7 @@ for (let i = 0; i < args.length; i++) {
   if (value === undefined) throw new Error(`${flag} needs a value`);
   if (flag === "--width") width = Number(value);
   else if (flag === "--height") height = Number(value);
+  else if (flag === "--query") query = `?${value}`;
   else if (["--click", "--hover", "--eval", "--wait", "--shot", "--type", "--press"].includes(flag))
     steps.push([flag.slice(2), value]);
   else throw new Error(`unknown flag ${flag}`);
@@ -74,7 +77,7 @@ try {
     if (msg.type() === "error" || msg.type() === "warning") console.log(`[${msg.type()}] ${msg.text()}`);
   });
 
-  await page.goto(`http://localhost:${PORT}/dev.html`);
+  await page.goto(`http://localhost:${PORT}/dev.html${query}`);
   // The backfill and trip clustering run right after load; let them land so
   // the first shot shows bundles and trips, not a half-scanned inbox.
   await page.waitForFunction(() => window.neo?.store().hydrated, null, { timeout: 15_000 });

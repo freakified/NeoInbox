@@ -8,11 +8,11 @@ import { log } from "../shared/log";
 import { runArchiveImport } from "./archiveImport";
 import { runTripScan } from "./extract";
 
-type ArchiveJob =
+export type ArchiveJob =
   | { kind: "import"; since: number | null }
   | { kind: "trips"; importSince?: number | null; inboxSince?: number | null };
 
-const JOB_KEY = "neoinbox-archive-job";
+export const JOB_KEY = "neoinbox-archive-job";
 
 /**
  * Record the job, run it, clear it. A job started while another is recorded
