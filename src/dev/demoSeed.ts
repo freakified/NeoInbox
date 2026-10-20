@@ -188,11 +188,11 @@ const lisbonTrip = (now: number): FakeMessageSpec[] => {
   ];
 };
 
-/** A weekend up the coast next week: the train there and back, a cabin. */
-const coastTrip = (now: number): FakeMessageSpec[] => {
+/** A weekend in LA next week: the high-speed train there and back, a hotel. */
+const laTrip = (now: number): FakeMessageSpec[] => {
   const train = (number: string, from: string, to: string, departs: string, arrives: string) => ({
     "@type": "TrainReservation",
-    reservationNumber: "CR8812",
+    reservationNumber: "HSR8812",
     reservationFor: {
       "@type": "TrainTrip",
       trainNumber: number,
@@ -206,31 +206,34 @@ const coastTrip = (now: number): FakeMessageSpec[] => {
   const back = at(now, 10, 16, 40);
   return [
     notice(
-      "Coastline Rail <bookings@coastlinerail.example>",
-      "Your train tickets: San Francisco → Mendocino",
+      "California High-Speed Rail <bookings@hsr.ca.example>",
+      "Your train tickets: San Francisco → Los Angeles",
       4 * 24 + 7,
       now,
       ldScript([
-        train("Coastline 7", "San Francisco", "Mendocino", out, at(now, 8, 13, 50)),
-        train("Coastline 8", "Mendocino", "San Francisco", back, at(now, 10, 21, 5)),
+        // Station names become the trip's name, so the structured data says
+        // the city; the ticket below says the station.
+        train("Sunset Express 12", "San Francisco", "Los Angeles", out, at(now, 8, 11, 55)),
+        train("Sunset Express 15", "Los Angeles", "San Francisco", back, at(now, 10, 19, 20)),
       ]) +
         card(
           "Your e-tickets",
-          "Booking <b>CR8812</b>, 1 adult",
-          `Coastline 7 · San Francisco → Mendocino · ${shortDate(out)}, 9:15 AM`,
-          `Coastline 8 · Mendocino → San Francisco · ${shortDate(back)}, 4:40 PM`,
+          "Booking <b>HSR8812</b>, 1 adult",
+          `Sunset Express 12 · San Francisco Transbay → Los Angeles Union Station · ${shortDate(out)}, 9:15 AM`,
+          `Sunset Express 15 · Los Angeles Union Station → San Francisco Transbay · ${shortDate(back)}, 4:40 PM`,
+          "Pin live tile to your phone's Start Screen for live updates! Requires Windows Phone 12 or later.",
         ),
       { read: true },
     ),
     notice(
-      "Hideaway Stays <bookings@hideawaystays.example>",
-      "Booking confirmed: Driftwood Cabin, Mendocino",
+      "Hollywood Tower Hotel <reservations@hollywoodtowerhotel.example>",
+      "Reservation confirmed: Hollywood Tower Hotel, Los Angeles",
       4 * 24 + 3,
       now,
-      ldScript(stay("HS-77310", "Driftwood Cabin", "Mendocino", "US", at(now, 8, 16), at(now, 10, 11))) +
+      ldScript(stay("HT-77310", "Hollywood Tower Hotel", "Los Angeles", "US", at(now, 8, 15), at(now, 10, 11))) +
         card(
-          "Driftwood Cabin is yours for 2 nights",
-          "Booking <b>HS-77310</b>. The lockbox code arrives the morning you check in.",
+          "We look forward to your stay",
+          "Reservation <b>HT-77310</b>, 2 nights. Check-in from 3 PM.",
         ),
       { read: true },
     ),
@@ -353,11 +356,11 @@ const social = (now: number): FakeMessageSpec[] => [
     card("Sunday Sketch Club", "Bring a pencil and something to lean on. 23 people are going."),
   ),
   notice(
-    "Goodreads <no-reply@goodreads.com>",
-    "Jordan Lee wants to be friends on Goodreads",
+    "Google Buzz <noreply@plus.google.com>",
+    "34 new updates from your friends on Google Buzz",
     3 * 24,
     now,
-    card("New friend request", "Jordan Lee is reading <i>The Overstory</i>."),
+    card("Catch up on Buzz", "Jordan Lee, Priya Raman and 32 others posted while you were away."),
     { read: true },
   ),
 ];
@@ -410,15 +413,15 @@ const updates = (now: number): FakeMessageSpec[] => [
     "New sign-in to your account",
     26,
     now,
-    card("New sign-in", "We noticed a new sign-in on a Mac. If this was you, there's nothing to do."),
+    card("New sign-in", "We noticed a new sign-in on a Lumia 7280 Pro. If this was you, there's nothing to do."),
     { read: true },
   ),
   notice(
     "The Weekly Byte <editor@weeklybyte.example>",
-    "The Weekly Byte: the quiet return of RSS",
+    "The Weekly Byte: Google Reader turns 21",
     2 * 24 + 9,
     now,
-    card("The Weekly Byte", "This week: the quiet return of RSS, and a tour of tiny web servers."),
+    card("The Weekly Byte", "This week: Reader turns 21, and is this finally the year of Linux on the desktop?"),
     { headers: unsubscribe, read: true },
   ),
 ];
@@ -481,7 +484,7 @@ export const demoSeed = (now = Date.now()): DemoSeed => {
   );
   const photos = thread(
     "Photos from the reunion",
-    [{ from: "Mom <mom@family.example>", hoursAgo: 52, read: true, body: ["Here are the photos! Aunt Jo looks great."] }],
+    [{ from: "Mom <mom@family.example>", hoursAgo: 52, read: true, body: ["Here are the photos! Aunt Jo looks great.", "Sent from my Windows Phone"] }],
     now,
     DEMO_ME,
   );
@@ -489,22 +492,6 @@ export const demoSeed = (now = Date.now()): DemoSeed => {
     { name: "porch.jpg", contentType: "image/jpeg", size: 2_400_000, file: porchPhoto() },
     { name: "cake.jpg", contentType: "image/jpeg", size: 1_900_000, file: cakePhoto() },
   ];
-  const cabin = thread(
-    "Cabin details",
-    [
-      {
-        from: "Sam Okafor <sam@example.com>",
-        hoursAgo: 6 * 24,
-        read: true,
-        body: [
-          "For your trip up the coast: the Wi-Fi is <b>Driftwood</b>, password <b>saltwater-42</b>.",
-          "Firewood is in the shed; the key is under the frog.",
-        ],
-      },
-    ],
-    now,
-    DEMO_ME,
-  );
   const lisbonTips = thread(
     "Lisbon recommendations",
     [
@@ -572,10 +559,9 @@ export const demoSeed = (now = Date.now()): DemoSeed => {
     ...hike.inbox,
     ...dinner.inbox,
     ...photos.inbox,
-    ...cabin.inbox,
     ...lisbonTips.inbox,
     ...lisbonTrip(now),
-    ...coastTrip(now),
+    ...laTrip(now),
     ...purchases(now),
     ...finance(now),
     ...social(now),
@@ -620,8 +606,8 @@ export const demoSeed = (now = Date.now()): DemoSeed => {
 
   return {
     mailbox,
-    // The cabin's Wi-Fi password: exactly what a pin is for.
-    pins: [{ key: cabin.inbox[0]!.headerMessageId!, pinnedAt: now - 6 * DAY }],
+    // A friend's tips, kept handy until the trip: exactly what a pin is for.
+    pins: [{ key: lisbonTips.inbox[0]!.headerMessageId!, pinnedAt: now - 2 * DAY }],
     reminders: [
       { id: "demo-passport", text: "Check passport expiry before Lisbon", createdAt: now - 2 * DAY, status: "active", pinned: true, accountId: "dev" },
       { id: "demo-grandma", text: "Call Grandma for her birthday", createdAt: now - 3 * HOUR, status: "active", pinned: false, accountId: "dev" },

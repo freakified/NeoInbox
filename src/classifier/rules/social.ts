@@ -13,6 +13,8 @@ const SOCIAL_DOMAINS = [
   // Professional and general networks.
   "linkedin.com", "linkedinmail.com", "facebook.com", "facebookmail.com",
   "fb.com", "instagram.com", "instagrammail.com", "threads.net",
+  // Ahead of Updates' google.com, which would otherwise claim it.
+  "plus.google.com",
   "twitter.com", "x.com", "bsky.app", "blueskyweb.xyz", "mastodon.social",
   "joinmastodon.org", "tumblr.com", "pinterest.com", "snapchat.com",
   "tiktok.com", "tiktokmail.com", "vk.com", "xing.com", "nextdoor.com",
