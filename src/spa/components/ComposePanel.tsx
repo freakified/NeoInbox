@@ -58,6 +58,10 @@ export const ComposePanel = ({
           : (unsentNewMessage ?? emptyComposerValue()),
   );
 
+  // Decided once on open: following value.to would yank the cursor to the
+  // body the moment the first recipient is committed (e.g. tabbing out of To).
+  const [initialFocus] = useState<"to" | "text">(() => (value.to.length ? "text" : "to"));
+
   /** Folded down to its title bar, out of the way but still open. */
   const [minimized, setMinimized] = useState(false);
 
@@ -162,7 +166,7 @@ export const ComposePanel = ({
           fill
           identityContext={reply?.identityContext ?? { accountId: accountFilter ?? undefined }}
           placeholder={reply?.placeholder ?? "Say something"}
-          focus={value.to.length ? "text" : "to"}
+          focus={initialFocus}
           onSubmit={submit}
           onDiscard={() => {
             settled.current = true;
