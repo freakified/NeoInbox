@@ -41,7 +41,10 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
           <Icon name="check" className={clsx(s.iconBase, s.iconDone)} />
         </ActionBtn>
       )}
-      <BundleMenu thread={thread} />
+      <BundleMenu
+        thread={thread}
+        onReportSpam={actions.canReportSpam ? actions.reportSpam : undefined}
+      />
     </div>
   );
 };

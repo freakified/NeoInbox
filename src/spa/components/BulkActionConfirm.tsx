@@ -6,7 +6,7 @@ import s from "./BulkActionConfirm.module.css";
 
 const CONFIRM_THRESHOLD = 25;
 
-type BulkActionKind = "done" | "trash";
+type BulkActionKind = "done" | "trash" | "spam";
 
 interface PendingBulkAction {
   kind: BulkActionKind;
@@ -16,30 +16,39 @@ interface PendingBulkAction {
 interface BulkActionContextValue {
   doneMessages: (messageKeys: MessageKey[]) => void;
   trashMessages: (messageKeys: MessageKey[]) => void;
+  spamMessages: (messageKeys: MessageKey[]) => void;
 }
 
 const BulkActionContext = createContext<BulkActionContextValue | null>(null);
 
-const actionText = (kind: BulkActionKind): string =>
-  kind === "done" ? "marked as done" : "moved to trash";
+const ACTION_TEXT: Record<BulkActionKind, string> = {
+  done: "marked as done",
+  trash: "moved to trash",
+  spam: "reported as spam",
+};
 
-const dialogTitle = (kind: BulkActionKind): string =>
-  kind === "done" ? "Mark messages as done?" : "Move messages to trash?";
+const DIALOG_TITLE: Record<BulkActionKind, string> = {
+  done: "Mark messages as done?",
+  trash: "Move messages to trash?",
+  spam: "Report messages as spam?",
+};
 
 const dialogMessage = ({ kind, messageKeys }: PendingBulkAction): string =>
-  `${messageKeys.length} messages will be ${actionText(kind)}.`;
+  `${messageKeys.length} messages will be ${ACTION_TEXT[kind]}.`;
 
 export const BulkActionProvider = ({ children }: { children: React.ReactNode }) => {
   const doneThread = useMailStore((st) => st.doneThread);
   const trashThread = useMailStore((st) => st.trashThread);
+  const spamThread = useMailStore((st) => st.spamThread);
   const [pending, setPending] = useState<PendingBulkAction | null>(null);
 
   const runAction = useCallback(
     ({ kind, messageKeys }: PendingBulkAction) => {
       if (kind === "done") doneThread(messageKeys);
+      else if (kind === "spam") spamThread(messageKeys);
       else trashThread(messageKeys);
     },
-    [doneThread, trashThread],
+    [doneThread, spamThread, trashThread],
   );
 
   const requestAction = useCallback(
@@ -56,6 +65,7 @@ export const BulkActionProvider = ({ children }: { children: React.ReactNode }) 
     () => ({
       doneMessages: (messageKeys) => requestAction("done", messageKeys),
       trashMessages: (messageKeys) => requestAction("trash", messageKeys),
+      spamMessages: (messageKeys) => requestAction("spam", messageKeys),
     }),
     [requestAction],
   );
@@ -86,7 +96,7 @@ export const BulkActionProvider = ({ children }: { children: React.ReactNode }) 
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="bulk-action-confirm-title" className={s.title}>
-              {dialogTitle(pending.kind)}
+              {DIALOG_TITLE[pending.kind]}
             </h2>
             <p id="bulk-action-confirm-message" className={s.message}>
               {dialogMessage(pending)}

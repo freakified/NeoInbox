@@ -60,6 +60,7 @@ export const INBOX = "inbox-a";
 export const ARCHIVE = "archive-a";
 export const SENT = "sent-a";
 export const DRAFTS = "drafts-a";
+export const JUNK = "junk-a";
 
 export const account = (
   id: string,
@@ -67,6 +68,7 @@ export const account = (
   messages: FakeMessageSpec[],
   opts: {
     archive?: boolean;
+    junk?: boolean;
     legacyType?: boolean;
     sent?: FakeMessageSpec[];
     archived?: FakeMessageSpec[];
@@ -81,6 +83,7 @@ export const account = (
       { id: `inbox-${prefix}`, name: "Inbox", ...role("inbox"), messages },
       { id: `sent-${prefix}`, name: "Sent", ...role("sent"), messages: opts.sent },
       { id: `drafts-${prefix}`, name: "Drafts", ...role("drafts") },
+      ...(opts.junk === false ? [] : [{ id: `junk-${prefix}`, name: "Junk", ...role("junk") }]),
       ...(opts.archive === false
         ? []
         : [{
@@ -141,6 +144,11 @@ export const shapes = {
   /** No Archives folder: archiving must fail loudly rather than lose mail. */
   noArchive: (messages: FakeMessageSpec[] = []): FakeMessengerOptions => ({
     accounts: [account("a", "a", messages, { archive: false })],
+  }),
+
+  /** No Junk folder (some POP and local setups): reporting spam must fail loudly. */
+  noJunk: (messages: FakeMessageSpec[] = []): FakeMessengerOptions => ({
+    accounts: [account("a", "a", messages, { junk: false })],
   }),
 
   /** Folders exposing only the deprecated `type`, never `specialUse`. */

@@ -3,7 +3,6 @@ import { clsx } from "clsx";
 import { isSameThread } from "../../shared/threading";
 import type { Thread } from "../../shared/types";
 import { useMailStore, type PendingReply } from "../../store/mailStore";
-import { useAccountMarker } from "../lib/accounts";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
 import { useThreadActions } from "../lib/useThreadActions";
 import { BundleMenu } from "./BundleMenu";
@@ -23,7 +22,6 @@ export const ThreadView = ({
   thread: Thread;
 }) => {
   const actions = useThreadActions(t);
-  const account = useAccountMarker(t.accountId);
   const hydrateThreadDetails = useMailStore((st) => st.hydrateThreadDetails);
   const markThreadRead = useMailStore((st) => st.markThreadRead);
   const allPendingReplies = useMailStore((st) => st.pendingReplies);
@@ -120,11 +118,6 @@ export const ThreadView = ({
     <div>
       <div className={s.header}>
         <h2 className={s.title}>{translatedSubject || t.subject || "(no subject)"}</h2>
-        {account && (
-          <span className={s.accountChip} style={{ "--account-color": account.color } as React.CSSProperties} title={account.name}>
-            {account.email || account.name}
-          </span>
-        )}
         <div className={s.headerActions}>
           <button
             onClick={(e) => {
@@ -191,7 +184,11 @@ export const ThreadView = ({
               <Icon name="check" className={clsx(s.iconBtnIcon, s.iconBtnIconDone)} />
             </button>
           )}
-          <BundleMenu thread={t} onTranslateToEnglish={translateLatest} />
+          <BundleMenu
+            thread={t}
+            onTranslate={translateLatest}
+            onReportSpam={actions.canReportSpam ? actions.reportSpam : undefined}
+          />
         </div>
       </div>
       {actions.isSnoozed && actions.snoozeWakeAt !== undefined && (

@@ -298,14 +298,6 @@
   gap: 22px;
 }
 
-/* Names whose color row follows, in Settings → Accounts. */
-.accountLabel {
-  margin: 0;
-  color: var(--color-md-on-surface);
-  font-size: 14px;
-  font-weight: 500;
-}
-
 .colorGrid {
   display: flex;
   flex-wrap: wrap;
@@ -647,6 +639,11 @@
 }
 
 /* MD1 radio: a 2px ring that turns primary, with a dot when checked. */
+/* Choices with a second line of text, which need more room than a one-line row. */
+.twoLineChoice {
+  padding: 4px 0;
+}
+
 .policyInput {
   appearance: none;
   flex: 0 0 auto;

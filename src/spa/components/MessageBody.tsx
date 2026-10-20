@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { liveTbId } from "../../shared/liveMessage";
 import { parseSender } from "../../shared/senders";
 import type { RawMessage } from "../../shared/types";
+import { useMailStore } from "../../store/mailStore";
 import { useIframeAutoHeight } from "../lib/useIframeAutoHeight";
 import {
   buildComposedSrcdoc,
@@ -11,7 +12,12 @@ import {
   extractTextBody,
   hasBlockedRemoteImages,
 } from "../lib/srcdoc";
-import { translateMessageToEnglish } from "../lib/translation";
+import {
+  targetLanguageLabel,
+  translateMessage,
+  translationTargetLabel,
+  TranslationSetupError,
+} from "../lib/translation";
 import {
   getRemoteImagePolicy,
   isTrustedImageSender,
@@ -40,10 +46,13 @@ export const MessageBody = ({
     "idle" | "loading" | "done" | "error"
   >("idle");
   const [translationError, setTranslationError] = useState("");
+  const [translationNeedsSetup, setTranslationNeedsSetup] = useState(false);
+  const openBundleSettings = useMailStore((st) => st.openBundleSettings);
   const [translatedText, setTranslatedText] = useState<string | null>(null);
   const [translatedSubject, setTranslatedSubject] = useState("");
   const [translatedBodyType, setTranslatedBodyType] = useState<"text" | "html">("text");
   const [showTranslation, setShowTranslation] = useState(false);
+  const [translationLabel, setTranslationLabel] = useState("");
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const senderEmail = useMemo(() => {
     const email = parseSender(m.author).email;
@@ -148,8 +157,10 @@ export const MessageBody = ({
   const requestTranslation = () => {
     setTranslationStatus("loading");
     setTranslationError("");
-    translateMessageToEnglish(m)
+    setTranslationLabel(translationTargetLabel());
+    translateMessage(m)
       .then((record) => {
+        setTranslationLabel(targetLanguageLabel(record.targetLanguage));
         const subject = record.translatedSubject ?? "";
         setTranslatedText(record.translatedText);
         setTranslatedSubject(subject);
@@ -160,6 +171,7 @@ export const MessageBody = ({
       })
       .catch((e) => {
         setTranslationError(String((e as Error)?.message ?? e));
+        setTranslationNeedsSetup(e instanceof TranslationSetupError);
         setTranslationStatus("error");
       });
   };
@@ -219,9 +231,9 @@ export const MessageBody = ({
             <div className={s.imageNotice}>
               <span>
                 {translationStatus === "loading"
-                  ? "Translating to English..."
+                  ? `Translating to ${translationLabel}…`
                   : translationStatus === "done"
-                    ? "Translated to English."
+                    ? `Translated to ${translationLabel}.`
                     : translationError || "Couldn't translate this message."}
               </span>
               {translationStatus === "done" && translatedText && (
@@ -233,11 +245,20 @@ export const MessageBody = ({
                   {showTranslation ? "Show original" : "Show translation"}
                 </button>
               )}
-              {translationStatus === "error" && (
-                <button className={s.noticeButton} type="button" onClick={requestTranslation}>
-                  Retry
-                </button>
-              )}
+              {translationStatus === "error" &&
+                (translationNeedsSetup ? (
+                  <button
+                    className={s.noticeButton}
+                    type="button"
+                    onClick={() => openBundleSettings({ pane: "translation" })}
+                  >
+                    Open translation settings
+                  </button>
+                ) : (
+                  <button className={s.noticeButton} type="button" onClick={requestTranslation}>
+                    Retry
+                  </button>
+                ))}
             </div>
           )}
           <iframe

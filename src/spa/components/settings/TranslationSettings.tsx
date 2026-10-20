@@ -6,7 +6,9 @@ import {
   ensureTranslationPermission,
   getTranslationConfig,
   setTranslationConfig,
+  TARGET_LANGUAGES,
   TRANSLATION_PROVIDERS,
+  uiTargetLanguage,
   type TranslationConfig,
   type TranslationProvider,
 } from "../../lib/translation";
@@ -17,7 +19,8 @@ const sameTranslationConfig = (a: TranslationConfig, b: TranslationConfig): bool
   a.apiKey === b.apiKey &&
   a.endpoint === b.endpoint &&
   a.region === b.region &&
-  a.model === b.model;
+  a.model === b.model &&
+  a.targetLanguage === b.targetLanguage;
 
 const TranslationSection = () => {
   const notify = useMailStore((st) => st.notify);
@@ -30,6 +33,7 @@ const TranslationSection = () => {
     endpoint: config.endpoint.trim(),
     region: config.region.trim(),
     model: config.model.trim(),
+    targetLanguage: config.targetLanguage,
   };
   const providerMeta = TRANSLATION_PROVIDERS[config.provider];
   const hasChanges = !sameTranslationConfig(normalized, saved);
@@ -60,20 +64,24 @@ const TranslationSection = () => {
     notify("Translation settings reset");
   };
 
-  const endpointPlaceholder =
-    config.provider === "deepl"
-      ? "https://api-free.deepl.com/v2/translate"
-      : config.provider === "azure"
-        ? "https://api.cognitive.microsofttranslator.com"
-        : config.provider === "libretranslate"
-          ? "https://libretranslate.com/translate"
-          : config.provider === "openaiCompatible"
-            ? "http://localhost:1234/v1/chat/completions"
-            : "https://example.com/translate";
-
   return (
     <section className={s.section}>
       <p className={s.helpText}>Text is only sent when you click Translate.</p>
+      <label className={s.fieldBlock}>
+        <span className={s.label}>Translate into</span>
+        <select
+          className={s.select}
+          value={config.targetLanguage}
+          onChange={(e) => updateConfig({ targetLanguage: e.target.value })}
+        >
+          <option value="">Thunderbird's language ({uiTargetLanguage().label})</option>
+          {TARGET_LANGUAGES.map((lang) => (
+            <option key={lang.code} value={lang.code}>
+              {lang.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <label className={s.fieldBlock}>
         <span className={s.label}>Service</span>
         <select
@@ -88,10 +96,10 @@ const TranslationSection = () => {
           ))}
         </select>
       </label>
-      {(providerMeta.needsApiKey || providerMeta.optionalApiKey) && (
+      {providerMeta.apiKey !== "none" && (
         <label className={s.fieldBlock}>
           <span className={s.label}>
-            {providerMeta.optionalApiKey ? "API key (optional)" : "API key"}
+            {providerMeta.apiKey === "optional" ? "API key (optional)" : "API key"}
           </span>
           <input
             type="password"
@@ -103,62 +111,48 @@ const TranslationSection = () => {
           />
         </label>
       )}
-      {(providerMeta.needsEndpoint || config.provider === "deepl" || config.provider === "azure") && (
+      {providerMeta.endpoint !== "none" && (
         <label className={s.fieldBlock}>
           <span className={s.label}>
-            {providerMeta.needsEndpoint ? "Endpoint" : "Endpoint override"}
+            {providerMeta.endpoint === "override" ? "Endpoint override (optional)" : "Endpoint"}
           </span>
           <input
             type="url"
             className={s.input}
             value={config.endpoint}
-            placeholder={endpointPlaceholder}
+            placeholder={providerMeta.endpointPlaceholder}
             onChange={(e) => updateConfig({ endpoint: e.target.value })}
             onKeyDown={(e) => e.key === "Enter" && save()}
           />
         </label>
       )}
-      {providerMeta.needsRegion && (
+      {providerMeta.region && (
         <label className={s.fieldBlock}>
-          <span className={s.label}>Region</span>
+          <span className={s.label}>Region (optional)</span>
           <input
             type="text"
             className={s.input}
             value={config.region}
-            placeholder="global, eastus, westeurope..."
+            placeholder="Leave blank for a global resource, e.g. eastus, westeurope"
             onChange={(e) => updateConfig({ region: e.target.value })}
             onKeyDown={(e) => e.key === "Enter" && save()}
           />
         </label>
       )}
-      {providerMeta.needsModel && (
+      {providerMeta.model && (
         <label className={s.fieldBlock}>
           <span className={s.label}>Model</span>
           <input
             type="text"
             className={s.input}
             value={config.model}
-            placeholder="local-model"
+            placeholder="e.g. gemma3, llama3.2, qwen3"
             onChange={(e) => updateConfig({ model: e.target.value })}
             onKeyDown={(e) => e.key === "Enter" && save()}
           />
         </label>
       )}
-      {config.provider === "custom" && (
-        <p className={s.helpText}>
-          Takes JSON {"{"} text, targetLanguage {"}"} and returns {"{"} translatedText {"}"}.
-        </p>
-      )}
-      {config.provider === "openaiCompatible" && (
-        <p className={s.helpText}>
-          Use LM Studio's OpenAI-compatible endpoint.
-        </p>
-      )}
-      {config.provider === "libretranslate" && (
-        <p className={s.helpText}>
-          Any LibreTranslate-compatible endpoint.
-        </p>
-      )}
+      {providerMeta.helpText && <p className={s.helpText}>{providerMeta.helpText}</p>}
       <div className={s.formActions}>
         <button type="button" className={s.saveBtn} disabled={!hasChanges} onClick={save}>
           Save

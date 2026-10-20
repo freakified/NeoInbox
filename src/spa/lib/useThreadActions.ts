@@ -27,6 +27,10 @@ export interface ThreadActions {
   snoozeDefault: () => void;
   unsnooze: () => void;
   trash: () => void;
+  /** Holds received mail, which is all reportSpam acts on. */
+  canReportSpam: boolean;
+  /** Received mail only: your own replies in the thread aren't spam. */
+  reportSpam: () => void;
   moveToInbox: () => void;
 }
 
@@ -37,7 +41,7 @@ export const useThreadActions = (thread: Thread): ThreadActions => {
   const notify = useMailStore((st) => st.notify);
   const moveToInboxThread = useMailStore((st) => st.moveToInboxThread);
   const snoozesByKey = useMailStore((st) => st.snoozesByKey);
-  const { doneMessages, trashMessages } = useBulkActions();
+  const { doneMessages, trashMessages, spamMessages } = useBulkActions();
 
   return useMemo(() => {
     const inboxMessageKeys = thread.messages
@@ -80,6 +84,8 @@ export const useThreadActions = (thread: Thread): ThreadActions => {
         notify("Moved back to inbox");
       },
       trash: () => trashMessages(thread.messages.map((m) => m.key)),
+      canReportSpam: inboxMessageKeys.length + doneMessageKeys.length > 0,
+      reportSpam: () => spamMessages([...inboxMessageKeys, ...doneMessageKeys]),
       moveToInbox: () => {
         moveToInboxThread(doneMessageKeys);
         notify("Moved back to inbox");
@@ -92,6 +98,7 @@ export const useThreadActions = (thread: Thread): ThreadActions => {
     pin,
     snoozeThread,
     snoozesByKey,
+    spamMessages,
     thread,
     trashMessages,
     unsnoozeThread,

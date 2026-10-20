@@ -99,6 +99,12 @@
   background: rgba(0, 0, 0, 0.06);
 }
 
+.divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--color-md-divider);
+}
+
 .menuHeader {
   display: flex;
   align-items: center;

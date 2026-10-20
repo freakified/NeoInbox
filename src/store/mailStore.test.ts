@@ -327,6 +327,18 @@ describe("progress and reclassify reporting", () => {
     expect(store().syncProgress).toMatchObject({ scanned: 120, classified: 30, done: false });
   });
 
+  it("keeps scan progress in one toast that goes when the scan ends", async () => {
+    await fromBackground({ type: "backfill-progress", scanned: 50, classified: 4, done: false });
+    await fromBackground({ type: "backfill-progress", scanned: 100, classified: 9, done: false });
+
+    const progress = store().toasts.filter((t) => t.progress);
+    expect(progress).toHaveLength(1);
+    expect(progress[0]?.message).toContain("100 messages, 9 classified");
+
+    await fromBackground({ type: "backfill-progress", scanned: 130, classified: 11, done: true });
+    expect(store().toasts.some((t) => t.progress)).toBe(false);
+  });
+
   it("reports a reclassify that changed nothing without implying failure", async () => {
     store().reclassify();
     await fromBackground({ type: "reclassify-done", scanned: 544, moved: 0 });

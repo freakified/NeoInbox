@@ -85,7 +85,6 @@ const RuleComposer = ({
   </div>
 );
 
-const PRECEDENCE_NOTE = "Most specific rule wins: sender, then domain, then subject.";
 
 export const ThreadRouteSummary = ({
   thread,
@@ -188,8 +187,8 @@ export const BuiltinBundleEditor = ({
           <h3 className={s.editorTitle}>{meta.name}</h3>
           <p className={s.editorDesc}>
             {category === "personal"
-              ? `Matching mail is never bundled. ${PRECEDENCE_NOTE}`
-              : `Matching mail goes here. ${PRECEDENCE_NOTE}`}
+              ? "Messages matching the rules added here will never be bundled."
+              : "Messages matching the rules addded here will be sent to this bundle."}
           </p>
         </div>
       </div>
@@ -198,7 +197,7 @@ export const BuiltinBundleEditor = ({
         <h4 className={s.sectionTitle}>Rules</h4>
         {rules.length === 0 ? (
           <p className={s.emptyText}>
-            {category === "personal" ? "No rules yet." : "No rules yet; built-in detection still applies."}
+            {category === "personal" ? "No rules yet." : "No rules yet (Built-in detection still applies)"}
           </p>
         ) : (
           <div className={s.ruleList}>
@@ -299,7 +298,6 @@ export const CustomBundleEditor = ({
         <Icon name={form.icon} className={s.editorIcon} style={{ color: form.color }} />
         <div>
           <h3 className={s.editorTitle}>{title}</h3>
-          <p className={s.editorDesc}>{PRECEDENCE_NOTE}</p>
         </div>
       </div>
 

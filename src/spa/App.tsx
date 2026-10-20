@@ -256,17 +256,20 @@ export const App = () => {
 
   // Another account is another mailbox: nothing open or selected carries over.
   const accountFilter = useMailStore((st) => st.accountFilter);
-  const firstAccountFilter = useRef(accountFilter);
+  const shownAccountFilter = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    if (accountFilter === firstAccountFilter.current) return;
-    firstAccountFilter.current = accountFilter;
+    if (!hydrated) return;
+    const previous = shownAccountFilter.current;
+    shownAccountFilter.current = accountFilter;
+    // The filter hydration sets is where NeoInbox opens, not a switch.
+    if (previous === undefined || previous === accountFilter) return;
     useSelection.getState().clear();
     scrollKeeper.release();
     setExpandedKey(null);
     setOpenBundleThreadId(null);
     setVisibleItemLimit(STREAM_PAGE_SIZE);
     window.scrollTo(0, 0);
-  }, [accountFilter]);
+  }, [hydrated, accountFilter]);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -326,7 +329,9 @@ export const App = () => {
 
   const toggleKey = (key: string) => changeOpen(expandedKey === key ? null : key, null);
 
-  const syncing = !!sync && !sync.done;
+  // Null is "not heard from the background yet", which is no more empty than
+  // a scan in flight is.
+  const syncSettled = !!sync?.done;
   const syncFailed = !!sync?.done && !!sync.error;
   const reconnecting = connectionState === "reconnecting";
   // Trips isn't listed with the bundles: like Google Inbox, it gets a
@@ -664,11 +669,6 @@ export const App = () => {
               </button>
             )}
             <div className={s.headerRight}>
-              {syncing && sync && (
-                <span className={s.syncText}>
-                  Scanning... {sync.scanned} messages, {sync.classified} classified
-                </span>
-              )}
               {syncFailed && (
                 <button
                   type="button"
@@ -791,7 +791,7 @@ export const App = () => {
               <p className={s.emptyText}>Searching…</p>
             )}
 
-            {hydrated && stream.threadCount === 0 && !syncing && !searching && (
+            {hydrated && stream.threadCount === 0 && syncSettled && !searching && (
               emptyState ? <EmptyState {...emptyState}>{archiveFooter}</EmptyState> : <InboxZero />
             )}
 

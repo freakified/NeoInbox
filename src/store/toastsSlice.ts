@@ -19,6 +19,9 @@ export const doneToastMessage = (count: number): string =>
 export const trashToastMessage = (count: number): string =>
   count === 1 ? "Moved to trash" : `${count} messages moved to trash`;
 
+export const spamToastMessage = (count: number): string =>
+  count === 1 ? "Reported as spam" : `${count} messages reported as spam`;
+
 export const undoTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 export const commitUndoToast = (
@@ -36,7 +39,7 @@ export const commitUndoToast = (
     for (const messageKey of toast.undo.messageKeys) {
       send({ type: toast.undo.kind, messageKey });
     }
-    if (toast.undo.kind === "trash") retireTrashedFromTrips(get, set, toast.undo.messageKeys);
+    if (toast.undo.kind !== "done") retireTrashedFromTrips(get, set, toast.undo.messageKeys);
   }
   set({ toasts: get().toasts.filter((t) => t.id !== toastId) });
 };
@@ -46,6 +49,7 @@ export const failureLabel = (command: FailedCommand): string => {
   if (command === "snooze") return "Couldn't snooze";
   if (command === "unsnooze") return "Couldn't unsnooze";
   if (command === "move-to-inbox") return "Couldn't move to inbox";
+  if (command === "spam") return "Couldn't report spam";
   return "Couldn't move to trash";
 }
 
@@ -64,6 +68,7 @@ export const toastsSlice = (
     const { kind, messageKey, wakeAt } = toast.retry;
     if (kind === "done") get().doneThread([messageKey]);
     else if (kind === "trash") get().trashThread([messageKey]);
+    else if (kind === "spam") get().spamThread([messageKey]);
     else if (kind === "unsnooze") get().unsnoozeThread([messageKey]);
     else if (kind === "move-to-inbox") get().moveToInboxThread([messageKey]);
     else if (kind === "snooze" && wakeAt !== undefined) {

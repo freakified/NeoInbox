@@ -34,6 +34,7 @@ export type PendingOp =
   | { kind: "snooze"; message: RawMessage; wakeAt: number }
   | { kind: "unsnooze"; message: RawMessage; snooze?: SnoozeRecord }
   | { kind: "trash"; message: RawMessage }
+  | { kind: "spam"; message: RawMessage }
   | { kind: "moveToInbox"; message: RawMessage };
 
 export interface ToastAction {
@@ -63,8 +64,10 @@ export interface ToastRecord {
   id: string;
   message: string;
   retry?: { kind: FailedCommand; messageKey: MessageKey; wakeAt?: number };
-  undo?: { messageKeys: MessageKey[]; kind: "done" | "trash" };
+  undo?: { messageKeys: MessageKey[]; kind: "done" | "trash" | "spam" };
   actions?: ToastAction[];
+  /** Updated in place while work runs; never auto-dismissed, removed when it ends. */
+  progress?: boolean;
 }
 
 /**
@@ -74,7 +77,7 @@ export interface ToastRecord {
  */
 export interface BundleSettingsRequest {
   /** Open on one of the non-bundle panes instead. */
-  pane?: "general" | "privacy" | "translation" | "advanced" | "accounts" | "archive" | "trips";
+  pane?: "general" | "privacy" | "translation" | "advanced" | "archive" | "trips";
   category?: Category | null;
   thread?: Thread;
   highlightRuleId?: string;
@@ -136,6 +139,8 @@ export interface MailStore {
   snoozeThread: (messageKeys: MessageKey[], wakeAt: number) => void;
   unsnoozeThread: (messageKeys: MessageKey[]) => void;
   trashThread: (messageKeys: MessageKey[]) => void;
+  /** Report spam: like trash, but into the account's Junk folder. */
+  spamThread: (messageKeys: MessageKey[]) => void;
   /** Restore done (archived) messages to their account's inbox. */
   moveToInboxThread: (messageKeys: MessageKey[]) => void;
   setRouteRule: (rule: RouteRuleRecord) => void;

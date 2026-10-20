@@ -22,8 +22,6 @@ import {
 } from "./settings/bundleForm";
 import { GeneralSettings } from "./settings/GeneralSettings";
 import { AdvancedSettings } from "./settings/AdvancedSettings";
-import { AccountSettings } from "./settings/AccountSettings";
-import { useAccounts } from "../lib/accounts";
 import { ArchiveSettings } from "./settings/ArchiveSettings";
 import { PrivacySettings } from "./settings/PrivacySettings";
 import { TranslationSettings } from "./settings/TranslationSettings";
@@ -40,7 +38,7 @@ export const BundleManagerModal = ({
   initialPane,
 }: {
   onClose: () => void;
-  initialPane?: "general" | "privacy" | "translation" | "advanced" | "accounts" | "archive" | "trips";
+  initialPane?: "general" | "privacy" | "translation" | "advanced" | "archive" | "trips";
   thread?: Thread;
   initialCategory?: Category | null;
   startNewBundle?: boolean;
@@ -116,7 +114,6 @@ export const BundleManagerModal = ({
   };
 
   const [selected, setSelected] = useState<SelectedPane>(selectedAtOpen);
-  const accounts = useAccounts();
   const [form, setForm] = useState<BundleFormState>(initialForm);
   const [ruleType, setRuleType] = useState<RuleType>(initialRuleType);
   const [ruleValue, setRuleValue] = useState(initialRuleValue);
@@ -273,7 +270,7 @@ export const BundleManagerModal = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div className={s.head}>
-          <h2 className={s.title}>Settings</h2>
+          <h2 className={s.title}>NeoInbox Settings</h2>
           <button type="button" className={s.closeBtn} onClick={onClose} aria-label="Close">
             <Icon name="close" className={s.closeIcon} />
           </button>
@@ -305,16 +302,6 @@ export const BundleManagerModal = ({
               <Icon name="translate" className={s.navIcon} />
               <span className={s.navName}>Translation</span>
             </button>
-            {accounts.length > 1 && (
-              <button
-                type="button"
-                className={clsx(s.bundleNavItem, paneKey(selected) === "accounts" && s.bundleNavItemActive)}
-                onClick={() => choose({ kind: "accounts" })}
-              >
-                <Icon name="manage_accounts" className={s.navIcon} />
-                <span className={s.navName}>Accounts</span>
-              </button>
-            )}
             <button
               type="button"
               className={clsx(s.bundleNavItem, paneKey(selected) === "archive" && s.bundleNavItemActive)}
@@ -402,8 +389,6 @@ export const BundleManagerModal = ({
               <GeneralSettings />
             ) : selected.kind === "advanced" ? (
               <AdvancedSettings />
-            ) : selected.kind === "accounts" ? (
-              <AccountSettings />
             ) : selected.kind === "privacy" ? (
               <PrivacySettings />
             ) : selected.kind === "translation" ? (

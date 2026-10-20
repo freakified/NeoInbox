@@ -57,6 +57,7 @@ export const ThreadRow = ({
     if (e.key === "e") run(actions.hasInboxMessages, actions.done);
     else if (e.key === "s") run(actions.hasInboxMessages, actions.snoozeDefault);
     else if (e.key === "#") run(true, actions.trash);
+    else if (e.key === "!") run(actions.canReportSpam, actions.reportSpam);
     else if (e.key === "p") run(true, actions.togglePin, false);
     else if (e.key === "x") run(true, () => toggleSelected(t.id), false);
   };

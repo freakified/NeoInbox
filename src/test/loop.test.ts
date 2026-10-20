@@ -12,6 +12,7 @@ import { boot, type Booted } from "./boot";
 import {
   ARCHIVE,
   INBOX,
+  JUNK,
   forumMail,
   headerOnlyPromoMail,
   personalMail,
@@ -252,6 +253,73 @@ describe("moving archived mail back to the inbox", () => {
 
     expect(app.mail.idsIn(INBOX)).toEqual([]);
     expect(rowFor(app, id)).toMatchObject({ origin: "done", folderId: ARCHIVE });
+  });
+});
+
+describe("reporting spam", () => {
+  it("moves the message to Junk and flags it there", async () => {
+    const app = await open();
+    const id = await app.mail.deliver(INBOX, promoMail());
+    await settle();
+
+    app.store().spamThread([app.mail.keyOf(id)]);
+
+    // Optimistic: gone before the move, which waits out the undo toast.
+    expect(inboxItems(app)).toHaveLength(0);
+    expect(app.mail.folderOf(id)).toBe(INBOX);
+
+    await commitPendingAction(app);
+
+    expect(app.mail.idsIn(INBOX)).toEqual([]);
+    const [junkId] = app.mail.idsIn(JUNK);
+    expect(junkId).toBeDefined();
+    expect(app.mail.isJunk(junkId!)).toBe(true);
+    // Flagging the Junk copy must not pull it back in as inbox mail.
+    expect(rowFor(app, id)).toBeUndefined();
+    expect(await app.db.messages.count()).toBe(0);
+  });
+
+  it("finds the Junk copy to flag when the move hands nothing back", async () => {
+    const app = await open();
+    app.mail.withholdMoveResults = true;
+    const id = await app.mail.deliver(INBOX, promoMail());
+    await settle();
+
+    app.store().spamThread([app.mail.keyOf(id)]);
+    await commitPendingAction(app);
+
+    const [junkId] = app.mail.idsIn(JUNK);
+    expect(app.mail.isJunk(junkId!)).toBe(true);
+    expect(rowFor(app, id)).toBeUndefined();
+  });
+
+  it("undo keeps the message in the inbox, unflagged", async () => {
+    const app = await open();
+    const id = await app.mail.deliver(INBOX, promoMail());
+    await settle();
+
+    app.store().spamThread([app.mail.keyOf(id)]);
+    app.store().undoToast(app.store().toasts.at(-1)!.id);
+    await settle();
+
+    expect(inboxItems(app)).toHaveLength(1);
+    expect(app.mail.folderOf(id)).toBe(INBOX);
+    expect(app.mail.isJunk(id)).toBe(false);
+  });
+
+  it("rolls the row back into the inbox when there is no Junk folder", async () => {
+    const app = await open(shapes.noJunk());
+    const id = await app.mail.deliver(INBOX, promoMail());
+    await settle();
+
+    app.store().spamThread([app.mail.keyOf(id)]);
+    await commitPendingAction(app);
+
+    expect(app.mail.folderOf(id)).toBe(INBOX);
+    expect(inboxItems(app)).toHaveLength(1);
+    expect(app.store().toasts.at(-1)?.message).toBe(
+      "Couldn't report spam — No Spam folder found for this account",
+    );
   });
 });
 

@@ -201,11 +201,6 @@
   background: rgba(0, 0, 0, 0.08);
 }
 
-.syncText {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.8);
-}
-
 .syncErrorPill {
   font-size: 13px;
   color: #fff;
@@ -603,7 +598,6 @@
     gap: 8px;
   }
 
-  .syncText,
   .reconnectText {
     display: none;
   }

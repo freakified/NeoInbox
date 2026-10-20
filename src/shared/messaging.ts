@@ -30,6 +30,8 @@ export type ClientMsg =
   | { type: "snooze"; messageKey: MessageKey; wakeAt: number }
   | { type: "unsnooze"; messageKey: MessageKey }
   | { type: "trash"; messageKey: MessageKey }
+  /** Report spam: move to the account's Junk folder and flag it as junk. */
+  | { type: "spam"; messageKey: MessageKey }
   | { type: "move-to-inbox"; messageKey: MessageKey }
   /**
    * Set Thunderbird's read flag, which syncs to the server like any client's.
@@ -149,7 +151,7 @@ export interface ArchiveImportStatus {
  */
 export type InboxImportStatus = ArchiveImportStatus;
 
-export type FailedCommand = "done" | "snooze" | "unsnooze" | "trash" | "move-to-inbox";
+export type FailedCommand = "done" | "snooze" | "unsnooze" | "trash" | "spam" | "move-to-inbox";
 
 export type ServerMsg =
   | ({ type: "delta" } & Delta)

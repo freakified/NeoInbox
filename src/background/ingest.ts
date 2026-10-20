@@ -20,7 +20,7 @@ import {
   resolveArchiveFolder,
 } from "./archiveFolders";
 import { setPinned } from "./localState";
-import { collectInboxFolders } from "../shared/folders";
+import { collectInboxFolders, collectJunkFolders } from "../shared/folders";
 
 import { DETAILS_LAZY, MESSAGE_DETAILS_VERSION } from "../shared/details";
 import { snippetFromPart } from "../shared/snippet";
@@ -38,6 +38,13 @@ export class TrashFailedError extends Error {
   constructor(message: string, readonly cause?: unknown) {
     super(message);
     this.name = "TrashFailedError";
+  }
+}
+
+export class SpamFailedError extends Error {
+  constructor(message: string, readonly cause?: unknown) {
+    super(message);
+    this.name = "SpamFailedError";
   }
 }
 
@@ -407,6 +414,77 @@ export const trashMessage = async (key: MessageKey): Promise<void> => {
 
   if (!(await messageSettledOutOfFolder(id, sourceFolderId, headerMessageId))) {
     throw new TrashFailedError("Delete appeared to succeed but message still in source folder");
+  }
+}
+
+/**
+ * Report spam: move the message to its account's Junk folder, then set
+ * Thunderbird's junk flag on the copy that landed there. Moving to Junk is
+ * the report that counts — it's what Gmail and other servers learn from — so
+ * a flag that can't be set is only logged.
+ *
+ * The flag goes on after the move, not before: flagging the inbox copy fires
+ * onUpdated, which would re-cache it as inbox mail and put the row back on
+ * screen until the move landed.
+ */
+export const spamMessage = async (key: MessageKey): Promise<void> => {
+  const id = await opTbId(key);
+  if (id === null) {
+    log.info("spam", "message no longer exists; treating spam as settled", { key });
+    return;
+  }
+  let sourceFolderId = "";
+  let accountId = "";
+  let headerMessageId = "";
+  try {
+    const msg = (await messenger.messages.get(id)) as messenger.messages.MessageHeader & {
+      folder?: { id?: string; accountId?: string };
+    };
+    sourceFolderId = msg.folder?.id ?? "";
+    accountId = msg.folder?.accountId ?? "";
+    headerMessageId = msg.headerMessageId ?? "";
+  } catch (e) {
+    if (isMessageNotFound(e)) {
+      log.info("spam", "message already gone; treating spam as settled", { id });
+      return;
+    }
+    throw e;
+  }
+
+  const junkFolderId = (await collectJunkFolders()).find((f) => f.accountId === accountId)?.id;
+  if (!junkFolderId) throw new SpamFailedError("No Spam folder found for this account");
+  if (junkFolderId === sourceFolderId) return;
+
+  let movedId: number | undefined;
+  try {
+    const moved = (await messenger.messages.move(
+      [id],
+      junkFolderId as unknown as messenger.folders.MailFolderId,
+    )) as { messages?: { id: number }[] } | undefined;
+    movedId = moved?.messages?.[0]?.id;
+  } catch (e) {
+    if (isMessageNotFound(e)) {
+      log.info("spam", "message disappeared during move; treating as settled", { id });
+      return;
+    }
+    log.warn("spam", "move threw", { id, junkFolderId, e: String(e) });
+    throw new SpamFailedError("Move to Spam failed", e);
+  }
+
+  if (!(await messageSettledOutOfFolder(id, sourceFolderId, headerMessageId))) {
+    throw new SpamFailedError("Move appeared to succeed but message still in source folder");
+  }
+
+  // An IMAP move often hands nothing back; find the Junk copy by Message-ID.
+  movedId ??= (await findByHeaderMessageIdInFolder(junkFolderId, headerMessageId))?.id;
+  if (movedId === undefined) {
+    log.info("spam", "moved copy not visible yet; leaving it unflagged", { id, junkFolderId });
+    return;
+  }
+  try {
+    await messenger.messages.update(movedId, { junk: true });
+  } catch (e) {
+    log.warn("spam", "setting the junk flag failed", { id: movedId, e: String(e) });
   }
 }
 

@@ -9,6 +9,7 @@ interface FolderRoles {
   sent: InboxFolder[];
   drafts: InboxFolder[];
   archives: InboxFolder[];
+  junk: InboxFolder[];
 }
 
 /** TTL is a safety net for missed folder events; events invalidate eagerly. */
@@ -37,6 +38,10 @@ export const collectArchiveFolders = async (): Promise<InboxFolder[]> => {
   return (await getRoles()).archives;
 }
 
+export const collectJunkFolders = async (): Promise<InboxFolder[]> => {
+  return (await getRoles()).junk;
+}
+
 const getRoles = async (): Promise<FolderRoles> => {
   if (cache && Date.now() - cache.at < CACHE_TTL_MS) return cache.roles;
   pending ??= loadRoles()
@@ -52,7 +57,7 @@ const getRoles = async (): Promise<FolderRoles> => {
 
 const loadRoles = async (): Promise<FolderRoles> => {
   const accounts = await messenger.accounts.list();
-  const roles: FolderRoles = { inbox: [], sent: [], drafts: [], archives: [] };
+  const roles: FolderRoles = { inbox: [], sent: [], drafts: [], archives: [], junk: [] };
   for (const acc of accounts) {
     walk(acc.folders ?? [], (f, underArchive) => {
       if (!f.id) return;
@@ -65,6 +70,7 @@ const loadRoles = async (): Promise<FolderRoles> => {
       if (isSent(f)) roles.sent.push(entry);
       if (isDraft(f)) roles.drafts.push(entry);
       if (underArchive || isArchive(f)) roles.archives.push(entry);
+      if (isJunk(f)) roles.junk.push(entry);
     });
   }
   return roles;
@@ -85,6 +91,12 @@ const isSent = (f: messenger.folders.MailFolder): boolean => {
 const isDraft = (f: messenger.folders.MailFolder): boolean => {
   if (f.specialUse?.includes("drafts")) return true;
   if (f.type === "drafts") return true;
+  return false;
+}
+
+const isJunk = (f: messenger.folders.MailFolder): boolean => {
+  if (f.specialUse?.includes("junk")) return true;
+  if (f.type === "junk") return true;
   return false;
 }
 

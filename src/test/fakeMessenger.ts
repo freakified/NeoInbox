@@ -189,6 +189,7 @@ interface StoredMessage {
   subject: string;
   date: Date;
   read: boolean;
+  junk: boolean;
   tags: string[];
   size: number;
   recipients: string[];
@@ -323,6 +324,7 @@ export class FakeMessenger {
       subject: spec.subject ?? `Message ${id}`,
       date: spec.date instanceof Date ? spec.date : new Date(spec.date ?? Date.now()),
       read: spec.read ?? false,
+      junk: false,
       tags: spec.tags ?? [],
       size: spec.size ?? 1024,
       recipients: spec.recipients ?? ["me@example.com"],
@@ -484,6 +486,10 @@ export class FakeMessenger {
     return this.messages.get(id)?.folderId;
   }
 
+  isJunk(id: number): boolean | undefined {
+    return this.messages.get(id)?.junk;
+  }
+
   // ------------------------------------------------------------------ shared
 
   private folderRef(folderId: string): { id: string; accountId: string; name: string } {
@@ -505,6 +511,7 @@ export class FakeMessenger {
       bccList: msg.bccList,
       date: msg.date,
       read: msg.read,
+      junk: msg.junk,
       size: msg.size,
       tags: msg.tags,
       folder: this.folderRef(msg.folderId),
@@ -593,7 +600,7 @@ export class FakeMessenger {
 
   readonly messagesApi = {
     onNewMailReceived: new Event<[{ id: string; accountId: string; name: string }, { id: string | null; messages: messenger.messages.MessageHeader[] }]>(),
-    onUpdated: new Event<[messenger.messages.MessageHeader, { tags?: string[]; read?: boolean }]>(),
+    onUpdated: new Event<[messenger.messages.MessageHeader, { tags?: string[]; read?: boolean; junk?: boolean }]>(),
     onDeleted: new Event<[{ id: string | null; messages: messenger.messages.MessageHeader[] }]>(),
     onMoved: new Event<[{ id: string | null; messages: messenger.messages.MessageHeader[] }, { id: string | null; messages: messenger.messages.MessageHeader[] }]>(),
 
@@ -692,9 +699,10 @@ export class FakeMessenger {
       await this.messagesApi.onDeleted.emit(this.paginateHeaders(headers));
     },
 
-    update: async (id: number, props: { read?: boolean; tags?: string[] }) => {
+    update: async (id: number, props: { read?: boolean; junk?: boolean; tags?: string[] }) => {
       const msg = this.require(id);
       if (props.read !== undefined) msg.read = props.read;
+      if (props.junk !== undefined) msg.junk = props.junk;
       if (props.tags !== undefined) msg.tags = props.tags;
       await this.messagesApi.onUpdated.emit(this.header(msg), props);
     },

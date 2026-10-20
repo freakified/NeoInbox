@@ -12,6 +12,7 @@ import {
   useTripMemberships,
   useTrips,
 } from "../../store/mailStore";
+import { translationTargetLabel } from "../lib/translation";
 import { useAnchoredMenu } from "../lib/useAnchoredMenu";
 import { Icon } from "./Icon";
 import { MoveDestinations } from "./MoveDestinations";
@@ -22,11 +23,14 @@ import s from "./BundleMenu.module.css";
 
 export const BundleMenu = ({
   thread,
-  onTranslateToEnglish,
+  onTranslate,
+  onReportSpam,
 }: {
   thread: Thread;
   /** Omitted where there's no open message to translate (the row hover bar). */
-  onTranslateToEnglish?: () => void;
+  onTranslate?: () => void;
+  /** Omitted when the thread holds no received mail, only your own. */
+  onReportSpam?: () => void;
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [view, setView] = useState<"root" | "move">("root");
@@ -199,32 +203,49 @@ export const BundleMenu = ({
                 <span className={s.menuItemLabel}>Move to</span>
                 <Icon name="chevron_right" className={s.menuChevron} />
               </button>
-              {onTranslateToEnglish && (
+              {onTranslate && (
                 <button
                   type="button"
                   className={s.menuItem}
                   role="menuitem"
                   onClick={() => {
-                    onTranslateToEnglish();
+                    onTranslate();
                     setMenuOpen(false);
                   }}
                 >
                   <Icon name="translate" className={s.menuIcon} />
-                  <span className={s.menuItemLabel}>Translate to English</span>
+                  <span className={s.menuItemLabel}>Translate to {translationTargetLabel()}</span>
                 </button>
               )}
-              <button
-                type="button"
-                className={s.menuItem}
-                role="menuitem"
-                onClick={() => {
-                  openBundleSettings({ category: thread.category, thread });
-                  setMenuOpen(false);
-                }}
-              >
-                <Icon name="settings" className={s.menuIcon} />
-                <span className={s.menuItemLabel}>Bundle settings</span>
-              </button>
+              {thread.category && thread.category !== "personal" && (
+                <button
+                  type="button"
+                  className={s.menuItem}
+                  role="menuitem"
+                  onClick={() => {
+                    openBundleSettings({ category: thread.category, thread });
+                    setMenuOpen(false);
+                  }}
+                >
+                  <Icon name="settings" className={s.menuIcon} />
+                  <span className={s.menuItemLabel}>Bundle settings</span>
+                </button>
+              )}
+              {onReportSpam && <div className={s.divider} role="separator" />}
+              {onReportSpam && (
+                <button
+                  type="button"
+                  className={s.menuItem}
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onReportSpam();
+                  }}
+                >
+                  <Icon name="report" className={s.menuIcon} />
+                  <span className={s.menuItemLabel}>Report spam</span>
+                </button>
+              )}
             </>
           ) : (
             <>

@@ -22,6 +22,7 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
       ["x", "Select or deselect (shift-click selects a range)"],
       ["⌘A / Ctrl+A", "Select all"],
       ["#", "Trash"],
+      ["!", "Report spam"],
     ],
   },
   {

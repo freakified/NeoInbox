@@ -15,6 +15,7 @@ import {
   loadMessageBody,
   opTbId,
   pinMessage,
+  spamMessage,
   trashMessage,
 } from "./ingest";
 import { type ArchivedCopy, findByHeaderMessageIdInFolder } from "./archiveFolders";
@@ -126,8 +127,11 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
   switch (msg.type) {
     case "hello": {
       await pushMyEmails();
-      const last = getLastProgress();
-      if (last) broadcast(last);
+      // Always answer, so the SPA can tell "nothing is scanning" from "not
+      // told yet" and doesn't show inbox zero over a cache still filling.
+      broadcast(
+        getLastProgress() ?? { type: "backfill-progress", scanned: 0, classified: 0, done: true },
+      );
       const tripScan = await getTripScanStatus();
       if (tripScan) broadcast({ type: "trip-scan-progress", ...tripScan });
       const archiveImport = await getArchiveImportStatus();
@@ -305,6 +309,23 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
         broadcast({
           type: "command-failed",
           command: "trash",
+          messageKey: msg.messageKey,
+          reason: String((e as Error)?.message ?? e),
+        });
+        return;
+      }
+      await db.messages.delete(msg.messageKey);
+      broadcast({ type: "delta", removedKeys: [msg.messageKey] });
+      return;
+    }
+    case "spam": {
+      try {
+        await spamMessage(msg.messageKey);
+      } catch (e) {
+        log.warn("command", "spam failed", { key: msg.messageKey, e: String(e) });
+        broadcast({
+          type: "command-failed",
+          command: "spam",
           messageKey: msg.messageKey,
           reason: String((e as Error)?.message ?? e),
         });

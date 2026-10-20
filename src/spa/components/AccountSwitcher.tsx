@@ -2,6 +2,7 @@ import { clsx } from "clsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMailStore } from "../../store/mailStore";
+import { startingAccountFilter, useUnifiedInbox } from "../lib/accountPrefs";
 import { type MailAccount, useAccounts } from "../lib/accounts";
 import { useSelfProfile } from "../lib/contactCards";
 import { openNewIssue } from "../lib/external";
@@ -16,7 +17,7 @@ import s from "./AccountSwitcher.module.css";
  * after their address by default, so the account name only labels the
  * account when you've given it one of your own ("Work").
  */
-const useAccountPerson = (account: MailAccount | null) => {
+export const useAccountPerson = (account: MailAccount | null) => {
   const profile = useSelfProfile(account?.email);
   if (!account) return null;
   const isAddress = !account.name || account.name.toLowerCase() === account.email.toLowerCase();
@@ -28,7 +29,7 @@ const useAccountPerson = (account: MailAccount | null) => {
   };
 };
 
-const AccountAvatar = ({
+export const AccountAvatar = ({
   account,
   person,
   className,
@@ -44,7 +45,8 @@ const AccountAvatar = ({
 
 /**
  * Google-style avatar menu in the app bar: settings, help, and with more than
- * one account, narrowing every view to one account's mail or showing them all.
+ * one account, switching between them, or to all of them together once the
+ * unified inbox is turned on.
  */
 export const AccountSwitcher = ({
   onShowShortcuts,
@@ -54,6 +56,7 @@ export const AccountSwitcher = ({
   onShowAbout: () => void;
 }) => {
   const accounts = useAccounts();
+  const unified = useUnifiedInbox();
   const accountFilter = useMailStore((st) => st.accountFilter);
   const setAccountFilter = useMailStore((st) => st.setAccountFilter);
   const messagesByKey = useMailStore((st) => st.messagesByKey);
@@ -69,11 +72,13 @@ export const AccountSwitcher = ({
   const current = multiple ? filtered : accounts[0] ?? null;
   const currentPerson = useAccountPerson(current);
 
-  // A remembered account that's since been removed from Thunderbird would
-  // otherwise leave every view empty with no way to tell why.
+  // An account that's since been removed from Thunderbird would otherwise
+  // leave every view empty with no way to tell why, and the unified inbox
+  // can be turned off while it's showing.
+  const stranded = multiple && !filtered && (accountFilter !== null || !unified);
   useEffect(() => {
-    if (accounts.length && accountFilter && !filtered) setAccountFilter(null);
-  }, [accounts, accountFilter, filtered, setAccountFilter]);
+    if (stranded) setAccountFilter(startingAccountFilter(accounts));
+  }, [stranded, accounts, setAccountFilter]);
 
   // Everything in each inbox, read or not; snoozed mail is out until it wakes.
   const inboxCounts = useMemo(() => {
@@ -114,7 +119,7 @@ export const AccountSwitcher = ({
   };
 
   const label = !current || !currentPerson
-    ? multiple ? "All accounts" : "your account"
+    ? multiple ? "Unified inbox" : "your account"
     : current.email && current.email !== currentPerson.label
       ? `${currentPerson.label} (${current.email})`
       : currentPerson.label;
@@ -148,7 +153,7 @@ export const AccountSwitcher = ({
           aria-label="Accounts"
           onClick={(e) => e.stopPropagation()}
         >
-          {multiple && (
+          {multiple && unified && (
             <>
               <button
                 type="button"
@@ -161,8 +166,8 @@ export const AccountSwitcher = ({
                   <Icon name="all_inbox" className={s.allIconSmall} />
                 </span>
                 <span className={s.itemText}>
-                  <span className={s.itemName}>All accounts</span>
-                  <span className={s.itemEmail}>Every inbox together</span>
+                  <span className={s.itemName}>Unified inbox</span>
+                  <span className={s.itemEmail}>All accounts together</span>
                 </span>
                 {totalInbox > 0 && <span className={s.count}>{totalInbox}</span>}
               </button>

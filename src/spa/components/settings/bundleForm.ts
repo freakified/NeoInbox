@@ -11,7 +11,6 @@ export type SelectedBundle = { kind: "builtin"; id: BuiltinCategory } | { kind: 
 export type SelectedPane =
   | { kind: "general" }
   | { kind: "advanced" }
-  | { kind: "accounts" }
   | { kind: "privacy" }
   | { kind: "translation" }
   | { kind: "trips" }
@@ -161,7 +160,6 @@ export const bundleKey = (selected: SelectedBundle): string =>
 export const paneKey = (selected: SelectedPane): string =>
   selected.kind === "general" ||
   selected.kind === "advanced" ||
-  selected.kind === "accounts" ||
   selected.kind === "privacy" ||
   selected.kind === "translation" ||
   selected.kind === "trips" ||

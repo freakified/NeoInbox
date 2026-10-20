@@ -513,6 +513,9 @@ const runScan = (mode: ScanMode): Promise<ScanCounters> => {
   return serialized(async () => {
     beginScan();
     const counters: ScanCounters = { scanned: 0, classified: 0, reclassified: 0, skippedOlder: 0 };
+    // Before the first message, not after PROGRESS_EVERY of them: until then
+    // the SPA would still be holding the last scan's done.
+    if (announce) sendProgress({ type: "backfill-progress", scanned: 0, classified: 0, done: false });
     let errored: string | null = null;
     try {
       const [inboxes, sents, drafts] = await Promise.all([

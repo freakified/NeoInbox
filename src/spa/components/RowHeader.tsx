@@ -50,6 +50,9 @@ export const RowHeader = ({
         if (e.shiftKey) e.preventDefault();
       }}
       onKeyDown={(e) => {
+        // Dialogs opened from the action strip are portaled out of the row,
+        // but React still bubbles their keystrokes here; leave those alone.
+        if (!e.currentTarget.contains(e.target as Node)) return;
         if (onClick && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
           onClick();

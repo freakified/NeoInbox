@@ -12,9 +12,10 @@ export const Toaster = () => {
 
   useEffect(() => {
     if (toasts.length === 0) return;
-    // Undo toasts are dismissed by the store's commit timer; skip them here.
+    // Undo toasts are dismissed by the store's commit timer, and progress
+    // toasts by the work finishing; skip them here.
     const timers = toasts
-      .filter((t) => !t.undo)
+      .filter((t) => !t.undo && !t.progress)
       .map((t) => window.setTimeout(() => dismissToast(t.id), AUTO_DISMISS_MS));
     return () => {
       for (const id of timers) window.clearTimeout(id);
@@ -59,14 +60,16 @@ export const Toaster = () => {
               {action.label}
             </button>
           ))}
-          <button
-            type="button"
-            className={s.dismiss}
-            onClick={() => dismissToast(t.id)}
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
+          {!t.progress && (
+            <button
+              type="button"
+              className={s.dismiss}
+              onClick={() => dismissToast(t.id)}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          )}
         </div>
       ))}
     </div>

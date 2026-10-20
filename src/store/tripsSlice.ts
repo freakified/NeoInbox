@@ -20,9 +20,9 @@ const writeTrips = (change: Partial<TripWrite>): void => {
 };
 
 /**
- * Trashed mail leaves its trip for good once the undo window closes, and a
- * trip left with no mail goes with it — Inbox trips, like its other bundles,
- * stopped existing when they had nothing in them. The rows become tombstones
+ * Trashed (or spam-reported) mail leaves its trip for good once the undo
+ * window closes, and a trip left with no mail goes with it — Inbox trips, like
+ * its other bundles, stopped existing when they had nothing in them. The rows become tombstones
  * so the auto-clusterer, which still has the trashed mail's reservations,
  * doesn't put the trip back.
  */

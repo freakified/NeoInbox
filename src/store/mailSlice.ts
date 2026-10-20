@@ -5,19 +5,59 @@ import {
   commitUndoToast,
   doneToastMessage,
   nextToastId,
+  spamToastMessage,
   TOAST_LIMIT,
   trashToastMessage,
   UNDO_TIMEOUT_MS,
   undoTimers,
 } from "./toastsSlice";
 import { MESSAGE_DETAILS_VERSION } from "../shared/details";
+import type { MessageKey } from "../shared/messageKey";
+
+/**
+ * Trash and Report spam: the rows leave at once, and the command waits out
+ * the undo toast, so Undo only has to put the rows back.
+ */
+const removeWithUndo = (
+  set: StoreSet,
+  get: StoreGet,
+  messageKeys: MessageKey[],
+  kind: "trash" | "spam",
+): void => {
+  if (messageKeys.length === 0) return;
+  flushDelta(set, get);
+  const prev = get().messagesByKey;
+  const map = { ...prev };
+  const pending = { ...get().pendingOps };
+  for (const key of messageKeys) {
+    const m = prev[key];
+    if (m) pending[key] = { kind, message: m };
+    delete map[key];
+  }
+  const toastId = nextToastId();
+  const toast: ToastRecord = {
+    id: toastId,
+    message: kind === "trash"
+      ? trashToastMessage(messageKeys.length)
+      : spamToastMessage(messageKeys.length),
+    undo: { messageKeys, kind },
+  };
+  const allToasts = [...get().toasts, toast];
+  const newToasts = allToasts.slice(-TOAST_LIMIT);
+  for (const dropped of allToasts.slice(0, allToasts.length - TOAST_LIMIT)) {
+    if (dropped.undo) commitUndoToast(get, set, dropped.id);
+  }
+  set({ messagesByKey: map, pendingOps: pending, toasts: newToasts });
+  const timer = setTimeout(() => commitUndoToast(get, set, toastId), UNDO_TIMEOUT_MS);
+  undoTimers.set(toastId, timer);
+};
 
 export const mailSlice = (
   set: StoreSet,
   get: StoreGet,
 ): Pick<
   MailStore,
-  "pin" | "doneThread" | "snoozeThread" | "unsnoozeThread" | "trashThread" | "moveToInboxThread" | "setRouteRule" | "deleteRouteRule" | "applyCategoryLocally" | "setCustomBundle" | "deleteCustomBundle" | "hydrateThreadDetails" | "markThreadRead" | "retryBackfill" | "openBundleSettings" | "closeBundleSettings" | "reclassify" | "importArchive" | "stopArchiveImport"
+  "pin" | "doneThread" | "snoozeThread" | "unsnoozeThread" | "trashThread" | "spamThread" | "moveToInboxThread" | "setRouteRule" | "deleteRouteRule" | "applyCategoryLocally" | "setCustomBundle" | "deleteCustomBundle" | "hydrateThreadDetails" | "markThreadRead" | "retryBackfill" | "openBundleSettings" | "closeBundleSettings" | "reclassify" | "importArchive" | "stopArchiveImport"
 > => ({
   pin: (messageKey, pinned) => {
     flushDelta(set, get);
@@ -106,32 +146,8 @@ export const mailSlice = (
     set({ messagesByKey: map, pendingOps: pending, snoozesByKey });
     for (const key of messageKeys) send({ type: "unsnooze", messageKey: key });
   },
-  trashThread: (messageKeys) => {
-    if (messageKeys.length === 0) return;
-    flushDelta(set, get);
-    const prev = get().messagesByKey;
-    const map = { ...prev };
-    const pending = { ...get().pendingOps };
-    for (const key of messageKeys) {
-      const m = prev[key];
-      if (m) pending[key] = { kind: "trash", message: m };
-      delete map[key];
-    }
-    const toastId = nextToastId();
-    const toast: ToastRecord = {
-      id: toastId,
-      message: trashToastMessage(messageKeys.length),
-      undo: { messageKeys, kind: "trash" },
-    };
-    const allToasts = [...get().toasts, toast];
-    const newToasts = allToasts.slice(-TOAST_LIMIT);
-    for (const dropped of allToasts.slice(0, allToasts.length - TOAST_LIMIT)) {
-      if (dropped.undo) commitUndoToast(get, set, dropped.id);
-    }
-    set({ messagesByKey: map, pendingOps: pending, toasts: newToasts });
-    const timer = setTimeout(() => commitUndoToast(get, set, toastId), UNDO_TIMEOUT_MS);
-    undoTimers.set(toastId, timer);
-  },
+  trashThread: (messageKeys) => removeWithUndo(set, get, messageKeys, "trash"),
+  spamThread: (messageKeys) => removeWithUndo(set, get, messageKeys, "spam"),
   moveToInboxThread: (messageKeys) => {
     if (messageKeys.length === 0) return;
     flushDelta(set, get);

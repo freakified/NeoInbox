@@ -3,7 +3,8 @@ import { create } from "zustand";
 import { db } from "./db";
 import { deriveStream, type Stream, type StreamView } from "./stream";
 import { composeSlice } from "./composeSlice";
-import { getDefaultAccount } from "../spa/lib/accountPrefs";
+import { startingAccountFilter } from "../spa/lib/accountPrefs";
+import { listAccounts } from "../spa/lib/accounts";
 import { loadHistoryPage, loadInbox, loadStartupMessages } from "./history";
 import { mailSlice } from "./mailSlice";
 import { connectPort } from "./portClient";
@@ -67,14 +68,14 @@ export const useMailStore = create<MailStore>((set, get) => ({
   historyFrom: 0,
   loadingHistory: false,
   search: null,
-  // Opens on the default account; switching is for this session only.
-  accountFilter: getDefaultAccount(),
+  // Set to the default account by init; switching is for this session only.
+  accountFilter: null,
 
   setAccountFilter: (accountId) => set({ accountFilter: accountId }),
 
   init: async () => {
     if (get().hydrated) return;
-    const [rawBundles, routeRules, snoozes, reminders, trips, tripMemberships] =
+    const [rawBundles, routeRules, snoozes, reminders, trips, tripMemberships, accounts] =
       await Promise.all([
         db.customBundles.toArray(),
         db.routeRules.toArray(),
@@ -82,6 +83,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
         db.reminders.toArray(),
         db.trips.toArray(),
         db.tripMemberships.toArray(),
+        listAccounts(),
       ]);
     const { rows, historyFrom } = await loadStartupMessages(tripMemberships);
     const customBundles = rawBundles.sort((a, b) => a.order - b.order);
@@ -105,6 +107,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
       remindersById,
       tripsById,
       tripMembershipByKey,
+      accountFilter: startingAccountFilter(accounts),
     });
 
     startReminderWakeTimer(get);

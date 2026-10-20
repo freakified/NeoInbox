@@ -27,6 +27,28 @@ const loadMissingTripMembers = async (
   set({ messagesByKey: map });
 };
 
+const SCAN_TOAST_ID = "scan-progress";
+
+/**
+ * One toast tracks a running full scan, rewritten in place as progress lands
+ * so it keeps its spot in the stack, and dropped once the scan ends.
+ */
+const withScanToast = (
+  toasts: ToastRecord[],
+  msg: Extract<ServerMsg, { type: "backfill-progress" }>,
+): ToastRecord[] => {
+  if (msg.done) return toasts.filter((t) => t.id !== SCAN_TOAST_ID);
+  const toast: ToastRecord = {
+    id: SCAN_TOAST_ID,
+    message: `Scanning… ${msg.scanned} messages, ${msg.classified} classified`,
+    progress: true,
+  };
+  if (toasts.some((t) => t.id === SCAN_TOAST_ID)) {
+    return toasts.map((t) => (t.id === SCAN_TOAST_ID ? toast : t));
+  }
+  return [...toasts, toast].slice(-TOAST_LIMIT);
+};
+
 export const applyServerMsg = (
   set: StoreSet,
   get: StoreGet,
@@ -47,6 +69,7 @@ export const applyServerMsg = (
           done: msg.done,
           error: msg.error ?? null,
         },
+        toasts: withScanToast(get().toasts, msg),
       });
       return;
     case "inbox-window":
