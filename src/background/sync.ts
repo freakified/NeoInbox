@@ -1,4 +1,4 @@
-import { runBackfill } from "./backfill";
+import { runBackfill, runIncrementalSync } from "./backfill";
 import { withTimeout } from "./scanQueue";
 import { isTripCandidate, scheduleTripExtraction } from "./extract";
 import {
@@ -267,15 +267,60 @@ const ingestBulkArrival = async (list: MessageList): Promise<void> => {
   await wakeSnoozesForNewMail(added);
 };
 
+/** Last message count seen per inbox folder, to tell arrivals from removals. */
+const inboxCounts = new Map<string, number>();
+let inboxResyncTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Catches inbox arrivals Thunderbird never announces. onNewMailReceived does
+ * not fire for every message that lands in an inbox — a forward from your
+ * own alt account went unseen until it was opened — so a rising message
+ * count is taken as a cue to run the incremental sync, which picks up
+ * anything newer than the folder's cursor. Debounced: an IMAP fetch moves the
+ * count several times.
+ */
+const onInboxFolderInfoChanged = async (
+  folder: messenger.folders.MailFolder,
+  info: messenger.folders.MailFolderInfo,
+): Promise<void> => {
+  const total = info.totalMessageCount;
+  if (total === undefined || !folder.id) return;
+  if (!(await getFolderIds(collectInboxFolders)).has(folder.id)) return;
+  const previous = inboxCounts.get(folder.id);
+  inboxCounts.set(folder.id, total);
+  if (previous !== undefined && total <= previous) return;
+  clearTimeout(inboxResyncTimer);
+  inboxResyncTimer = setTimeout(() => {
+    log.debug("sync", "inbox count rose; running incremental sync", { folderId: folder.id });
+    void runIncrementalSync().catch((e) => log.warn("sync", "inbox resync failed", e));
+  }, 5_000);
+};
+
 export const wireSyncEngine = (): void => {
+  const onFolderInfoChanged = messenger.folders?.onFolderInfoChanged;
+  if (onFolderInfoChanged) {
+    onFolderInfoChanged.addListener((folder, info) => {
+      void onInboxFolderInfoChanged(folder, info).catch((e) =>
+        log.warn("sync", "onFolderInfoChanged failed", e),
+      );
+    });
+  } else {
+    log.warn("sync", "folders.onFolderInfoChanged unavailable");
+  }
+
+
   messenger.messages.onNewMailReceived.addListener(async (folder, list) => {
     try {
       // Mail can land in a folder that isn't a watched inbox (e.g. a
       // server-side filter routes it elsewhere); caching it as "inbox"
       // regardless would show it in the stream and then have the next full
       // scan prune it as stranded, since its folder isn't in the scanned set.
+      log.debug("sync", `onNewMailReceived ${list.messages.length} in ${folder?.id}`);
       const inboxIds = await getFolderIds(collectInboxFolders);
-      if (folder?.id && !inboxIds.has(folder.id)) return;
+      if (folder?.id && !inboxIds.has(folder.id)) {
+        log.debug("sync", "new mail outside the watched inboxes", { folderId: folder.id });
+        return;
+      }
       if (await isBulkArrival(folder?.id, list)) {
         await ingestBulkArrival(list);
         return;

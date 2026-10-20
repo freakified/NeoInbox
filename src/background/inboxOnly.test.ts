@@ -11,7 +11,7 @@
  * which messages had bodies fetched) rather than about results, since every
  * regression here looks correct and just quietly downloads a few gigabytes.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { boot, type Booted } from "../test/boot";
 import {
   ARCHIVE,
@@ -197,6 +197,25 @@ describe("the inbox scan window", () => {
     await settle();
 
     expect(await app.db.messages.get(app.mail.keyOf(fresh))).toBeDefined();
+  });
+});
+
+describe("mail Thunderbird doesn't announce", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("lands once the inbox's message count rises", async () => {
+    app = await open(shapes.standard([personalMail()]));
+    await app.backfill.runBackfill();
+    await settle();
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const fresh = await app.mail.deliverUnannounced(INBOX, personalMail({ date: Date.now() }));
+    expect(await app.db.messages.get(app.mail.keyOf(fresh))).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(5_001);
+    vi.useRealTimers();
+    await settle();
+
+    expect(await app.db.messages.get(app.mail.keyOf(fresh))).toMatchObject({ origin: "inbox" });
   });
 });
 

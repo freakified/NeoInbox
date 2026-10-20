@@ -107,6 +107,24 @@ describe("buildThreads", () => {
     expect(threads[0]!.participantsLabel).toBe("Ada, me (2)");
   });
 
+  it("shows mail that came back to me once, as the received copy", () => {
+    const echo = {
+      headerMessageId: "<self@example.com>",
+      author: "Me <me@example.com>",
+      recipients: ["me-alt@example.com"],
+      subject: "Test message",
+    };
+    const sent = msg({ ...echo, key: "sent-copy", origin: "sent", read: true });
+    const received = msg({ ...echo, key: "inbox-copy", date: 1_500 });
+
+    const [thread, ...rest] = buildThreads([sent, received], ME);
+
+    expect(rest).toHaveLength(0);
+    expect(thread!.messages.map((m) => m.key)).toEqual(["inbox-copy"]);
+    // The Sent view never sees the inbox copy, so it keeps its own.
+    expect(buildThreads([sent], ME, new Set(["sent"]))[0]!.messages).toEqual([sent]);
+  });
+
   it("drops threads with no message in an anchor folder", () => {
     const sentOnly = msg({ origin: "sent", author: "Me <me@example.com>" });
     expect(buildThreads([sentOnly], ME)).toHaveLength(0);

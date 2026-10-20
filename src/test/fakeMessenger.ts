@@ -409,6 +409,19 @@ export class FakeMessenger {
   }
 
   /**
+   * Adds a message Thunderbird never announces: no onNewMailReceived, only
+   * the folder's message count changing, as a forward from your own alt
+   * account arrived on Gmail.
+   */
+  async deliverUnannounced(folderId: string, spec: FakeMessageSpec = {}): Promise<number> {
+    const id = this.insert(folderId, spec);
+    await this.foldersApi.onFolderInfoChanged.emit(this.folderRef(folderId), {
+      totalMessageCount: this.idsIn(folderId).length,
+    });
+    return id;
+  }
+
+  /**
    * Moves messages and fires onMoved — what archiving from Thunderbird's own
    * UI, or from another client, looks like to the extension.
    */
@@ -722,6 +735,7 @@ export class FakeMessenger {
     onMoved: new Event<[]>(),
     onDeleted: new Event<[]>(),
     onUpdated: new Event<[]>(),
+    onFolderInfoChanged: new Event<[{ id: string; accountId: string; name: string }, { totalMessageCount?: number }]>(),
     getFolderInfo: async (ref: unknown) => {
       const blocked = this.guard("getFolderInfo");
       if (blocked) return blocked;

@@ -139,6 +139,27 @@ export const resolveThread = <T extends Thread>(
 ): T | undefined =>
   threads.find((t) => t.id === ref.id) ?? threads.find((t) => isSameThread(t, ref));
 
+/**
+ * Mail you sent that came back to you — a CC to yourself, a forward from
+ * another account, a list echoing your post — is one message in two folders,
+ * Sent and Inbox, under one Message-ID. Show it once, as the received copy:
+ * that's the row pin, snooze and done act on.
+ */
+const withoutSentEchoes = (msgs: RawMessage[]): RawMessage[] => {
+  const received = new Set(
+    msgs
+      .filter((m) => m.origin === "inbox" || m.origin === "done")
+      .map((m) => cleanMessageId(m.headerMessageId))
+      .filter(Boolean),
+  );
+  if (!received.size) return msgs;
+  return msgs.filter(
+    (m) =>
+      (m.origin !== "sent" && m.origin !== "draft") ||
+      !received.has(cleanMessageId(m.headerMessageId)),
+  );
+};
+
 export function buildThreads(
   messages: readonly RawMessage[],
   myEmails: ReadonlySet<string>,
@@ -211,8 +232,9 @@ export function buildThreads(
   }
 
   const threads: Thread[] = [];
-  for (const [key, msgs] of byKey) {
-    if (!msgs.some((m) => anchorOrigins.has(m.origin))) continue;
+  for (const [key, grouped] of byKey) {
+    if (!grouped.some((m) => anchorOrigins.has(m.origin))) continue;
+    const msgs = withoutSentEchoes(grouped);
     msgs.sort((a, b) => a.date - b.date);
     const latest = msgs[msgs.length - 1];
     if (!latest) continue;
