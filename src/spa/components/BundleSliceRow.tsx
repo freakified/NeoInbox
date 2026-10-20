@@ -66,7 +66,19 @@ export const BundleSliceRow = ({
     })
     .filter(Boolean);
 
-  const preview = <span className={s.previewList}>{previewContent}</span>;
+  const preview = (
+    <>
+      {newCount > 0 && (
+        <span
+          className={s.newTag}
+          style={{ "--bundle-color": meta.color } as React.CSSProperties}
+        >
+          {newCount} new
+        </span>
+      )}
+      <span className={s.previewList}>{previewContent}</span>
+    </>
+  );
   const attachmentRefs = collectAttachments(threads.flatMap((t) => t.messages));
   const attachments = attachmentRefs.length > 0 && (
     <MessageAttachments attachments={attachmentRefs} compact limit={3} />
@@ -132,14 +144,6 @@ export const BundleSliceRow = ({
                 {meta.name}
               </span>
               <span className={s.threadCount}>{threadCountLabel}</span>
-              {newCount > 0 && (
-                <span
-                  className={s.newTag}
-                  style={{ "--bundle-color": meta.color } as React.CSSProperties}
-                >
-                  {newCount} new
-                </span>
-              )}
             </>
           }
           secondary={preview}
