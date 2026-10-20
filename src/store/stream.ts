@@ -230,6 +230,7 @@ export const deriveStream = (
 
   const reminderItems: StreamItem[] = [];
   for (const r of Object.values(remindersById)) {
+    if (accountId && r.accountId && r.accountId !== accountId) continue;
     const date = reminderDateForView(r, view, pinnedOnly);
     if (date !== null) reminderItems.push({ type: "reminder", date, reminder: r });
   }

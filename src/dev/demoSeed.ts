@@ -623,8 +623,9 @@ export const demoSeed = (now = Date.now()): DemoSeed => {
     // The cabin's Wi-Fi password: exactly what a pin is for.
     pins: [{ key: cabin.inbox[0]!.headerMessageId!, pinnedAt: now - 6 * DAY }],
     reminders: [
-      { id: "demo-passport", text: "Check passport expiry before Lisbon", createdAt: now - 2 * DAY, status: "active", pinned: true },
-      { id: "demo-grandma", text: "Call Grandma for her birthday", createdAt: now - 3 * HOUR, status: "active", pinned: false },
+      { id: "demo-passport", text: "Check passport expiry before Lisbon", createdAt: now - 2 * DAY, status: "active", pinned: true, accountId: "dev" },
+      { id: "demo-grandma", text: "Call Grandma for her birthday", createdAt: now - 3 * HOUR, status: "active", pinned: false, accountId: "dev" },
+      { id: "demo-slides", text: "Send the Q4 slides to Sam", createdAt: now - 5 * HOUR, status: "active", pinned: false, accountId: "work" },
     ],
   };
 };

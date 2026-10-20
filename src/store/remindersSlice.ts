@@ -2,11 +2,17 @@ import { db } from "./db";
 import type { MailStore, StoreGet, StoreSet } from "./storeTypes";
 import { log } from "../shared/log";
 import type { ReminderRecord } from "../shared/types";
+import { effectiveDefaultAccount, getDefaultAccount } from "../spa/lib/accountPrefs";
+import { listAccounts } from "../spa/lib/accounts";
 
 /** Reminders are SPA-owned; they persist straight to Dexie, no port round-trip. */
 const persistReminder = (record: ReminderRecord): void => {
   void db.reminders.put(record).catch((e) => log.warn("store", "reminder save failed", e));
 };
+
+/** The account a new reminder joins: the one shown, else the default account. */
+const reminderAccount = async (accountFilter: string | null): Promise<string | undefined> =>
+  accountFilter ?? effectiveDefaultAccount(await listAccounts(), getDefaultAccount(), false) ?? undefined;
 
 let reminderWakeTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -25,15 +31,18 @@ export const remindersSlice = (
   MailStore,
   "createReminder" | "updateReminderText" | "setReminderPinned" | "snoozeReminder" | "unsnoozeReminder" | "doneReminder" | "restoreReminder" | "deleteReminder" | "wakeDueReminders"
 > => ({
-  createReminder: (text, options) => {
+  createReminder: async (text, options) => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    const createdAt = Date.now();
+    const accountId = await reminderAccount(get().accountFilter);
     const record: ReminderRecord = {
       id: crypto.randomUUID(),
       text: trimmed,
-      createdAt: Date.now(),
+      createdAt,
       status: "active",
       pinned: options?.pinned ?? false,
+      ...(accountId ? { accountId } : {}),
       ...(options?.snoozeWakeAt ? { snoozeWakeAt: options.snoozeWakeAt } : {}),
     };
     set({ remindersById: { ...get().remindersById, [record.id]: record } });

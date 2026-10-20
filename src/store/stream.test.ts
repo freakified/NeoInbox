@@ -291,6 +291,19 @@ describe("reminders", () => {
     expect(kinds(stream([], { type: "done" }, ...args))).toEqual(["reminder"]);
     expect(kinds(stream([], { type: "inbox" }, ...args))).toEqual([]);
   });
+
+  it("shows only that account's reminders, and every account's with no filter", () => {
+    const a = reminder({ text: "From a", accountId: "a" });
+    const b = reminder({ text: "From b", accountId: "b" });
+    const texts = (accountId: string | null) =>
+      items(stream([], { type: "inbox" }, {}, false, { [a.id]: a, [b.id]: b }, {}, {}, accountId)).map(
+        (i) => i.type === "reminder" && i.reminder.text,
+      );
+
+    expect(texts("a")).toEqual(["From a"]);
+    expect(texts("b")).toEqual(["From b"]);
+    expect(texts(null).sort()).toEqual(["From a", "From b"]);
+  });
 });
 
 describe("pinned-only filter", () => {

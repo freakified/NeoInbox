@@ -65,7 +65,7 @@ export const ReminderComposer = ({
         snoozeReminder(reminder.id, snoozeWakeAt);
       }
     } else {
-      createReminder(text, { pinned, snoozeWakeAt });
+      void createReminder(text, { pinned, snoozeWakeAt });
     }
     onClose();
   };

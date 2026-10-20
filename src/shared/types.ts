@@ -136,6 +136,12 @@ export interface ReminderRecord {
   createdAt: number;
   status: "active" | "done";
   pinned: boolean;
+  /**
+   * The account the reminder belongs to: the one shown when it was created,
+   * or the default account if that was every account. Unset only when there
+   * was no account at all; it then shows in every account.
+   */
+  accountId?: string;
   /** When a snoozed reminder returns to the inbox; unset = not snoozed. */
   snoozeWakeAt?: number;
   /** Set when the reminder's stream position comes from a snooze wake. */
