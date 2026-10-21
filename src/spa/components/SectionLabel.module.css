@@ -4,6 +4,6 @@
   color: var(--color-md-secondary-text);
   text-transform: none;
   letter-spacing: 0;
-  margin-bottom: 8px;
+  margin: 0 0 8px;
   padding: 0 12px;
 }

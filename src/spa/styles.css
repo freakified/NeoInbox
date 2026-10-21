@@ -61,3 +61,16 @@ body,
   background: var(--color-md-background);
   color: var(--color-md-on-surface);
 }
+
+/* Read by screen readers, not drawn: state a row only shows as an icon. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

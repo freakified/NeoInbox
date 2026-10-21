@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { liveTbId } from "../../shared/liveMessage";
 import { parseSender } from "../../shared/senders";
 import type { RawMessage } from "../../shared/types";
@@ -80,6 +80,23 @@ export const InlineMessage = ({
   const color = avatarColor(name);
   const [preview, setPreview] = useState<string | null>(null);
   const isDraft = m.origin === "draft";
+  const id = useId();
+  const senderId = `${id}-sender`;
+  const bodyId = `${id}-body`;
+  // The message's toggle is its sender, open or closed, so it stays the same
+  // element (and keeps focus) as the message opens. A click on it reaches
+  // the header's handler like any other click on the header.
+  const senderLabel = isOpen
+    ? sender.name
+    : isDraft
+      ? `Draft · ${name} → `
+      : m.origin === "sent"
+        ? `${name} → `
+        : name;
+  const senderClass = clsx(
+    s.senderToggle,
+    isOpen ? s.senderOpen : [s.sender, !m.read && s.senderUnread],
+  );
 
   useEffect(() => {
     if (isOpen || preview !== null) return;
@@ -108,7 +125,7 @@ export const InlineMessage = ({
   }, [isOpen, m, preview]);
 
   return (
-    <div className={s.message}>
+    <article className={s.message} aria-labelledby={senderId}>
       <div
         className={clsx(s.header, !canToggle && s.headerLocked)}
         onClick={(e) => {
@@ -116,26 +133,33 @@ export const InlineMessage = ({
           if (canToggle) onToggle();
         }}
       >
-        <div className={s.avatar} style={{ backgroundColor: color }}>
+        <div className={s.avatar} style={{ backgroundColor: color }} aria-hidden="true">
           <ContactPhoto address={m.author}>{senderInitial(m.author)}</ContactPhoto>
         </div>
         <div className={s.meta}>
           <div className={s.metaLine}>
-            {isOpen ? (
-              <span className={s.openHeaderAddresses}>
-                {isDraft && <span className={s.draftBadge}>Draft</span>}
-                <span className={s.senderOpen} title={sender.email}>
-                  {sender.name}
+            <span className={isOpen ? s.openHeaderAddresses : s.senderWrap}>
+              {isOpen && isDraft && <span className={s.draftBadge}>Draft</span>}
+              {canToggle ? (
+                <button
+                  type="button"
+                  id={senderId}
+                  className={senderClass}
+                  title={isOpen ? sender.email : undefined}
+                  aria-expanded={isOpen}
+                  aria-controls={isOpen ? bodyId : undefined}
+                >
+                  {senderLabel}
+                </button>
+              ) : (
+                <span id={senderId} className={senderClass} title={isOpen ? sender.email : undefined}>
+                  {senderLabel}
                 </span>
-                <AddressList label="to" recipients={recipients} />
-                <AddressList label="cc" recipients={ccRecipients} />
-                <AddressList label="bcc" recipients={bccRecipients} />
-              </span>
-            ) : (
-              <span className={clsx(s.sender, !m.read && s.senderUnread)}>
-                {isDraft ? `Draft · ${name} → ` : m.origin === "sent" ? `${name} → ` : name}
-              </span>
-            )}
+              )}
+              {isOpen && <AddressList label="to" recipients={recipients} />}
+              {isOpen && <AddressList label="cc" recipients={ccRecipients} />}
+              {isOpen && <AddressList label="bcc" recipients={bccRecipients} />}
+            </span>
             <span className={s.date} title={formatFullDate(m.date)}>{formatDate(m.date)}</span>
           </div>
           {!isOpen && (
@@ -144,6 +168,7 @@ export const InlineMessage = ({
             </div>
           )}
           <ExpandableRegion
+            id={bodyId}
             isOpen={isOpen}
             className={s.bodyWrap}
             innerClassName={s.bodyInner}
@@ -169,6 +194,6 @@ export const InlineMessage = ({
           )}
         </div>
       </div>
-    </div>
+    </article>
   );
 };

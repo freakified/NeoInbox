@@ -93,6 +93,8 @@ export const FadeIn = ({ children, className }: FadeInProps) => {
 
 type ExpandableRegionProps = {
   children: ReactNode;
+  /** For the toggle's aria-controls. */
+  id?: string;
   className?: string;
   innerClassName?: string;
   isOpen: boolean;
@@ -100,6 +102,7 @@ type ExpandableRegionProps = {
 
 export const ExpandableRegion = ({
   children,
+  id,
   className,
   innerClassName,
   isOpen,
@@ -107,7 +110,7 @@ export const ExpandableRegion = ({
   const reducedMotion = useReducedMotion();
 
   if (reducedMotion) {
-    return isOpen ? <div className={className}>{children}</div> : null;
+    return isOpen ? <div id={id} className={className}>{children}</div> : null;
   }
 
   return (
@@ -115,6 +118,7 @@ export const ExpandableRegion = ({
       {isOpen && (
         <motion.div
           key="body"
+          id={id}
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: "auto", opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}

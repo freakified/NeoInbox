@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { LayoutGroup } from "framer-motion";
 import {
   useBundleSettings,
@@ -40,6 +40,8 @@ import { ThreadRow } from "./components/ThreadRow";
 import { Toaster } from "./components/Toaster";
 import { overlayIsOpen } from "./lib/overlays";
 import { moveRowFocus } from "./lib/rowNavigation";
+import { focusToggleAfterChange } from "./lib/toggleFocus";
+import { useRovingFocus } from "./lib/useRovingFocus";
 import { useSelection, visibleThreadIds } from "./lib/selection";
 import { TRIP_COLOR, TripSliceRow } from "./components/TripSliceRow";
 import { useKnownContacts } from "./lib/contacts";
@@ -147,6 +149,9 @@ const isTypingTarget = (target: EventTarget | null): boolean => {
   return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 };
 
+/** Below this the drawer covers the stream rather than sitting beside it. */
+const isOverlayDrawer = (): boolean => window.matchMedia("(max-width: 979px)").matches;
+
 /** `g` prefix targets, Gmail/Inbox style. */
 const GO_TO_VIEWS: Record<string, StreamView> = {
   i: { type: "inbox" },
@@ -215,6 +220,7 @@ export const App = () => {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [openBundleThreadId, setOpenBundleThreadId] = useState<string | null>(null);
   const headerRef = useRef<HTMLElement | null>(null);
+  const sectionIdBase = useId();
   const contentRef = useRef<HTMLElement | null>(null);
   const bundleSettings = useBundleSettings();
   const closeBundleSettings = useMailStore((st) => st.closeBundleSettings);
@@ -227,6 +233,15 @@ export const App = () => {
   const [drawerOpen, setDrawerOpen] = useState(() =>
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 980px)").matches,
   );
+  const drawerRef = useRef<HTMLElement | null>(null);
+  const drawerToggleRef = useRef<HTMLButtonElement | null>(null);
+  const navKeyDown = useRovingFocus(drawerRef);
+  // Closing hides the drawer from focus (it goes inert), so focus inside it
+  // goes back to the menu button rather than falling to <body>.
+  const closeDrawer = useCallback(() => {
+    if (drawerRef.current?.contains(document.activeElement)) drawerToggleRef.current?.focus();
+    setDrawerOpen(false);
+  }, []);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const goPrefixRef = useRef(false);
@@ -361,11 +376,11 @@ export const App = () => {
       const nextHash = viewHash(view);
       if (window.location.hash === nextHash) setHashView(view);
       else window.location.hash = nextHash;
-      if (window.matchMedia("(max-width: 979px)").matches) setDrawerOpen(false);
+      if (isOverlayDrawer()) closeDrawer();
     } else {
       setHashView(view);
     }
-  }, []);
+  }, [closeDrawer]);
   /** Empty the box, and leave the results for wherever search was started from. */
   const cancelSearch = () => {
     setSearchText("");
@@ -411,14 +426,24 @@ export const App = () => {
         }
       }
 
+      // Lists with arrow keys of their own, like the drawer's views.
+      const ownArrows = (e.target as HTMLElement).closest?.("[data-arrow-keys]");
+      if (ownArrows && e.key.startsWith("Arrow")) return;
+
       if (e.key === "j" || e.key === "ArrowDown") {
         if (moveRowFocus(1)) e.preventDefault();
       } else if (e.key === "k" || e.key === "ArrowUp") {
         if (moveRowFocus(-1)) e.preventDefault();
       } else if (e.key === "Escape") {
-        if (useSelection.getState().ids.size > 0) useSelection.getState().clear();
-        else if (openBundleThreadId) changeOpen(expandedKey, null);
-        else if (expandedKey) changeOpen(null, null);
+        if (drawerOpen && isOverlayDrawer()) closeDrawer();
+        else if (useSelection.getState().ids.size > 0) useSelection.getState().clear();
+        else if (openBundleThreadId) {
+          focusToggleAfterChange(`thread:${openBundleThreadId}`);
+          changeOpen(expandedKey, null);
+        } else if (expandedKey) {
+          focusToggleAfterChange(expandedKey);
+          changeOpen(null, null);
+        }
       } else if (e.key === "?") {
         e.preventDefault();
         setShowShortcuts(true);
@@ -437,10 +462,15 @@ export const App = () => {
     // the way back up, so this runs first and can claim a key outright.
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [expandedKey, navigate, openBundleThreadId]);
+  }, [expandedKey, navigate, openBundleThreadId, drawerOpen, closeDrawer]);
 
-  const navClass = (view: StreamView) =>
-    `${s.navItem} ${isSameView(activeView, view) ? s.navItemActive : ""}`;
+  const navProps = (view: StreamView) => {
+    const current = isSameView(activeView, view);
+    return {
+      className: `${s.navItem} ${current ? s.navItemActive : ""}`,
+      "aria-current": current ? ("page" as const) : undefined,
+    };
+  };
   const showDoneAll = activeView.type === "inbox" || activeView.type === "bundle";
   const header =
     pinnedOnly && activeView.type === "inbox"
@@ -533,6 +563,16 @@ export const App = () => {
         }
       }}
     >
+      {/* Past the header and drawer, which are a lot of Tab presses. */}
+      <button
+        type="button"
+        className={s.skipLink}
+        onClick={() => {
+          if (!moveRowFocus(1)) contentRef.current?.focus();
+        }}
+      >
+        Skip to conversations
+      </button>
       {showShortcuts && <ShortcutsHelp onClose={() => setShowShortcuts(false)} />}
       {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
 
@@ -561,12 +601,22 @@ export const App = () => {
           <>
             <div className={s.headerLeft}>
               <button
+                ref={drawerToggleRef}
                 type="button"
                 className={s.menuBtn}
                 title={drawerOpen ? "Hide navigation" : "Show navigation"}
                 aria-label={drawerOpen ? "Hide navigation" : "Show navigation"}
                 aria-expanded={drawerOpen}
-                onClick={() => setDrawerOpen((open) => !open)}
+                onClick={() => {
+                  if (drawerOpen) return closeDrawer();
+                  setDrawerOpen(true);
+                  // Covering the stream, the drawer is where you are now.
+                  if (isOverlayDrawer()) {
+                    requestAnimationFrame(() =>
+                      drawerRef.current?.querySelector<HTMLElement>('button[tabindex="0"]')?.focus(),
+                    );
+                  }
+                }}
               >
                 <Icon name="menu" className={s.menuIcon} />
               </button>
@@ -699,19 +749,34 @@ export const App = () => {
           <button
             type="button"
             className={s.drawerScrim}
-            aria-label="Close navigation"
+            // For the pointer only: Escape closes the drawer from the keyboard.
+            tabIndex={-1}
+            aria-hidden="true"
             onClick={() => setDrawerOpen(false)}
           />
         )}
 
-        <aside className={s.drawer} aria-label="Mailbox navigation">
-          <nav className={s.drawerNav}>
+        <aside
+          ref={drawerRef}
+          className={s.drawer}
+          aria-label="Mailbox navigation"
+          // Closed, it's only slid off screen; this takes it out of reach.
+          inert={!drawerOpen}
+          onBlur={(e) => {
+            // Covering the stream, it closes once focus moves on, like a menu.
+            const to = e.relatedTarget as Node | null;
+            if (!to || !isOverlayDrawer()) return;
+            if (drawerRef.current?.contains(to) || drawerToggleRef.current?.contains(to)) return;
+            setDrawerOpen(false);
+          }}
+        >
+          <nav className={s.drawerNav} data-arrow-keys onKeyDown={navKeyDown}>
             <div className={s.drawerGroup}>
-              <button type="button" className={navClass({ type: "inbox" })} onClick={() => navigate({ type: "inbox" })}>
+              <button type="button" {...navProps({ type: "inbox" })} onClick={() => navigate({ type: "inbox" })}>
                 <Icon name="inbox" className={s.navIcon} style={{ color: "#4285F4" }} />
                 <span>Inbox</span>
               </button>
-              <button type="button" className={navClass({ type: "snoozed" })} onClick={() => navigate({ type: "snoozed" })}>
+              <button type="button" {...navProps({ type: "snoozed" })} onClick={() => navigate({ type: "snoozed" })}>
                 <Icon
                   name="schedule"
                   className={s.navIcon}
@@ -719,22 +784,22 @@ export const App = () => {
                 />
                 <span>Snoozed</span>
               </button>
-              <button type="button" className={navClass({ type: "done" })} onClick={() => navigate({ type: "done" })}>
+              <button type="button" {...navProps({ type: "done" })} onClick={() => navigate({ type: "done" })}>
                 <Icon name="done" className={s.navIcon} style={{ color: "#0F9D58" }} />
                 <span>Done</span>
               </button>
             </div>
 
             <div className={s.drawerGroup}>
-              <button type="button" className={navClass({ type: "draft" })} onClick={() => navigate({ type: "draft" })}>
+              <button type="button" {...navProps({ type: "draft" })} onClick={() => navigate({ type: "draft" })}>
                 <Icon name="drafts" className={s.navIcon} />
                 <span>Drafts</span>
               </button>
-              <button type="button" className={navClass({ type: "sent" })} onClick={() => navigate({ type: "sent" })}>
+              <button type="button" {...navProps({ type: "sent" })} onClick={() => navigate({ type: "sent" })}>
                 <Icon name="send" className={s.navIcon} />
                 <span>Sent</span>
               </button>
-              <button type="button" className={navClass({ type: "reminders" })} onClick={() => navigate({ type: "reminders" })}>
+              <button type="button" {...navProps({ type: "reminders" })} onClick={() => navigate({ type: "reminders" })}>
                 <Icon name="pan_tool_alt" className={s.navIcon} />
                 <span>Reminders</span>
               </button>
@@ -762,7 +827,7 @@ export const App = () => {
               {tripsEnabled && (
                 <button
                   type="button"
-                  className={navClass({ type: "trips" })}
+                  {...navProps({ type: "trips" })}
                   onClick={() => navigate({ type: "trips" })}
                 >
                   <Icon name="travel" className={s.navIcon} style={{ color: TRIP_COLOR }} />
@@ -773,7 +838,7 @@ export const App = () => {
                 <button
                   type="button"
                   key={id}
-                  className={navClass({ type: "bundle", category: id })}
+                  {...navProps({ type: "bundle", category: id })}
                   onClick={() => navigate({ type: "bundle", category: id })}
                 >
                   <Icon
@@ -789,7 +854,7 @@ export const App = () => {
         </aside>
 
         <SearchTermsContext.Provider value={highlightTerms}>
-          <main ref={contentRef} className={s.content}>
+          <main ref={contentRef} className={s.content} tabIndex={-1}>
             {!hydrated && (
               <p className={s.emptyText}>Loading…</p>
             )}
@@ -802,7 +867,8 @@ export const App = () => {
               emptyState ? <EmptyState {...emptyState}>{archiveFooter}</EmptyState> : <InboxZero />
             )}
 
-            {visibleStream.sections.map((group) => {
+            {visibleStream.sections.map((group, groupIdx) => {
+              const sectionLabelId = `${sectionIdBase}-section-${groupIdx}`;
               const expandedBundleIdx = expandedKey && isGroupKey(expandedKey)
                 ? group.items.findIndex((item) => groupKeyOf(item) === expandedKey)
                 : -1;
@@ -852,7 +918,7 @@ export const App = () => {
               return (
                 <section key={group.label} className={s.section}>
                   <div className={s.sectionHeader}>
-                    <SectionLabel>{group.label}</SectionLabel>
+                    <SectionLabel id={sectionLabelId}>{group.label}</SectionLabel>
                     {showDoneAll && canDoneSection(group.items) && (
                       <div className={s.sectionActions}>
                         <button
@@ -865,69 +931,71 @@ export const App = () => {
                       </div>
                     )}
                   </div>
-                  <LayoutGroup>
-                    {openBundle ? (
-                      <>
-                        {expandedBundleIdx > 0 && (
-                          <MotionSurface className={s.card}>
-                            {renderItems(group.items.slice(0, expandedBundleIdx))}
+                  <div role="list" aria-labelledby={sectionLabelId} className={s.sectionList}>
+                    <LayoutGroup>
+                      {openBundle ? (
+                        <>
+                          {expandedBundleIdx > 0 && (
+                            <MotionSurface className={s.card}>
+                              {renderItems(group.items.slice(0, expandedBundleIdx))}
+                            </MotionSurface>
+                          )}
+                          {openBundle.type === "trip" ? (
+                            <TripSliceRow
+                              tripKey={`trip:${openBundle.trip.id}`}
+                              trip={openBundle.trip}
+                              threads={openBundle.threads}
+                              isOpen={true}
+                              onToggle={toggleKey}
+                              openThreadId={openBundleThreadId}
+                              onOpenThreadChange={setBundleThread}
+                            />
+                          ) : (
+                            <BundleSliceRow
+                              bundleKey={`bundle:${openBundle.category}`}
+                              category={openBundle.category}
+                              threads={openBundle.threads}
+                              isOpen={true}
+                              onToggle={toggleKey}
+                              openThreadId={openBundleThreadId}
+                              onOpenThreadChange={setBundleThread}
+                            />
+                          )}
+                          {expandedBundleIdx < group.items.length - 1 && (
+                            <MotionSurface className={s.card}>
+                              {renderItems(group.items.slice(expandedBundleIdx + 1))}
+                            </MotionSurface>
+                          )}
+                        </>
+                      ) : expandedThreadIdx >= 0 ? (
+                        <>
+                          {expandedThreadIdx > 0 && (
+                            <MotionSurface className={s.card}>
+                              {renderItems(group.items.slice(0, expandedThreadIdx))}
+                            </MotionSurface>
+                          )}
+                          {/* Keyed per thread: reusing the previous card's element would
+                            make framer fly it here from wherever that card was. */}
+                          <MotionSurface key={expandedKey} className={s.expandedThread}>
+                            <ThreadRow
+                              thread={(group.items[expandedThreadIdx] as Extract<StreamItem, { type: "thread" }>).thread}
+                              isExpanded={true}
+                              onToggle={() => toggleKey(expandedKey!)}
+                            />
                           </MotionSurface>
-                        )}
-                        {openBundle.type === "trip" ? (
-                          <TripSliceRow
-                            tripKey={`trip:${openBundle.trip.id}`}
-                            trip={openBundle.trip}
-                            threads={openBundle.threads}
-                            isOpen={true}
-                            onToggle={toggleKey}
-                            openThreadId={openBundleThreadId}
-                            onOpenThreadChange={setBundleThread}
-                          />
-                        ) : (
-                          <BundleSliceRow
-                            bundleKey={`bundle:${openBundle.category}`}
-                            category={openBundle.category}
-                            threads={openBundle.threads}
-                            isOpen={true}
-                            onToggle={toggleKey}
-                            openThreadId={openBundleThreadId}
-                            onOpenThreadChange={setBundleThread}
-                          />
-                        )}
-                        {expandedBundleIdx < group.items.length - 1 && (
-                          <MotionSurface className={s.card}>
-                            {renderItems(group.items.slice(expandedBundleIdx + 1))}
-                          </MotionSurface>
-                        )}
-                      </>
-                    ) : expandedThreadIdx >= 0 ? (
-                      <>
-                        {expandedThreadIdx > 0 && (
-                          <MotionSurface className={s.card}>
-                            {renderItems(group.items.slice(0, expandedThreadIdx))}
-                          </MotionSurface>
-                        )}
-                        {/* Keyed per thread: reusing the previous card's element would
-                          make framer fly it here from wherever that card was. */}
-                        <MotionSurface key={expandedKey} className={s.expandedThread}>
-                          <ThreadRow
-                            thread={(group.items[expandedThreadIdx] as Extract<StreamItem, { type: "thread" }>).thread}
-                            isExpanded={true}
-                            onToggle={() => toggleKey(expandedKey!)}
-                          />
+                          {expandedThreadIdx < group.items.length - 1 && (
+                            <MotionSurface className={s.card}>
+                              {renderItems(group.items.slice(expandedThreadIdx + 1))}
+                            </MotionSurface>
+                          )}
+                        </>
+                      ) : (
+                        <MotionSurface className={s.card}>
+                          {renderItems(group.items)}
                         </MotionSurface>
-                        {expandedThreadIdx < group.items.length - 1 && (
-                          <MotionSurface className={s.card}>
-                            {renderItems(group.items.slice(expandedThreadIdx + 1))}
-                          </MotionSurface>
-                        )}
-                      </>
-                    ) : (
-                      <MotionSurface className={s.card}>
-                        {renderItems(group.items)}
-                      </MotionSurface>
-                    )}
-                  </LayoutGroup>
+                      )}
+                    </LayoutGroup>
+                  </div>
                 </section>
               );
             })}

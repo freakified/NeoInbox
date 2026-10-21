@@ -93,6 +93,15 @@
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
+/* Holds the title button; the button keeps its own look and truncation. */
+.bannerHeading {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  font: inherit;
+}
+
 .bannerTitle {
   font-size: 28px;
   font-weight: 400;

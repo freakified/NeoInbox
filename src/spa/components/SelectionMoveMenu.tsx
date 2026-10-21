@@ -13,6 +13,7 @@ import {
 } from "../../store/mailStore";
 import { type BulkMoveGroup, type BulkMovePlan, planBulkMove, rulesForGroup } from "../lib/bulkMove";
 import { useAnchoredMenu } from "../lib/useAnchoredMenu";
+import { useMenuFocus } from "../lib/useMenuFocus";
 import { BulkMoveRuleDialog, type BulkRuleChoice } from "./BulkMoveRuleDialog";
 import { Icon } from "./Icon";
 import { MoveDestinations } from "./MoveDestinations";
@@ -50,6 +51,7 @@ export const SelectionMoveMenu = ({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuStyle = useAnchoredMenu(open, triggerRef, menuRef);
+  const menuFocus = useMenuFocus({ open, onClose: () => setOpen(false), triggerRef, menuRef });
 
   const customBundles = useCustomBundles();
   const routeRules = useRouteRules();
@@ -84,13 +86,8 @@ export const SelectionMoveMenu = ({
       if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
       setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", close);
-      document.removeEventListener("keydown", onKey);
-    };
+    return () => document.removeEventListener("mousedown", close);
   }, [open]);
 
   // setTripMembership owns the toast and its Undo, as for a single thread.
@@ -157,8 +154,16 @@ export const SelectionMoveMenu = ({
         <Icon name="drive_file_move" className={iconClassName} />
       </button>
       {open && createPortal(
-        <div ref={menuRef} className={menu.menu} style={menuStyle} role="menu">
-          <div className={menu.menuHeader}>
+        <div
+          ref={menuRef}
+          className={menu.menu}
+          style={menuStyle}
+          role="menu"
+          aria-label={`Move ${conversations(threads.length)} to`}
+          {...menuFocus}
+        >
+          {/* The menu's label says this already. */}
+          <div className={menu.menuHeader} aria-hidden="true">
             <Icon name="drive_file_move" className={menu.menuIcon} />
             <span className={menu.menuItemLabel}>Move {conversations(threads.length)} to</span>
           </div>

@@ -11,6 +11,7 @@ import { avatarColor, senderInitial, senderName } from "../lib/avatar";
 import { formatDate } from "../lib/dateBucket";
 import { loadDraftValue } from "../lib/draftValue";
 import { useIdentities } from "../lib/identities";
+import { useMenuFocus } from "../lib/useMenuFocus";
 import {
   composerBody,
   ComposerForm,
@@ -84,14 +85,8 @@ const KindMenu = ({
     if (!open) return;
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect) setPos({ left: rect.left, top: rect.bottom + 4 });
-    menuRef.current?.querySelector<HTMLButtonElement>("[aria-checked=true]")?.focus();
     const close = (e: Event) => {
-      if (e instanceof KeyboardEvent) {
-        if (e.key !== "Escape") return;
-        e.preventDefault();
-        e.stopPropagation();
-        triggerRef.current?.focus();
-      } else if (
+      if (
         menuRef.current?.contains(e.target as Node) ||
         triggerRef.current?.contains(e.target as Node)
       ) {
@@ -100,14 +95,20 @@ const KindMenu = ({
       setOpen(false);
     };
     document.addEventListener("mousedown", close, true);
-    document.addEventListener("keydown", close, true);
     window.addEventListener("scroll", close, true);
     return () => {
       document.removeEventListener("mousedown", close, true);
-      document.removeEventListener("keydown", close, true);
       window.removeEventListener("scroll", close, true);
     };
   }, [open]);
+  // The menu draws once it's been positioned, so focus waits for that.
+  const menuFocus = useMenuFocus({
+    open,
+    onClose: () => setOpen(false),
+    triggerRef,
+    menuRef,
+    layoutKey: pos !== null,
+  });
 
   return (
     <>
@@ -126,7 +127,14 @@ const KindMenu = ({
       {open &&
         pos &&
         createPortal(
-          <div ref={menuRef} role="menu" className={s.kindMenu} style={pos}>
+          <div
+            ref={menuRef}
+            role="menu"
+            aria-label="Reply type"
+            className={s.kindMenu}
+            style={pos}
+            {...menuFocus}
+          >
             {KINDS.map((k) => (
               <button
                 key={k.kind}

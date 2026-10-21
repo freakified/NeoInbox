@@ -60,6 +60,11 @@
   background: #e5e5e5;
 }
 
+.bundleHeading {
+  margin: 0;
+  font: inherit;
+}
+
 .bundleTitle {
   font-size: 24px;
   font-weight: 500;
@@ -139,7 +144,7 @@
 }
 
 /* Same for a thread opened first or last under a bucket label. */
-.bucketHeader + .expandedThread {
+.bucketHeader + .bucketRows > .expandedThread:first-child {
   margin-top: 0;
 }
 

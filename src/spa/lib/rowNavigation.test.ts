@@ -53,6 +53,16 @@ describe("moveRowFocus", () => {
     expect(moveRowFocus(1)).toBe(false);
   });
 
+  it("resolves the row from a control beside its header", () => {
+    document.body.innerHTML = `
+      <div data-row id="outer">
+        <button data-row-header id="outerToggle"></button>
+        <div data-row><button data-row-header id="innerToggle"></button><button id="strip"></button></div>
+      </div>`;
+    document.querySelector<HTMLElement>("#strip")!.focus();
+    expect(focusedRow()?.id).toBe("innerToggle");
+  });
+
   it("resolves the row from a focused descendant", () => {
     renderRows(2);
     document.querySelector<HTMLElement>("#child1")!.focus();

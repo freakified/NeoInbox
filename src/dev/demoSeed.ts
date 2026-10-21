@@ -792,7 +792,7 @@ export const demoSeed = (loadedAt = Date.now()): DemoSeed => {
         read: true,
         body: [
           "Greetings,",
-          "I have returned from my journey into the depths of the earth. It seems that once again the team dug too deeply and too greedily, unleashing a wide variety of unnamed horrors. Luckily, they had cleared them all out by the time I arrive, and I was able to collect a few photos. Check them out!",
+          "I have returned from my journey into the depths of the earth. It seems that once again the team dug too deeply and too greedily, unleashing a wide variety of unnamed horrors. Luckily, they had cleared them all out by the time I arrived, and I was able to collect a few photos. Check them out!",
           "J",
           "Sent from my Casio EXILIM K-Tai 10 Ultra",
           [

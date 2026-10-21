@@ -28,7 +28,7 @@ import { visualElementStore } from "framer-motion";
  * anchoring to those would chase the animation.
  */
 
-const KEY_ATTR = "data-row-key";
+export const ROW_KEY_ATTR = "data-row-key";
 /** Space kept between the fixed app header and a revealed row. */
 const TOP_MARGIN = 16;
 const BOTTOM_MARGIN = 16;
@@ -79,15 +79,19 @@ const layoutTop = (el: HTMLElement): number => {
 
 const viewportTop = (el: HTMLElement) => layoutTop(el) - window.scrollY;
 
-const keyedRows = () => Array.from(document.querySelectorAll<HTMLElement>(`[${KEY_ATTR}]`));
+const keyedRows = () => Array.from(document.querySelectorAll<HTMLElement>(`[${ROW_KEY_ATTR}]`));
 
 // Keys carry thread ids, which can contain characters a selector can't
 // express (NULs), so look them up by comparison rather than querySelector.
-const find = (key: string): HTMLElement | null =>
-  keyedRows().find((el) => el.getAttribute(KEY_ATTR) === key) ?? null;
+export const findByAttr = (attr: string, key: string): HTMLElement | null =>
+  Array.from(document.querySelectorAll<HTMLElement>(`[${attr}]`)).find(
+    (el) => el.getAttribute(attr) === key,
+  ) ?? null;
+
+const find = (key: string): HTMLElement | null => findByAttr(ROW_KEY_ATTR, key);
 
 export const rowKeyOf = (el: Element | null): string | null =>
-  el?.closest(`[${KEY_ATTR}]`)?.getAttribute(KEY_ATTR) ?? null;
+  el?.closest(`[${ROW_KEY_ATTR}]`)?.getAttribute(ROW_KEY_ATTR) ?? null;
 
 const isOnScreen = (el: HTMLElement) => {
   const top = viewportTop(el);
@@ -122,12 +126,12 @@ const recordNeighbours = (el: HTMLElement) => {
   const index = rows.indexOf(el);
   const next = rows.slice(index + 1).find((r) => !el.contains(r));
   const prev = rows.slice(0, index).reverse().find((r) => !r.contains(el));
-  anchor.next = next?.getAttribute(KEY_ATTR) ?? null;
-  anchor.prev = prev ? { key: prev.getAttribute(KEY_ATTR)!, offset: viewportTop(prev) } : null;
+  anchor.next = next?.getAttribute(ROW_KEY_ATTR) ?? null;
+  anchor.prev = prev ? { key: prev.getAttribute(ROW_KEY_ATTR)!, offset: viewportTop(prev) } : null;
 };
 
 const setAnchor = (el: HTMLElement, pinned: boolean, offset = viewportTop(el)) => {
-  anchor = { key: el.getAttribute(KEY_ATTR)!, offset, pinned, next: null, prev: null };
+  anchor = { key: el.getAttribute(ROW_KEY_ATTR)!, offset, pinned, next: null, prev: null };
   recordNeighbours(el);
 };
 
@@ -223,7 +227,7 @@ const startLoop = () => {
  */
 const patchFramer = () => {
   if (patchedRoot) return;
-  const sample = document.querySelector(`[${KEY_ATTR}]`);
+  const sample = document.querySelector(`[${ROW_KEY_ATTR}]`);
   const root = sample ? visualElementStore.get(sample)?.projection?.root : undefined;
   if (!root) return;
   type Scroll = { offset: { x: number; y: number } } | undefined;

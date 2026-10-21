@@ -7,6 +7,7 @@ import { overlayIsOpen } from "../lib/overlays";
 import { keepFocusAfterRowRemoval } from "../lib/rowNavigation";
 import { useIsSelected, useSelection, useSelectionActive } from "../lib/selection";
 import { formatSnoozeToastTime } from "../lib/snoozePresets";
+import { focusToggleAfterChange } from "../lib/toggleFocus";
 import { useThreadActions } from "../lib/useThreadActions";
 import { ActionStrip } from "./ActionStrip";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -24,11 +25,19 @@ export const ThreadRow = ({
   thread: t,
   isExpanded,
   onToggle,
+  headingLevel = 3,
 }: {
   thread: Thread;
   isExpanded: boolean;
   onToggle: () => void;
+  /** The open conversation's subject heading: deeper inside a bundle. */
+  headingLevel?: number;
 }) => {
+  const rowKey = `thread:${t.id}`;
+  const toggle = () => {
+    focusToggleAfterChange(rowKey);
+    onToggle();
+  };
   const actions = useThreadActions(t);
   const selected = useIsSelected(t.id);
   const selecting = useSelectionActive();
@@ -104,14 +113,23 @@ export const ThreadRow = ({
       {t.pinned && <Icon name="push_pin" className={s.pinIndicator} />}
     </span>
   ) : snoozeInfo;
+  // What the row's icons and weight say, for its spoken name.
+  const status = [
+    t.unreadCount > 0 && "unread",
+    t.pinned && "pinned",
+    isDone && "done",
+    t.snoozeDueAt && `snoozed until ${formatDate(t.snoozeDueAt)}`,
+    attachmentRefs.length > 0 && "has attachments",
+  ].filter(Boolean).join(", ");
 
   return (
     <MotionRow
       data-row
       data-thread-row
       data-thread-id={isExpanded ? undefined : t.id}
-      data-row-key={`thread:${t.id}`}
+      data-row-key={rowKey}
       className={s.row}
+      role="listitem"
     >
       {!isExpanded && (
         <RowHeader
@@ -169,9 +187,11 @@ export const ThreadRow = ({
           // While selecting, a click anywhere on the row adds it to the
           // selection rather than opening it, and the per-row actions give way
           // to the selection bar's.
-          onClick={selecting ? select : onToggle}
+          status={status || undefined}
+          onClick={selecting ? select : toggle}
           onKeyDown={onKeyDown}
           expanded={false}
+          toggleKey={rowKey}
           selected={selected}
           actionStrip={selecting ? undefined : <ActionStrip thread={t} />}
         />
@@ -179,7 +199,12 @@ export const ThreadRow = ({
       {isExpanded && (
         <FadeIn>
           <ErrorBoundary scope="inline" label="conversation">
-            <ThreadView thread={t} />
+            <ThreadView
+              thread={t}
+              rowKey={rowKey}
+              onCollapse={toggle}
+              headingLevel={headingLevel}
+            />
           </ErrorBoundary>
         </FadeIn>
       )}

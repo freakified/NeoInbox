@@ -14,6 +14,7 @@ import {
 } from "../../store/mailStore";
 import { translationTargetLabel } from "../lib/translation";
 import { useAnchoredMenu } from "../lib/useAnchoredMenu";
+import { useMenuFocus } from "../lib/useMenuFocus";
 import { Icon } from "./Icon";
 import { MoveDestinations } from "./MoveDestinations";
 import { MoveRuleDialog } from "./MoveRuleDialog";
@@ -43,6 +44,13 @@ export const BundleMenu = ({
   // The menu is portaled out of the row so later rows (each its own stacking
   // context) can't paint over it.
   const menuStyle = useAnchoredMenu(menuOpen, triggerRef, menuRef, view);
+  const menuFocus = useMenuFocus({
+    open: menuOpen,
+    onClose: () => setMenuOpen(false),
+    triggerRef,
+    menuRef,
+    layoutKey: view,
+  });
 
   const customBundles = useCustomBundles();
   const routeRules = useRouteRules();
@@ -175,6 +183,8 @@ export const BundleMenu = ({
         ref={triggerRef}
         type="button"
         title="More actions"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
         onClick={(e) => {
           e.stopPropagation();
           openMenu(!menuOpen);
@@ -189,7 +199,9 @@ export const BundleMenu = ({
           className={s.menu}
           style={menuStyle}
           role="menu"
+          aria-label={view === "root" ? "More actions" : "Move to"}
           onClick={(e) => e.stopPropagation()}
+          {...menuFocus}
         >
           {view === "root" ? (
             <>
@@ -252,6 +264,8 @@ export const BundleMenu = ({
               <button
                 type="button"
                 className={s.menuBackItem}
+                role="menuitem"
+                aria-label="Back"
                 onClick={() => setView("root")}
               >
                 <Icon name="arrow_back" className={s.menuIcon} />

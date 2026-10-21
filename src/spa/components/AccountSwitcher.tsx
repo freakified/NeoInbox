@@ -7,6 +7,7 @@ import { type MailAccount, useAccounts } from "../lib/accounts";
 import { useSelfProfile } from "../lib/contactCards";
 import { openNewIssue } from "../lib/external";
 import { useAnchoredMenu } from "../lib/useAnchoredMenu";
+import { useMenuFocus } from "../lib/useMenuFocus";
 import { Icon } from "./Icon";
 import { ContactPhoto } from "./ContactPhoto";
 import s from "./AccountSwitcher.module.css";
@@ -65,6 +66,7 @@ export const AccountSwitcher = ({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuStyle = useAnchoredMenu(open, triggerRef, menuRef);
+  const menuFocus = useMenuFocus({ open, onClose: () => setOpen(false), triggerRef, menuRef });
 
   const multiple = accounts.length > 1;
   const filtered = accounts.find((a) => a.id === accountFilter) ?? null;
@@ -99,18 +101,8 @@ export const AccountSwitcher = ({
       if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
       setOpen(false);
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.stopPropagation();
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
     document.addEventListener("mousedown", onMouseDown);
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      document.removeEventListener("mousedown", onMouseDown);
-      document.removeEventListener("keydown", onKeyDown, true);
-    };
+    return () => document.removeEventListener("mousedown", onMouseDown);
   }, [open]);
 
   const choose = (accountId: string | null) => {
@@ -152,6 +144,7 @@ export const AccountSwitcher = ({
           role="menu"
           aria-label="Accounts"
           onClick={(e) => e.stopPropagation()}
+          {...menuFocus}
         >
           {multiple && unified && (
             <>
@@ -171,7 +164,7 @@ export const AccountSwitcher = ({
                 </span>
                 {totalInbox > 0 && <span className={s.count}>{totalInbox}</span>}
               </button>
-              <div className={s.divider} />
+              <div className={s.divider} role="separator" />
             </>
           )}
           {accounts.map((account) => (
@@ -183,7 +176,7 @@ export const AccountSwitcher = ({
               onChoose={multiple ? () => choose(account.id) : undefined}
             />
           ))}
-          {accounts.length > 0 && <div className={s.divider} />}
+          {accounts.length > 0 && <div className={s.divider} role="separator" />}
           <button
             type="button"
             role="menuitem"
@@ -196,7 +189,7 @@ export const AccountSwitcher = ({
             <Icon name="settings" className={s.footerIcon} />
             <span className={s.itemName}>Settings</span>
           </button>
-          <div className={s.divider} />
+          <div className={s.divider} role="separator" />
           <button
             type="button"
             role="menuitem"
@@ -223,7 +216,7 @@ export const AccountSwitcher = ({
             <span className={s.itemName}>Request a feature</span>
             <Icon name="open_in_new" className={s.externalIcon} />
           </button>
-          <div className={s.divider} />
+          <div className={s.divider} role="separator" />
           <button
             type="button"
             role="menuitem"

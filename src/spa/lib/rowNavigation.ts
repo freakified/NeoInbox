@@ -15,10 +15,13 @@ const ROW_SELECTOR = "[data-row-header]";
 export const rowHeaders = (): HTMLElement[] =>
   Array.from(document.querySelectorAll<HTMLElement>(ROW_SELECTOR));
 
-export const focusedRow = (): HTMLElement | null => {
-  const active = document.activeElement;
-  return active instanceof HTMLElement ? active.closest<HTMLElement>(ROW_SELECTOR) : null;
-};
+/** The row header `el` belongs to: its own, or its row's when it's a control beside it. */
+export const rowHeaderOf = (el: Element | null): HTMLElement | null =>
+  el?.closest<HTMLElement>(ROW_SELECTOR) ??
+  el?.closest("[data-row]")?.querySelector<HTMLElement>(ROW_SELECTOR) ??
+  null;
+
+export const focusedRow = (): HTMLElement | null => rowHeaderOf(document.activeElement);
 
 const focusRow = (row: HTMLElement | undefined, reveal = true): boolean => {
   if (!row) return false;
@@ -51,14 +54,17 @@ export const moveRowFocus = (delta: number): boolean => {
  * restart at the top of the list.
  */
 export const keepFocusAfterRowRemoval = (): void => {
-  const rows = rowHeaders();
-  const index = rows.indexOf(focusedRow() as HTMLElement);
-  if (index === -1) return;
+  const index = rowHeaders().indexOf(focusedRow() as HTMLElement);
+  if (index !== -1) requestAnimationFrame(() => focusRowAt(index));
+};
 
-  requestAnimationFrame(() => {
-    const next = rowHeaders();
-    if (!next.length) return;
-    // Already in place: the scroll keeper puts the next row where this one was.
-    focusRow(next[Math.min(index, next.length - 1)], false);
-  });
+/**
+ * Focus whichever row is now at `index` (or the last), as after the row that
+ * was there is removed.
+ */
+export const focusRowAt = (index: number): void => {
+  const rows = rowHeaders();
+  if (!rows.length) return;
+  // Already in place: the scroll keeper puts the next row where this one was.
+  focusRow(rows[Math.min(index, rows.length - 1)], false);
 };

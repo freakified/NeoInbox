@@ -11,7 +11,11 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
 
   return (
     <div className={s.strip} onClick={(e) => e.stopPropagation()}>
-      <ActionBtn title={thread.pinned ? "Unpin (p)" : "Pin (p)"} onClick={actions.togglePin}>
+      <ActionBtn
+        title={thread.pinned ? "Unpin" : "Pin"}
+        shortcut="p"
+        onClick={actions.togglePin}
+      >
         <Icon
           name="push_pin"
           className={clsx(s.iconBase, thread.pinned ? s.iconPrimary : s.iconMuted)}
@@ -28,11 +32,11 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
       ) : (
         actions.hasInboxMessages && <SnoozeMenu onChoose={actions.snooze} />
       )}
-      <ActionBtn title="Trash (#)" onClick={actions.trash}>
+      <ActionBtn title="Trash" shortcut="#" onClick={actions.trash}>
         <Icon name="delete" className={clsx(s.iconBase, s.iconMuted)} />
       </ActionBtn>
       {actions.hasInboxMessages && (
-        <ActionBtn title="Done (e)" onClick={actions.done}>
+        <ActionBtn title="Done" shortcut="e" onClick={actions.done}>
           <Icon name="check" className={clsx(s.iconBase, s.iconMuted)} />
         </ActionBtn>
       )}
@@ -51,15 +55,21 @@ export const ActionStrip = ({ thread }: { thread: Thread }) => {
 
 const ActionBtn = ({
   title,
+  shortcut,
   onClick,
   children,
 }: {
   title: string;
+  /** The row's key for this, shown in the tooltip and announced. */
+  shortcut?: string;
   onClick: () => void;
   children: React.ReactNode;
 }) => (
   <button
-    title={title}
+    type="button"
+    title={shortcut ? `${title} (${shortcut})` : title}
+    aria-label={title}
+    aria-keyshortcuts={shortcut}
     onClick={(e) => {
       e.stopPropagation();
       onClick();

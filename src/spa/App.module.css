@@ -284,6 +284,32 @@
   padding-top: var(--header-height);
 }
 
+/* Off screen until it has focus, then over the header's corner. */
+.skipLink {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 200;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 4px;
+  background: #fff;
+  color: var(--color-md-primary-dark);
+  font: 500 14px var(--font-sans);
+  box-shadow: var(--shadow-elevation-2);
+  cursor: pointer;
+  transform: translateY(-200%);
+}
+
+.skipLink:focus {
+  transform: none;
+}
+
+/* Focused only as the skip link's fallback, with no rows to land on. */
+.content:focus {
+  outline: none;
+}
+
 .drawer {
   position: fixed;
   top: var(--header-height);
@@ -399,11 +425,11 @@
 
 /* An open thread or bundle keeps a gap from the rows beside it, but not from
    its section's label or the next section, so those stay the usual distance. */
-.section > .sectionHeader + * {
+.sectionList > :first-child {
   margin-top: 0;
 }
 
-.section > :last-child {
+.sectionList > :last-child {
   margin-bottom: 0;
 }
 

@@ -7,6 +7,7 @@ import {
   setMinutes,
   snoozePresets,
 } from "../lib/snoozePresets";
+import { useMenuFocus } from "../lib/useMenuFocus";
 import {
   setLastCustomSnooze,
   TIME_OF_DAY_LABELS,
@@ -104,18 +105,18 @@ export const SnoozeMenu = ({
       ) return;
       close();
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.stopPropagation();
-      close();
-    };
     document.addEventListener("mousedown", onMouseDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onMouseDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
+    return () => document.removeEventListener("mousedown", onMouseDown);
   }, [open]);
+
+  const menuFocus = useMenuFocus({
+    open,
+    onClose: close,
+    triggerRef,
+    menuRef: dropdownRef,
+    dialog: picking,
+    layoutKey: picking,
+  });
 
   const choose = (wakeAt: number) => {
     close();
@@ -153,6 +154,7 @@ export const SnoozeMenu = ({
             role={picking ? "dialog" : "menu"}
             aria-label={picking ? "Pick date & time" : "Snooze until"}
             onClick={(e) => e.stopPropagation()}
+            {...menuFocus}
           >
             {picking ? (
               <SnoozePicker
@@ -164,7 +166,8 @@ export const SnoozeMenu = ({
               />
             ) : (
               <>
-                <div className={s.title}>Snooze until...</div>
+                {/* The menu's label says this already. */}
+                <div className={s.title} aria-hidden="true">Snooze until...</div>
                 {snoozePresets(SNOOZE_PREFS).map(({ label, icon, wakeAt }) => (
                   <button
                     key={label}
@@ -181,7 +184,7 @@ export const SnoozeMenu = ({
                     <span className={s.optionTime}>{formatSnoozeOptionTime(wakeAt)}</span>
                   </button>
                 ))}
-                <div className={s.divider} />
+                <div className={s.divider} role="separator" />
                 <button
                   className={clsx(s.option, s.lastOption)}
                   type="button"

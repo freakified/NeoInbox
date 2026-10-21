@@ -18,8 +18,15 @@ const MIDDLE_COLLAPSE_THREAD_THRESHOLD = 8;
 
 export const ThreadView = ({
   thread: t,
+  rowKey,
+  onCollapse,
+  headingLevel = 3,
 }: {
   thread: Thread;
+  /** The row this conversation is open in (see toggleFocus). */
+  rowKey: string;
+  onCollapse: () => void;
+  headingLevel?: number;
 }) => {
   const actions = useThreadActions(t);
   const hydrateThreadDetails = useMailStore((st) => st.hydrateThreadDetails);
@@ -117,7 +124,22 @@ export const ThreadView = ({
   return (
     <div>
       <div className={s.header}>
-        <h2 className={s.title}>{translatedSubject || t.subject || "(no subject)"}</h2>
+        <div role="heading" aria-level={headingLevel} className={s.title}>
+          {/* The open row's toggle: what its row was before it opened. */}
+          <button
+            type="button"
+            className={s.titleBtn}
+            data-row-header=""
+            data-row-toggle={rowKey}
+            aria-expanded={true}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCollapse();
+            }}
+          >
+            {translatedSubject || t.subject || "(no subject)"}
+          </button>
+        </div>
         <div className={s.headerActions}>
           <button
             onClick={(e) => {
@@ -242,6 +264,7 @@ export const ThreadView = ({
                   setShowMiddle(true);
                 }}
                 title={`Show ${messages.length - 2} hidden replies`}
+                aria-label={`Show ${messages.length - 2} hidden replies`}
               >
                 <span className={s.middleRail} aria-hidden="true" />
                 <span className={s.middleCount}>{messages.length - 2}</span>

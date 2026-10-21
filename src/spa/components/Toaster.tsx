@@ -22,56 +22,72 @@ export const Toaster = () => {
     };
   }, [toasts, dismissToast]);
 
-  if (toasts.length === 0) return null;
+  // The live region is always there, so a screen reader notices what's added
+  // to it; one appearing along with its text often goes unannounced. It reads
+  // each message once, without the buttons, and skips progress ticks.
+  const announcer = (
+    <div className="visually-hidden" role="status">
+      {toasts
+        .filter((t) => !t.progress)
+        .map((t) => (
+          <div key={t.id}>{t.message}</div>
+        ))}
+    </div>
+  );
 
   return (
-    <div className={s.root}>
-      {toasts.map((t) => (
-        <div key={t.id} className={s.toast} role="status">
-          <span className={s.message}>{t.message}</span>
-          {t.undo && (
-            <button
-              type="button"
-              className={s.action}
-              onClick={() => undoToast(t.id)}
-            >
-              Undo
-            </button>
-          )}
-          {t.retry && (
-            <button
-              type="button"
-              className={s.action}
-              onClick={() => retryToast(t.id)}
-            >
-              Retry
-            </button>
-          )}
-          {t.actions?.map((action) => (
-            <button
-              key={action.label}
-              type="button"
-              className={s.action}
-              onClick={() => {
-                action.run();
-                dismissToast(t.id);
-              }}
-            >
-              {action.label}
-            </button>
+    <>
+      {announcer}
+      {toasts.length > 0 && (
+        <div className={s.root} role="region" aria-label="Notifications">
+          {toasts.map((t) => (
+            <div key={t.id} className={s.toast}>
+              <span className={s.message}>{t.message}</span>
+              {t.undo && (
+                <button
+                  type="button"
+                  className={s.action}
+                  onClick={() => undoToast(t.id)}
+                >
+                  Undo
+                </button>
+              )}
+              {t.retry && (
+                <button
+                  type="button"
+                  className={s.action}
+                  onClick={() => retryToast(t.id)}
+                >
+                  Retry
+                </button>
+              )}
+              {t.actions?.map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  className={s.action}
+                  onClick={() => {
+                    action.run();
+                    dismissToast(t.id);
+                  }}
+                >
+                  {action.label}
+                </button>
+              ))}
+              {!t.progress && (
+                <button
+                  type="button"
+                  className={s.dismiss}
+                  onClick={() => dismissToast(t.id)}
+                  aria-label="Dismiss"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           ))}
-          {!t.progress && (
-            <button
-              type="button"
-              className={s.dismiss}
-              onClick={() => dismissToast(t.id)}
-              aria-label="Dismiss"
-            >
-              ×
-            </button>
-          )}
         </div>
-      ))}
-    </div>
+      )}
+    </>
   );
 };

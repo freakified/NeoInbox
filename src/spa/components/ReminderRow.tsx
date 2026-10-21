@@ -119,7 +119,12 @@ export const ReminderRow = ({ reminder }: { reminder: ReminderRecord }) => {
   ) : baseDate;
 
   return (
-    <MotionRow data-row data-row-key={`reminder:${reminder.id}`} className={s.row}>
+    <MotionRow
+      data-row
+      data-row-key={`reminder:${reminder.id}`}
+      className={s.row}
+      role="listitem"
+    >
       <RowHeader
         leading={
           <div className={s.avatar}>
@@ -130,6 +135,13 @@ export const ReminderRow = ({ reminder }: { reminder: ReminderRecord }) => {
         secondary={<Highlight text={reminder.text} />}
         subline={woke}
         date={date}
+        status={
+          [
+            reminder.pinned && "pinned",
+            reminder.snoozeWakeAt !== undefined &&
+              `snoozed until ${formatDate(reminder.snoozeWakeAt)}`,
+          ].filter(Boolean).join(", ") || undefined
+        }
         onClick={() => setEditing(true)}
         actionStrip={<ReminderActionStrip reminder={reminder} />}
       />

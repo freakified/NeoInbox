@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { clsx } from "clsx";
 import type { Thread, TripRecord } from "../../shared/types";
 import { ITINERARY_ICONS, itineraryMessage, type ItineraryItem } from "../../shared/itinerary";
 import { formatTripRange, tripDateRange } from "../../shared/trips";
 import { useMailStore } from "../../store/mailStore";
+import { focusToggleAfterChange } from "../lib/toggleFocus";
+import { useMenuFocus } from "../lib/useMenuFocus";
 import { useTripItinerary } from "../lib/useTripItinerary";
 import { useBulkActions } from "./BulkActionConfirm";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -66,6 +68,13 @@ export const TripSliceRow = ({
 
   const toggleThread = (id: string) =>
     setOpenThreadId(activeOpenThreadId === id ? null : id);
+  const toggleTrip = () => {
+    focusToggleAfterChange(tripKey);
+    onToggle(tripKey);
+  };
+  const id = useId();
+  const bodyId = `${id}-body`;
+  const relatedId = `${id}-related`;
 
   const commitRename = () => {
     setEditing(false);
@@ -115,6 +124,7 @@ export const TripSliceRow = ({
       data-row
       data-row-key={tripKey}
       className={clsx(b.slice, isOpen && b.sliceOpen)}
+      role="listitem"
       onClick={(e) => {
         if (!isOpen || !activeOpenThreadId) return;
         const target = e.target as HTMLElement;
@@ -124,6 +134,7 @@ export const TripSliceRow = ({
         ) {
           return;
         }
+        focusToggleAfterChange(`thread:${activeOpenThreadId}`);
         setOpenThreadId(null);
       }}
     >
@@ -136,17 +147,20 @@ export const TripSliceRow = ({
           }
           primary={trip.name}
           bold={unread}
+          status={unread ? "unread" : undefined}
           secondary={
             <span className={s.card}>
               <TripArt tone="light" className={s.cardArt} />
               <span className={s.cardText}>
-                <span className={s.cardName}>{trip.name}</span>
+                {/* Already the row's primary text, as far as speech goes. */}
+                <span className={s.cardName} aria-hidden="true">{trip.name}</span>
                 {rangeLabel && <span>{rangeLabel}</span>}
               </span>
             </span>
           }
-          onClick={() => onToggle(tripKey)}
+          onClick={toggleTrip}
           expanded={false}
+          toggleKey={tripKey}
         />
       )}
 
@@ -164,18 +178,34 @@ export const TripSliceRow = ({
                   onFocus={(e) => e.target.select()}
                   onChange={(e) => setDraftName(e.target.value)}
                   onBlur={commitRename}
+                  aria-label="Trip name"
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") commitRename();
+                    // The title button comes back in the field's place.
+                    if (e.key === "Enter") {
+                      focusToggleAfterChange(tripKey);
+                      commitRename();
+                    }
                     if (e.key === "Escape") {
+                      focusToggleAfterChange(tripKey);
                       setDraftName(trip.name);
                       setEditing(false);
                     }
                   }}
                 />
               ) : (
-                <button onClick={() => onToggle(tripKey)} className={s.bannerTitle}>
-                  {trip.name}
-                </button>
+                <h3 className={s.bannerHeading}>
+                  <button
+                    type="button"
+                    onClick={toggleTrip}
+                    className={s.bannerTitle}
+                    data-row-header=""
+                    data-row-toggle={tripKey}
+                    aria-expanded={true}
+                    aria-controls={bodyId}
+                  >
+                    {trip.name}
+                  </button>
+                </h3>
               )}
               {rangeLabel && <span className={s.rangeLabel}>{rangeLabel}</span>}
             </div>
@@ -209,6 +239,7 @@ export const TripSliceRow = ({
       )}
 
       <ExpandableRegion
+        id={bodyId}
         isOpen={isOpen}
         className={b.expandBody}
         innerClassName={s.expandInner}
@@ -219,62 +250,65 @@ export const TripSliceRow = ({
           )}
           {threads.length > 0 && (
             <div className={b.bucketHeader}>
-              <h3 className={b.bucketLabel}>Related items</h3>
+              <h4 id={relatedId} className={b.bucketLabel}>Related items</h4>
             </div>
           )}
-          {expandedIdx >= 0 ? (
-            <>
-              {expandedIdx > 0 && (
-                <RowGroup
-                  layoutId={`trip-${trip.id}-before`}
-                  className={clsx(b.innerRows, b.rowsBeforeOpen)}
-                >
-                  {threads.slice(0, expandedIdx).map((t) => (
-                    <ThreadRow
-                      key={t.id}
-                      thread={t}
-                      isExpanded={false}
-                      onToggle={() => toggleThread(t.id)}
-                    />
-                  ))}
-                </RowGroup>
-              )}
-              <MotionSurface key={threads[expandedIdx]!.id} className={b.expandedThread} data-expanded-thread>
-                <ThreadRow
-                  key={threads[expandedIdx]!.id}
-                  thread={threads[expandedIdx]!}
-                  isExpanded={true}
-                  onToggle={() => toggleThread(threads[expandedIdx]!.id)}
-                />
-              </MotionSurface>
-              {expandedIdx < threads.length - 1 && (
-                <RowGroup
-                  layoutId={`trip-${trip.id}-after`}
-                  className={clsx(b.innerRows, b.rowsAfterOpen)}
-                >
-                  {threads.slice(expandedIdx + 1).map((t) => (
-                    <ThreadRow
-                      key={t.id}
-                      thread={t}
-                      isExpanded={false}
-                      onToggle={() => toggleThread(t.id)}
-                    />
-                  ))}
-                </RowGroup>
-              )}
-            </>
-          ) : (
-            <RowGroup className={b.innerRows}>
-              {threads.map((t) => (
-                <ThreadRow
-                  key={t.id}
-                  thread={t}
-                  isExpanded={false}
-                  onToggle={() => toggleThread(t.id)}
-                />
-              ))}
-            </RowGroup>
-          )}
+          <div role="list" aria-labelledby={threads.length > 0 ? relatedId : undefined} className={b.bucketRows}>
+            {expandedIdx >= 0 ? (
+              <>
+                {expandedIdx > 0 && (
+                  <RowGroup
+                    layoutId={`trip-${trip.id}-before`}
+                    className={clsx(b.innerRows, b.rowsBeforeOpen)}
+                  >
+                    {threads.slice(0, expandedIdx).map((t) => (
+                      <ThreadRow
+                        key={t.id}
+                        thread={t}
+                        isExpanded={false}
+                        onToggle={() => toggleThread(t.id)}
+                      />
+                    ))}
+                  </RowGroup>
+                )}
+                <MotionSurface key={threads[expandedIdx]!.id} className={b.expandedThread} data-expanded-thread>
+                  <ThreadRow
+                    key={threads[expandedIdx]!.id}
+                    thread={threads[expandedIdx]!}
+                    isExpanded={true}
+                    onToggle={() => toggleThread(threads[expandedIdx]!.id)}
+                    headingLevel={5}
+                  />
+                </MotionSurface>
+                {expandedIdx < threads.length - 1 && (
+                  <RowGroup
+                    layoutId={`trip-${trip.id}-after`}
+                    className={clsx(b.innerRows, b.rowsAfterOpen)}
+                  >
+                    {threads.slice(expandedIdx + 1).map((t) => (
+                      <ThreadRow
+                        key={t.id}
+                        thread={t}
+                        isExpanded={false}
+                        onToggle={() => toggleThread(t.id)}
+                      />
+                    ))}
+                  </RowGroup>
+                )}
+              </>
+            ) : (
+              <RowGroup className={b.innerRows}>
+                {threads.map((t) => (
+                  <ThreadRow
+                    key={t.id}
+                    thread={t}
+                    isExpanded={false}
+                    onToggle={() => toggleThread(t.id)}
+                  />
+                ))}
+              </RowGroup>
+            )}
+          </div>
         </ErrorBoundary>
       </ExpandableRegion>
     </MotionRow>
@@ -284,9 +318,9 @@ export const TripSliceRow = ({
 // Read-only: a line can merge several emails (booking, check-in, schedule
 // change), so there's no one source to open.
 const Itinerary = ({ items }: { items: ItineraryItem[] }) => (
-  <div className={s.itinerary}>
+  <div className={s.itinerary} role="list" aria-label="Itinerary">
     {items.map((item) => (
-      <div key={item.id} className={s.itineraryRow}>
+      <div key={item.id} className={s.itineraryRow} role="listitem">
         <Icon name={ITINERARY_ICONS[item.kind]} className={s.itineraryIcon} />
         <span className={s.itineraryText}>
           <span className={s.itineraryTitle}>{item.title}</span>
@@ -303,6 +337,7 @@ const TripOverflowMenu = ({ onRename }: { onRename: () => void }) => {
   const [position, setPosition] = useState<React.CSSProperties>({});
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuFocus = useMenuFocus({ open, onClose: () => setOpen(false), triggerRef, menuRef });
 
   useEffect(() => {
     if (!open) return;
@@ -325,6 +360,8 @@ const TripOverflowMenu = ({ onRename }: { onRename: () => void }) => {
       <button
         ref={triggerRef}
         title="More"
+        aria-haspopup="menu"
+        aria-expanded={open}
         className={s.bannerBtn}
         onClick={(e) => {
           e.stopPropagation();
@@ -342,7 +379,9 @@ const TripOverflowMenu = ({ onRename }: { onRename: () => void }) => {
             className={menu.menu}
             style={position}
             role="menu"
+            aria-label="Trip actions"
             onClick={(e) => e.stopPropagation()}
+            {...menuFocus}
           >
             <button
               type="button"

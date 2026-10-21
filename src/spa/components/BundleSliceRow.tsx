@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { clsx } from "clsx";
 import type { Category, Thread } from "../../shared/types";
 import { getCategoryMeta } from "../../shared/categories";
@@ -6,6 +6,7 @@ import { useCustomBundles, useMailStore } from "../../store/mailStore";
 import { senderName } from "../lib/avatar";
 import { countNewThreads, getBundleSeenAt, markBundleSeen, useBundleSeenAt } from "../lib/bundleSeen";
 import { groupByBucket } from "../lib/dateBucket";
+import { focusToggleAfterChange } from "../lib/toggleFocus";
 import { useBulkActions } from "./BulkActionConfirm";
 import { Icon } from "./Icon";
 import { MessageAttachments, collectAttachments } from "./MessageAttachments";
@@ -51,6 +52,13 @@ export const BundleSliceRow = ({
   }, [isOpen, bundleKey]);
 
   const threadCountLabel = threads.length > 25 ? "(25+)" : `(${threads.length})`;
+  const senderNames = threads
+    .slice(0, 3)
+    .map((t) => {
+      const last = t.messages[t.messages.length - 1];
+      return last ? senderName(last.author) : "";
+    })
+    .filter(Boolean);
   const previewContent = threads
     .slice(0, 3)
     .map((t, idx) => {
@@ -97,6 +105,12 @@ export const BundleSliceRow = ({
 
   const toggleThread = (id: string) =>
     setOpenThreadId(activeOpenThreadId === id ? null : id);
+  const toggleBundle = () => {
+    focusToggleAfterChange(bundleKey);
+    onToggle(bundleKey);
+  };
+  const id = useId();
+  const bodyId = `${id}-body`;
 
   const handleDoneAll = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -117,6 +131,7 @@ export const BundleSliceRow = ({
       data-row
       data-row-key={bundleKey}
       className={clsx(s.slice, isOpen && s.sliceOpen)}
+      role="listitem"
       onClick={(e) => {
         if (!isOpen || !activeOpenThreadId) return;
 
@@ -128,6 +143,7 @@ export const BundleSliceRow = ({
           return;
         }
 
+        focusToggleAfterChange(`thread:${activeOpenThreadId}`);
         setOpenThreadId(null);
       }}
     >
@@ -161,20 +177,37 @@ export const BundleSliceRow = ({
               </>
             ) : undefined
           }
-          onClick={() => onToggle(bundleKey)}
+          // "Forums(5)" reads as one word; say what the count is.
+          label={[
+            meta.name,
+            threads.length > 25
+              ? "more than 25 conversations"
+              : `${threads.length} ${threads.length === 1 ? "conversation" : "conversations"}`,
+            newCount > 0 && `${newCount} new`,
+            senderNames.join(", "),
+          ].filter(Boolean).join(", ")}
+          onClick={toggleBundle}
           expanded={false}
+          toggleKey={bundleKey}
         />
       )}
 
       {isOpen && (
         <div className={s.openHeader}>
-          <button
-            onClick={() => onToggle(bundleKey)}
-            className={s.bundleTitle}
-            style={{ color: meta.color }}
-          >
-            {meta.name}
-          </button>
+          <h3 className={s.bundleHeading}>
+            <button
+              type="button"
+              onClick={toggleBundle}
+              className={s.bundleTitle}
+              style={{ color: meta.color }}
+              data-row-header=""
+              data-row-toggle={bundleKey}
+              aria-expanded={true}
+              aria-controls={bodyId}
+            >
+              {meta.name}
+            </button>
+          </h3>
           <div className={s.actions}>
             <button
               onClick={(e) => {
@@ -205,69 +238,74 @@ export const BundleSliceRow = ({
       )}
 
       <ExpandableRegion
+        id={bodyId}
         isOpen={isOpen}
         className={s.expandBody}
         innerClassName={s.expandInner}
       >
         {groupByBucket(threads, (t) => t.latestDate).map(
-          ({ label, items }) => {
+          ({ label, items }, bucketIdx) => {
             const expandedIdx = activeOpenThreadId
               ? items.findIndex((t) => t.id === activeOpenThreadId)
               : -1;
             const bucketKey = `${category}-${label}`;
+            const labelId = `${id}-bucket-${bucketIdx}`;
 
             return (
               <div key={label}>
                 <div className={s.bucketHeader}>
-                  <p className={s.bucketLabel}>{label}</p>
+                  <h4 id={labelId} className={s.bucketLabel}>{label}</h4>
                 </div>
-                {expandedIdx >= 0 ? (
-                  <>
-                    {expandedIdx > 0 && (
-                      <RowGroup layoutId={`${bucketKey}-before`} className={clsx(s.innerRows, s.rowsBeforeOpen)}>
-                        {items.slice(0, expandedIdx).map((t) => (
-                          <ThreadRow
-                            key={t.id}
-                            thread={t}
-                            isExpanded={false}
-                            onToggle={() => toggleThread(t.id)}
-                          />
-                        ))}
-                      </RowGroup>
-                    )}
-                    <MotionSurface key={items[expandedIdx]!.id} className={s.expandedThread} data-expanded-thread>
-                      <ThreadRow
-                        key={items[expandedIdx]!.id}
-                        thread={items[expandedIdx]!}
-                        isExpanded={true}
-                        onToggle={() => toggleThread(items[expandedIdx]!.id)}
-                      />
-                    </MotionSurface>
-                    {expandedIdx < items.length - 1 && (
-                      <RowGroup layoutId={`${bucketKey}-after`} className={clsx(s.innerRows, s.rowsAfterOpen)}>
-                        {items.slice(expandedIdx + 1).map((t) => (
-                          <ThreadRow
-                            key={t.id}
-                            thread={t}
-                            isExpanded={false}
-                            onToggle={() => toggleThread(t.id)}
-                          />
-                        ))}
-                      </RowGroup>
-                    )}
-                  </>
-                ) : (
-                  <RowGroup className={s.innerRows}>
-                    {items.map((t) => (
-                      <ThreadRow
-                        key={t.id}
-                        thread={t}
-                        isExpanded={activeOpenThreadId === t.id}
-                        onToggle={() => toggleThread(t.id)}
-                      />
-                    ))}
-                  </RowGroup>
-                )}
+                <div role="list" aria-labelledby={labelId} className={s.bucketRows}>
+                  {expandedIdx >= 0 ? (
+                    <>
+                      {expandedIdx > 0 && (
+                        <RowGroup layoutId={`${bucketKey}-before`} className={clsx(s.innerRows, s.rowsBeforeOpen)}>
+                          {items.slice(0, expandedIdx).map((t) => (
+                            <ThreadRow
+                              key={t.id}
+                              thread={t}
+                              isExpanded={false}
+                              onToggle={() => toggleThread(t.id)}
+                            />
+                          ))}
+                        </RowGroup>
+                      )}
+                      <MotionSurface key={items[expandedIdx]!.id} className={s.expandedThread} data-expanded-thread>
+                        <ThreadRow
+                          key={items[expandedIdx]!.id}
+                          thread={items[expandedIdx]!}
+                          isExpanded={true}
+                          onToggle={() => toggleThread(items[expandedIdx]!.id)}
+                          headingLevel={5}
+                        />
+                      </MotionSurface>
+                      {expandedIdx < items.length - 1 && (
+                        <RowGroup layoutId={`${bucketKey}-after`} className={clsx(s.innerRows, s.rowsAfterOpen)}>
+                          {items.slice(expandedIdx + 1).map((t) => (
+                            <ThreadRow
+                              key={t.id}
+                              thread={t}
+                              isExpanded={false}
+                              onToggle={() => toggleThread(t.id)}
+                            />
+                          ))}
+                        </RowGroup>
+                      )}
+                    </>
+                  ) : (
+                    <RowGroup className={s.innerRows}>
+                      {items.map((t) => (
+                        <ThreadRow
+                          key={t.id}
+                          thread={t}
+                          isExpanded={activeOpenThreadId === t.id}
+                          onToggle={() => toggleThread(t.id)}
+                        />
+                      ))}
+                    </RowGroup>
+                  )}
+                </div>
               </div>
             );
           },
