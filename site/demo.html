@@ -14,21 +14,30 @@
       .loading {
         position: fixed;
         inset: 0;
-        display: grid;
-        place-items: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
         opacity: 0;
         animation: loading-in 300ms ease-out 400ms forwards;
       }
-      .loading img { width: 72px; height: 72px; animation: loading-pulse 1.6s ease-in-out infinite; }
+      .loading img { width: 72px; height: 72px; }
+      .loading p {
+        margin: 0;
+        font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        color: #5f6368;
+        animation: loading-pulse 1.6s ease-in-out infinite;
+      }
       @keyframes loading-in { to { opacity: 1; } }
       @keyframes loading-pulse { 50% { opacity: 0.45; } }
       @media (prefers-reduced-motion: reduce) {
-        .loading img { animation: none; }
+        .loading p { animation: none; }
       }
     </style>
   </head>
   <body>
-    <div id="root"><div class="loading" role="status" aria-label="Loading the demo"><img src="/icon.svg" alt="" /></div></div>
+    <div id="root"><div class="loading" role="status"><img src="/icon.svg" alt="" /><p>Loading NeoInbox Demo...</p></div></div>
     <script type="module" src="./demo-main.ts"></script>
   </body>
 </html>
