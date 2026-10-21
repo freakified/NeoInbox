@@ -484,6 +484,39 @@ footer {
   border-top: 1px solid #e0e0e0;
 }
 
+/* Matches the hit counter on freakified.net. */
+.visitor-counter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 12px;
+}
+
+.visitor-counter[hidden] {
+  display: none;
+}
+
+.visitor-digits {
+  background: black;
+  color: #d6b564;
+  font-family: ui-monospace, Menlo, Monaco, "Cascadia Mono", "Segoe UI Mono", "Roboto Mono", Consolas, "Courier New", monospace;
+  font-size: 14px;
+  padding: 6px 2px 6px 12px;
+  border-radius: 4px;
+  letter-spacing: 12px;
+  line-height: 1;
+}
+
+.visitor-note {
+  max-width: 440px;
+  margin: 0 0 8px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 /* The app wants a desktop-sized window; on a phone, the window shows a
    screenshot instead, its traffic lights are only for looks, and the
    caption links to the demo. */

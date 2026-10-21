@@ -8,6 +8,7 @@
     <meta property="og:title" content="NeoInbox: Google Inbox, reborn for Thunderbird" />
     <meta property="og:description" content="Recreating the classic Google Inbox experience, fully local and for any email account." />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <script data-goatcounter="https://neoinbox-counter.freakified.net/count" async src="/js/count.js"></script>
     <script type="module" src="./landing.ts"></script>
   </head>
   <body>
@@ -158,11 +159,20 @@
     </section>
 
     <footer>
+      <div class="visitor-counter" hidden>
+        Congratulations! You are visitor #
+        <div class="visitor-digits">...</div>
+        <p class="visitor-note">
+          <!-- This counter is powered by <a href="https://www.goatcounter.com">GoatCounter</a>, which -->
+          <!-- uses no cookies and collects no personal data! Don't worry, the the add-on doesn't send any data at all, but I simply cannot resist putting a numeric hit counter on every website. -->
+        </p>
+      </div>
       <p>
-        NeoInbox is free and open source under the
-        <a href="https://github.com/freakified/NeoInbox/blob/master/LICENSE">MPL-2.0</a>, and
-        <a href="https://github.com/freakified/NeoInbox">on GitHub</a>. It is not affiliated
-        with, endorsed by, or sponsored by Google. Google is a trademark of Google LLC.
+        NeoInbox is open source under the
+        <a href="https://github.com/freakified/NeoInbox/blob/master/LICENSE">MPL-2.0</a>! Check out the source code over on 
+        <a href="https://github.com/freakified/NeoInbox">on GitHub</a>.       </p>
+      <p>
+NeoInbox is not affiliated with, endorsed by, or sponsored by Google. Google is a trademark of Google LLC.
       </p>
     </footer>
   </body>

@@ -88,3 +88,15 @@ wide.addEventListener("change", fit);
 win.querySelector(".lights .close")!.addEventListener("click", () => void hide("closed"));
 win.querySelector(".lights .minimize")!.addEventListener("click", () => void hide("minimized"));
 dockApp.addEventListener("click", () => void restore());
+
+// The footer's hit counter: total visits from GoatCounter, shown once it
+// answers. The demo iframe isn't counted (count.js skips frames).
+fetch("https://neoinbox-counter.freakified.net/counter/TOTAL.json")
+  .then((r) => r.json())
+  .then((data: { count?: string }) => {
+    if (!data?.count) return;
+    const counter = document.querySelector<HTMLElement>(".visitor-counter")!;
+    counter.querySelector(".visitor-digits")!.textContent = data.count.padStart(6, "0");
+    counter.hidden = false;
+  })
+  .catch(() => {});
