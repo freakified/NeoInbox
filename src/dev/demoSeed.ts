@@ -593,7 +593,7 @@ const purchases = (now: number): FakeMessageSpec[] => [
         ) +
         details([["Carrier", "FedEx Ground"], ["Tracking number", "123456789012"], ["Estimated delivery", "3–5 business days"]]) +
         button("Track shipment", hammockHut.color) +
-        small("Requires two sturdy trees, posts, or a reasonably patient friend. Most customers get in on the first try. Most customers stay in on the fourth."),
+        small("May result in increased engineering efficiency."),
     }),
   ),
 ];

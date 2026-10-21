@@ -4,9 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>NeoInbox: Google Inbox, reborn for Thunderbird</title>
-    <meta name="description" content="Recreating the classic Google Inbox experience, fully local and for any email account. A Thunderbird add-on with bundles, trips, pins, snoozes and reminders." />
+    <meta name="description" content="Recreating the classic Google Inbox experience as a fully local Thunderbird extension that works with any email account. Includes bundles, trips, pins, snoozes and reminders." />
     <meta property="og:title" content="NeoInbox: Google Inbox, reborn for Thunderbird" />
-    <meta property="og:description" content="Recreating the classic Google Inbox experience, fully local and for any email account." />
+    <meta property="og:description" content="Recreating the classic Google Inbox experience as a fully local Thunderbird extension that works with any email account." />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <script data-goatcounter="https://neoinbox-counter.freakified.net/count" async src="/js/count.js"></script>
     <script type="module" src="./landing.ts"></script>
@@ -18,11 +18,11 @@
         NeoInbox
       </h1>
       <p class="lede">
-        Recreating the classic Google™ Inbox experience, fully local and for any email account.
+        Recreating the classic Google™ Inbox experience as a fully local Thunderbird extension that works with any email account.
       </p>
       <div class="actions">
-        <a class="button primary" href="#install">Install</a>
-        <a class="button" href="/demo">Try the live demo</a>
+        <a class="button primary" href="#install">Get NeoInbox</a>
+        <a class="button wide-only" href="/demo">Try the live demo</a>
       </div>
     </header>
 
@@ -60,8 +60,7 @@
         </div>
       </div>
       <p class="caption narrow-only">
-        The live demo runs the real app on a sample mailbox, and it's made for a bigger screen.
-        Try it on a computer, or <a href="/demo">open it here anyway</a>.
+        The live demo is intended for desktops, but you can <a href="/demo">open it here anyway</a>!
       </p>
     </section>
 
@@ -78,21 +77,21 @@
         <img src="/shots/bundles.webp" alt="The Purchases bundle opened, with package tracking cards for each shipment" loading="lazy" />
         <h2>Bundles</h2>
         <p>
-          Forget about like folders or whatever; emails are "bundled" as part of the mail stream, cleanly grouping things in logical categories. 
+          Forget about like folders or whatever; emails are "bundled" as part of the mail stream, cleanly grouping things in logical categories.
         </p>
       </article>
       <article>
         <img src="/shots/trips.webp" alt="A trip to Los Angeles, with its train tickets and hotel stay" loading="lazy" />
         <h2>Trips</h2>
         <p>
-          Flight, hotel, train and dinner confirmations are automatically parsed and bundled together as trip!
+          Flight, hotel, train and dinner confirmations are automatically parsed and bundled together as a trip!
         </p>
       </article>
       <article>
         <img src="/shots/snooze.webp" alt="The snooze menu: later today, tomorrow, this weekend, next week, or a date and time" loading="lazy" />
         <h2>Done, pin, snooze</h2>
         <p>
-          Achive the mythical state of Inbox Zero by marking completed messages as done, or just snooze them until later!
+          Achieve the mythical state of Inbox Zero by marking completed messages as done, or just snooze them until later!
         </p>
       </article>
       <article>
@@ -110,10 +109,28 @@
     </section>
 
     <section class="install" id="install">
-      <h2>Install NeoInbox</h2>
+      <h2>Get NeoInbox</h2>
       <p>
-        NeoInbox should work with any account Thunderbird can open:
-        Gmail, Outlook, Yahoo! Mail, or even your own server.
+        To get started with NeoInbox, you'll first need to install Thunderbird, a free, open source email client. It supports almost every email service, including Gmail, Yahoo Mail, and Outlook!
+      </p>
+
+      <h3>Set up Thunderbird</h3>
+      <p class="note">Already using Thunderbird 128 or newer? <a href="#install-neoinbox">Skip ahead to installing NeoInbox.</a></p>
+      <ol class="steps">
+        <li>
+          Download Thunderbird from <a href="https://www.thunderbird.net/">thunderbird.net</a>.
+        </li>
+        <li>
+          Open Thunderbird and add your email account.
+        </li>
+        <li>Give it some time to download your email.</li>
+      </ol>
+      <a class="button" href="https://www.thunderbird.net/">Get Thunderbird</a>
+
+      <h3 id="install-neoinbox">Install NeoInbox</h3>
+      <p class="note">
+        NeoInbox has been submitted to the official addons.thunderbird.net, and will hopefully
+        be approved soon! Until then, you'll need to install it manually.
       </p>
       <ol class="steps">
         <li>
@@ -130,15 +147,28 @@
           in the toolbar.
         </li>
       </ol>
-      <p class="note">
-        NeoInbox is coming to addons.thunderbird.net, which will keep it up to date
-        automatically. Until then, you can install new versions directly from GitHub.
-      </p>
       <a class="button primary" href="https://github.com/freakified/NeoInbox/releases/latest">Download from GitHub</a>
     </section>
 
     <section class="faq">
       <h2>FAQ</h2>
+      <h3>Why?</h3>
+      <p>
+        In 2014, Google
+        <a href="https://gmail.googleblog.com/2014/10/an-inbox-that-works-for-you.html">released Inbox™ by Gmail™</a>
+        and solved email UX. Even now, 7 years after
+        Google made the <a href="https://www.dantilden.com/2019/03/20/google-inbox/">objectively incorrect</a> decision to shut it down, almost nothing has come
+        close to Inbox’s elegant way of visualizing and organizing emails. (The best attempt by
+        far was a cloud email service called
+        <a href="https://techcrunch.com/2022/02/15/shortwave-gets-9m-to-bring-back-google-inbox/">Shortwave</a>, which was at least initially intended as
+        a true spiritual successor to Inbox. Sadly, even that project ultimately strayed too far
+        from the Inbox UX, implementing a non-optional 2-pane view that did away with one of
+        Inbox’s best UX concepts.) Given this constant stream of false starts and betrayals, I
+        wanted to build something that looked and worked more or less exactly like the original
+        Inbox, but was fully local and could work with any email account. Something that, once
+        you had it on your computer, wouldn’t suddenly vanish or change because the creator lost
+        interest or suddenly got a different idea about how your email should look!
+      </p>
       <h3>Why a Thunderbird extension? Why not just vibecode an entire email client?</h3>
       <p>
         Email is a pile of legacy cruft and strange workarounds. There’s a reason why basically
@@ -164,15 +194,17 @@
         <div class="visitor-digits">...</div>
         <p class="visitor-note">
           <!-- This counter is powered by <a href="https://www.goatcounter.com">GoatCounter</a>, which -->
-          <!-- uses no cookies and collects no personal data! Don't worry, the the add-on doesn't send any data at all, but I simply cannot resist putting a numeric hit counter on every website. -->
+          <!-- uses no cookies and collects no personal data! Don't worry, the add-on doesn't send any data at all, but I simply cannot resist putting a numeric hit counter on every website. -->
         </p>
       </div>
       <p>
         NeoInbox is open source under the
-        <a href="https://github.com/freakified/NeoInbox/blob/master/LICENSE">MPL-2.0</a>! Check out the source code over on 
-        <a href="https://github.com/freakified/NeoInbox">on GitHub</a>.       </p>
+        <a href="https://github.com/freakified/NeoInbox/blob/master/LICENSE">MPL-2.0</a>! Check out the source code over
+        <a href="https://github.com/freakified/NeoInbox">on GitHub</a>.
+      </p>
       <p>
-NeoInbox is not affiliated with, endorsed by, or sponsored by Google. Google is a trademark of Google LLC.
+        NeoInbox is not affiliated with, endorsed by, or sponsored by Google.
+        Google, Gmail and Inbox by Gmail are trademarks of Google LLC.
       </p>
     </footer>
   </body>

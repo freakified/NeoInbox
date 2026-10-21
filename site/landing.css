@@ -465,6 +465,16 @@ a {
   font-size: 14px;
 }
 
+.install h3 {
+  font-size: 20px;
+  font-weight: 500;
+  margin: 40px 0 8px;
+}
+
+.install h3 + .note {
+  margin-bottom: 16px;
+}
+
 .faq h3 {
   font-size: 18px;
   font-weight: 500;
@@ -564,5 +574,14 @@ footer {
 
   .narrow-only {
     display: block;
+  }
+
+  .wide-only {
+    display: none;
+  }
+
+  /* Clear the window's drop shadow. */
+  .caption {
+    margin-top: 40px;
   }
 }

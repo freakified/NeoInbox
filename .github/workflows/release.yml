@@ -39,9 +39,15 @@ jobs:
       - name: Package
         run: |
           pnpm package
+          pnpm source-zip
           mv neoinbox.xpi "neoinbox-$GITHUB_REF_NAME.xpi"
+          mv neoinbox-source.zip "neoinbox-source-$GITHUB_REF_NAME.zip"
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "neoinbox-$GITHUB_REF_NAME.xpi" --generate-notes
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "neoinbox-$GITHUB_REF_NAME.xpi" \
+            "neoinbox-source-$GITHUB_REF_NAME.zip" \
+            --generate-notes
