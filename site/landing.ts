@@ -72,6 +72,19 @@ const restore = async (): Promise<void> => {
   busy = false;
 };
 
+// Load the demo only where there's room for it (landing.css's breakpoint);
+// phones see a screenshot, with the traffic lights out of reach.
+const wide = matchMedia("(min-width: 761px)");
+const lights = win.querySelector<HTMLElement>(".lights")!;
+const shot = win.querySelector<HTMLImageElement>(".window-shot")!;
+const fit = (): void => {
+  lights.inert = !wide.matches;
+  if (wide.matches && !frame.src) frame.src = frame.dataset.src!;
+  if (!wide.matches && !shot.src) shot.src = shot.dataset.src!;
+};
+fit();
+wide.addEventListener("change", fit);
+
 win.querySelector(".lights .close")!.addEventListener("click", () => void hide("closed"));
 win.querySelector(".lights .minimize")!.addEventListener("click", () => void hide("minimized"));
 dockApp.addEventListener("click", () => void restore());

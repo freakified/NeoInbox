@@ -4,8 +4,9 @@ dist-site/
 *.log
 .DS_Store
 .vite/
-shots/
+/shots/
 
 # Real mail captured by neoSampleDump() — personal data, never commit
 fixtures/real-mail/
 *.xpi
+neoinbox-source.zip

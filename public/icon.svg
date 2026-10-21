@@ -10,7 +10,6 @@
       <feGaussianBlur in="SourceAlpha" stdDeviation=".5"/>
       <feOffset dx=".7" dy="1"/>
       <feComponentTransfer><feFuncA type="linear" slope=".45"/></feComponentTransfer>
-      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
 
     <!-- inside of the envelope: deep, shadowed blue -->
@@ -49,7 +48,14 @@
     </linearGradient>
   </defs>
 
+  <!-- drop shadow drawn from a silhouette, so only it goes through the filter;
+       WebKit rasterizes filtered content at low resolution, which blurred the whole icon -->
   <g filter="url(#shadow)">
+    <use href="#env"/>
+    <use href="#check" transform="translate(26.25 12.5) scale(1.15) translate(-26.25 -12.5)" stroke="#000" stroke-width=".87" stroke-linejoin="round"/>
+  </g>
+
+  <g>
     <!-- envelope interior (roof + back wall) -->
     <use href="#env" fill="url(#inside)"/>
 

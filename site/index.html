@@ -36,7 +36,16 @@
             </div>
             <span class="window-title" aria-hidden="true">NeoInbox Live Demo</span>
           </div>
-          <iframe src="/demo" title="NeoInbox live demo"></iframe>
+          <!-- landing.ts loads the demo only on screens wide enough for it,
+               and the screenshot of it only on phones. -->
+          <iframe data-src="/demo" title="NeoInbox live demo"></iframe>
+          <img
+            class="window-shot"
+            data-src="/shots/demo.webp"
+            alt="NeoInbox's inbox: a reminder, bundles of purchases and finance mail, and a trip"
+            width="2264"
+            height="1440"
+          />
         </div>
         <div class="dock" hidden>
           <div class="dock-shelf">
@@ -56,38 +65,45 @@
     </section>
 
     <section class="features">
-      <article style="--accent: #3f51b5">
+      <h2>Features</h2>
+      <article>
+        <img src="/shots/stream.webp" alt="The inbox, grouped by day, with a reminder, a conversation and two bundles" loading="lazy" />
         <h2>Unified Mail Stream</h2>
         <p>
           All emails seamlessly flow into one another, with smooth animations!
         </p>
       </article>
-      <article style="--accent: #795548">
+      <article>
+        <img src="/shots/bundles.webp" alt="The Purchases bundle opened, with package tracking cards for each shipment" loading="lazy" />
         <h2>Bundles</h2>
         <p>
           Forget about like folders or whatever; emails are "bundled" as part of the mail stream, cleanly grouping things in logical categories. 
         </p>
       </article>
-      <article style="--accent: #3f51b5">
+      <article>
+        <img src="/shots/trips.webp" alt="A trip to Los Angeles, with its train tickets and hotel stay" loading="lazy" />
         <h2>Trips</h2>
         <p>
           Flight, hotel, train and dinner confirmations are automatically parsed and bundled together as trip!
         </p>
       </article>
-      <article style="--accent: #5ca46f">
+      <article>
+        <img src="/shots/snooze.webp" alt="The snooze menu: later today, tomorrow, this weekend, next week, or a date and time" loading="lazy" />
         <h2>Done, pin, snooze</h2>
         <p>
           Achive the mythical state of Inbox Zero by marking completed messages as done, or just snooze them until later!
         </p>
       </article>
-      <article style="--accent: #4285f4">
+      <article>
+        <img src="/shots/reminders.webp" alt="A new reminder being typed at the top of the inbox" loading="lazy" />
         <h2>Reminders</h2>
         <p>Instead of emailing yourself, you can just directly input reminders into the inbox!</p>
       </article>
-      <article style="--accent: #212121">
+      <article>
+        <img src="/shots/accounts.webp" alt="The account menu, listing two email accounts" loading="lazy" />
         <h2>Fully local</h2>
         <p>
-          All sorting happens on your computer, with telemetry, subscriptions, or other unpleasantries!
+          All sorting happens on your computer, with no telemetry, subscriptions, or other unpleasantries!
         </p>
       </article>
     </section>

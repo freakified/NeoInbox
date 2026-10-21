@@ -88,8 +88,8 @@ const when = (iso: string): string => `${shortDate(iso)}, ${time(iso)}`;
 
 // ─── senders ────────────────────────────────────────────────────────────────
 
-const skyline: Brand = {
-  name: "Skyline Air",
+const oceanic: Brand = {
+  name: "Oceanic Airlines",
   color: "#0b4f8a",
   mark: `<path d="M3 27 37 9 29 23 11 29z" fill="#fff"/><path d="M11 29 15 35 19 27z" fill="#9fd3ff"/>`,
 };
@@ -134,10 +134,11 @@ const totalBooks: Brand = {
   color: "#a0522d",
   mark: `<path d="M16 6h8M14 10h12c3 6 3 14 0 20H14c-3-6-3-14 0-20z" stroke="#fff" stroke-width="2.5" fill="#f6d27a"/><path d="M17 34h6" stroke="#fff" stroke-width="2.5"/>`,
 };
-const deskCo: Brand = {
-  name: "The Desk Company",
-  color: "#5b4636",
-  mark: `<circle cx="20" cy="20" r="15" fill="none" stroke="#fff" stroke-width="2"/><circle cx="20" cy="20" r="10" fill="none" stroke="#fff" stroke-width="2"/><circle cx="21" cy="19" r="4.5" fill="none" stroke="#fff" stroke-width="2"/>`,
+const hammockHut: Brand = {
+  name: "The Hammock Hut",
+  color: "#2f7d6d",
+  mark: `<path d="M6 34V10M34 34V10" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M6 14q14 18 28 0" stroke="#f6d27a" stroke-width="3" fill="none"/><path d="M10 18q10 10 20 0" stroke="#fff" stroke-width="1.5" fill="none"/>`,
+  address: "Third Street, Hammock District",
 };
 const tradeFed: Brand = {
   name: "Trade Federation Credit Union",
@@ -155,17 +156,17 @@ const buzz: Brand = {
   color: "#6a3fb5",
   mark: `<path d="M6 8h28v18H18l-8 7v-7H6z" fill="#fff"/><circle cx="14" cy="17" r="2" fill="#6a3fb5"/><circle cx="20" cy="17" r="2" fill="#6a3fb5"/><circle cx="26" cy="17" r="2" fill="#6a3fb5"/>`,
 };
-const northbound: Brand = {
-  name: "Northbound Outfitters",
-  color: "#234e3a",
-  mark: `<path d="M3 34 15 12l7 12 5-7 10 17z" fill="#fff"/><path d="M15 12l3 6-3-1-3 1z" fill="#c9e4d6"/>`,
+const peakSpice: Brand = {
+  name: "Peak Spice Outfitters",
+  color: "#9a4a1c",
+  mark: `<path d="M3 34 15 12l7 12 5-7 10 17z" fill="#fff"/><path d="M15 12l3 6-3-1-3 1z" fill="#f2a65a"/>`,
   page: "#f3efe7",
 };
-const ember: Brand = {
-  name: "Ember Coffee Co.",
-  color: "#4e2f1a",
-  mark: `<path d="M20 4c6 8 10 12 10 19a10 10 0 0 1-20 0c0-5 3-8 5-11 1 4 3 5 5 6-1-5 0-9 0-14z" fill="#ff8a3d"/>`,
-  page: "#f4ede6",
+const robusta: Brand = {
+  name: "Robusta Coffee Corporation",
+  color: "#5c5c5c",
+  mark: `<rect x="9" y="9" width="22" height="22" fill="#fff"/>`,
+  page: "#eeeeee",
 };
 const freeman: Brand = {
   name: "Freeman Dental",
@@ -195,10 +196,12 @@ const birdBook = thumb(
   <path d="M26 34c4-8 14-10 18-6-4 0-6 2-7 4 3 2 2 6-2 7-4 1-8-1-9-5z" fill="#f2c14e"/><circle cx="40" cy="29" r="1" fill="#222"/>
   <rect x="22" y="44" width="22" height="2" fill="#f5efe6"/><rect x="25" y="48" width="16" height="2" fill="#f5efe6"/>`,
 );
-const desk = thumb(
-  "#f1ece6",
-  `<rect x="8" y="22" width="48" height="6" rx="1" fill="#a47148"/><rect x="14" y="28" width="4" height="26" fill="#444"/>
-  <rect x="46" y="28" width="4" height="26" fill="#444"/><rect x="10" y="52" width="12" height="3" fill="#444"/><rect x="42" y="52" width="12" height="3" fill="#444"/>`,
+const hammock = thumb(
+  "#eef5f2",
+  `<path d="M10 56V12M54 56V12" stroke="#7a5230" stroke-width="4" stroke-linecap="round"/>
+  <path d="M10 20 18 26M54 20 46 26" stroke="#a47148" stroke-width="1.5"/>
+  <path d="M18 26q14 18 28 0" stroke="#2f7d6d" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <path d="M20 28q12 12 24 0" stroke="#f6d27a" stroke-width="1.5" fill="none" stroke-dasharray="2 2"/>`,
 );
 const jacket = (color: string, trim: string): string =>
   svgSrc(
@@ -276,7 +279,7 @@ const stay = (code: string, name: string, city: string, country: string, checkin
 
 /** Lisbon in three weeks: flights both ways, a guesthouse, a dinner booking. */
 const lisbonTrip = (now: number): FakeMessageSpec[] => {
-  const airline = { name: "Skyline Air", iataCode: "SK" };
+  const airline = { name: "Oceanic Airlines", iataCode: "OA" };
   const out = at(now, 20, 17, 35);
   const outLands = at(now, 21, 13, 20);
   const back = at(now, 27, 11, 10);
@@ -284,7 +287,7 @@ const lisbonTrip = (now: number): FakeMessageSpec[] => {
   const dinner = at(now, 23, 20, 30);
   return [
     notice(
-      "Skyline Air <reservations@skylineair.example>",
+      "Oceanic Airlines <reservations@oceanicairlines.example>",
       "Your flight confirmation RVX4QM — San Francisco to Lisbon",
       3 * 24 + 2,
       now,
@@ -292,7 +295,7 @@ const lisbonTrip = (now: number): FakeMessageSpec[] => {
         flightLeg("RVX4QM", airline, "412", "SFO", "LIS", out, outLands),
         flightLeg("RVX4QM", airline, "413", "LIS", "SFO", back, backLands),
       ]) +
-      email(skyline, {
+      email(oceanic, {
         preheader: "Confirmation RVX4QM · SFO → LIS · Check-in opens 24 hours before departure",
         body:
           heading("You're going to Lisbon!") +
@@ -300,18 +303,18 @@ const lisbonTrip = (now: number): FakeMessageSpec[] => {
           details([["Confirmation code", "RVX4QM"], ["Passenger", "Bob Emailson"], ["Fare", "Economy Plus · 1 checked bag"]]) +
           divider() +
           leg({
-            label: `Depart · SK 412 · ${shortDate(out)}`, from: "SFO", fromCity: "San Francisco", to: "LIS", toCity: "Lisbon",
+            label: `Depart · OA 412 · ${shortDate(out)}`, from: "SFO", fromCity: "San Francisco", to: "LIS", toCity: "Lisbon",
             departs: time(out), arrives: `${time(outLands)} <span style="color: #c62828">+1</span>`,
             note: "Terminal 2 · Seat 23C · Boeing 787-9 · 10h 45m nonstop"
-          }, skyline.color) +
+          }, oceanic.color) +
           leg({
-            label: `Return · SK 413 · ${shortDate(back)}`, from: "LIS", fromCity: "Lisbon", to: "SFO", toCity: "San Francisco",
+            label: `Return · OA 413 · ${shortDate(back)}`, from: "LIS", fromCity: "Lisbon", to: "SFO", toCity: "San Francisco",
             departs: time(back), arrives: time(backLands),
             note: "Terminal 1 · Seat 24C · Boeing 787-9 · 12h 55m nonstop"
-          }, skyline.color) +
-          button("Manage booking", skyline.color) +
+          }, oceanic.color) +
+          button("Manage booking", oceanic.color) +
           small("Check-in opens 24 hours before departure. Carry-on bags must fit in the sizer, which was designed by an optimist."),
-        reason: "You're receiving this email because you booked a flight with Skyline Air.",
+        reason: "You're receiving this email because you booked a flight with Oceanic Airlines.",
       }),
       { read: true },
     ),
@@ -466,35 +469,35 @@ const qr = (() => {
 
 /** Chicago last month, marked done: shows that past trips keep their mail. */
 const chicagoTrip = (now: number): FakeMessageSpec[] => {
-  const airline = { name: "Skyline Air", iataCode: "SK" };
+  const airline = { name: "Oceanic Airlines", iataCode: "OA" };
   const out = at(now, -34, 7, 5);
   const outLands = at(now, -34, 13, 20);
   const back = at(now, -30, 18, 45);
   const backLands = at(now, -30, 21, 15);
   return [
     notice(
-      "Skyline Air <reservations@skylineair.example>",
+      "Oceanic Airlines <reservations@oceanicairlines.example>",
       "Your flight confirmation HQ2TZB — San Francisco to Chicago",
       45 * 24,
       now,
       ldScript([
-        flightLeg("HQ2TZB", airline, "118", "SFO", "ORD", out, outLands),
-        flightLeg("HQ2TZB", airline, "121", "ORD", "SFO", back, backLands),
+        flightLeg("HQ2TZB", airline, "815", "SFO", "ORD", out, outLands),
+        flightLeg("HQ2TZB", airline, "816", "ORD", "SFO", back, backLands),
       ]) +
-      email(skyline, {
+      email(oceanic, {
         body:
           heading("Chicago, here you come") +
           details([["Confirmation code", "HQ2TZB"], ["Passenger", "Bob Emailson"]]) +
           divider() +
           leg({
-            label: `Depart · SK 118 · ${shortDate(out)}`, from: "SFO", fromCity: "San Francisco", to: "ORD", toCity: "Chicago O'Hare",
+            label: `Depart · OA 815 · ${shortDate(out)}`, from: "SFO", fromCity: "San Francisco", to: "ORD", toCity: "Chicago O'Hare",
             departs: time(out), arrives: time(outLands), note: "Terminal 2 · Seat 14A"
-          }, skyline.color) +
+          }, oceanic.color) +
           leg({
-            label: `Return · SK 121 · ${shortDate(back)}`, from: "ORD", fromCity: "Chicago O'Hare", to: "SFO", toCity: "San Francisco",
+            label: `Return · OA 816 · ${shortDate(back)}`, from: "ORD", fromCity: "Chicago O'Hare", to: "SFO", toCity: "San Francisco",
             departs: time(back), arrives: time(backLands), note: "Terminal 1 · Seat 15A"
-          }, skyline.color) +
-          button("Manage booking", skyline.color),
+          }, oceanic.color) +
+          button("Manage booking", oceanic.color),
       }),
       { read: true },
     ),
@@ -574,23 +577,23 @@ const purchases = (now: number): FakeMessageSpec[] => [
     }),
   ),
   notice(
-    "The Desk Company <hello@deskcompany.example>",
-    "Shipment confirmation: order #DC-88120",
+    "The Hammock Hut <hello@hammockhut.example>",
+    "Shipment confirmation: order #HH-88120",
     28,
     now,
-    email(deskCo, {
-      preheader: "Your order has shipped in 2 packages. Adult signature required.",
+    email(hammockHut, {
+      preheader: "Your hammock is on its way. Time to start practising.",
       body:
         heading("Shipment confirmation") +
-        para("Order <b>#DC-88120</b> has shipped in 2 packages with a combined weight of 38 kg. An adult signature will be required upon delivery.") +
-        progress(["Manufactured", "Shipped", "In transit", "Delivered"], 1, deskCo.color) +
+        para("Good news! Order <b>#HH-88120</b> has left the Hammock District and is on its way to you.") +
+        progress(["Woven", "Shipped", "In transit", "Delivered"], 1, hammockHut.color) +
         items(
-          [{ thumb: desk, name: "Rise standing desk", detail: "White oak top, 140 × 70 cm · black frame · Palm TouchStone 3 charging tray", price: "$350.00" }],
-          [["Shipping", "Free"], ["Total", "$380.63"]],
+          [{ thumb: hammock, name: "The Lazy Afternoon two-person hammock", detail: "Cotton rope · hardwood spreader bars · Palm TouchStone 3 charging pocket", price: "$129.00" }],
+          [["Shipping", "Free"], ["Total", "$140.18"]],
         ) +
         details([["Carrier", "FedEx Ground"], ["Tracking number", "123456789012"], ["Estimated delivery", "3–5 business days"]]) +
-        button("Track shipment", deskCo.color) +
-        small("Estimated assembly time: 30 minutes. One (1) Allen key is required and included. The second Allen key is a spare and does not indicate a defect."),
+        button("Track shipment", hammockHut.color) +
+        small("Requires two sturdy trees, posts, or a reasonably patient friend. Most customers get in on the first try. Most customers stay in on the fourth."),
     }),
   ),
 ];
@@ -639,7 +642,7 @@ const social = (now: number): FakeMessageSpec[] => [
   notice(
     "Google Buzz <noreply@plus.google.com>",
     "34 new updates from your friends on Google Buzz",
-    24 + 10,
+    2 * 24 + 3,
     now,
     email(buzz, {
       preheader: "Julian Placeholder, Tessa Testington and 32 others posted while you were away.",
@@ -661,42 +664,43 @@ const social = (now: number): FakeMessageSpec[] => [
 
 const promos = (now: number): FakeMessageSpec[] => [
   notice(
-    "Northbound Outfitters <deals@northbound.example>",
-    "Fall sale: 30% off every jacket",
+    "Peak Spice Outfitters <deals@peakspice.example>",
+    "Fall sale: 30% off every jacket, now with more spice",
     26,
     now,
-    email(northbound, {
-      preheader: "Every jacket, 30% off, through Sunday.",
+    email(peakSpice, {
+      preheader: "Every jacket, 30% off, through Sunday. Now insulated with 100% pumpkin spice.",
       body:
         hero(fallHero, "Layer up for less", "30% off every jacket, through Sunday") +
-        para("Did you know that if you purchase this, your fall will be at least 26.5% more refreshing?") +
+        para("This season, every jacket is insulated with responsibly sourced pumpkin spice. Warm, breathable, and at least 26.5% more autumnal than down.") +
         productGrid([
-          { thumb: jacket("#b5532f", "#3b2a20"), name: "Ridgeline Down Jacket", price: "$153", was: "$219" },
-          { thumb: jacket("#2f5d50", "#d9c8a9"), name: "Switchback Rain Shell", price: "$118", was: "$169" },
-          { thumb: jacket("#3b4a6b", "#f2c14e"), name: "Summit Fleece", price: "$62", was: "$89" },
-          { thumb: jacket("#d8b26e", "#5a3e22"), name: "Trailhead Chore Coat", price: "$97", was: "$139" },
+          { thumb: jacket("#b5532f", "#3b2a20"), name: "Ridgeline Pumpkin Spice Down Jacket", price: "$153", was: "$219" },
+          { thumb: jacket("#7b3f1d", "#d9c8a9"), name: "Switchback Cinnamon-Lined Shell", price: "$118", was: "$169" },
+          { thumb: jacket("#8a6a4a", "#f2c14e"), name: "Summit Nutmeg Fleece", price: "$62", was: "$89" },
+          { thumb: jacket("#d8b26e", "#5a3e22"), name: "Trailhead Allspice Chore Coat", price: "$97", was: "$139" },
         ]) +
-        code("Use code at checkout", "FALL30", northbound.color) +
-        button("Shop the sale", northbound.color),
+        code("Use code at checkout", "SPICE30", peakSpice.color) +
+        button("Shop the sale", peakSpice.color) +
+        small("Note: may not contain pumpkin. Some restrictions apply."),
       unsubscribe: true,
-      reason: "You're receiving this because you signed up for Northbound news and deals.",
+      reason: "You're receiving this because you signed up for Peak Spice news and deals.",
     }),
     { headers: unsubscribe },
   ),
   notice(
-    "Ember Coffee Co. <hello@embercoffee.example>",
-    "Your first 2 months for $10",
+    "Robusta Coffee Corporation <offers@robustacoffee.example>",
+    "An offer regarding coffee",
     2 * 24 + 4,
     now,
-    email(ember, {
-      preheader: "Fresh beans, roasted to order and delivered monthly.",
+    email(robusta, {
+      preheader: "Robusta Coffee Corporation is pleased to offer coffee.",
       body:
-        hero(coffeeHero, "Fresh beans, monthly", "Your first 2 months for $10") +
-        para("Every month we roast a new single-origin coffee and ship it the same day, so it reaches you at its best.") +
-        details([["Roasted", "To order, every Monday"], ["Bag size", "340 g (about 30 cups)"], ["After your trial", "$18/month, skip or cancel anytime"]]) +
-        code("Your trial code", "EMBER10", "#c4561d") +
-        button("Start my subscription", "#c4561d") +
-        small("Independent analysis shows that Ember Coffee is, in 94.7% of cases, safe for human consumption. Order today!"),
+        hero(coffeeHero, "Coffee", "Your first 2 months for $10") +
+        para("Robusta Coffee Corporation is pleased to offer you coffee. Each month, one bag of coffee will be delivered to your address. It can be used to make coffee.") +
+        details([["Product", "Coffee"], ["Coffee content", "At least 50.1%"], ["Bag size", "340 g"], ["After your trial", "$18/month"]]) +
+        code("Your trial code", "COFFEE", robusta.color) +
+        button("Start my subscription", robusta.color) +
+        small("Robusta Coffee Corporation assures customers that its coffee is at least 50.1% coffee. Questions about the remaining 49.9% may be directed to Customer Communications."),
       unsubscribe: true,
     }),
     { headers: unsubscribe, read: true },
@@ -713,7 +717,7 @@ const updates = (now: number): FakeMessageSpec[] => [
       preheader: "Your cleaning is Thursday at 10:00 AM with Dr. Kleiner.",
       body:
         hero(toothbrush, "", "") +
-        heading("See you Thursday") +
+        heading("Rise and shine!") +
         para("It seems you have an upcoming appointment; if you were to miss it, there could be unforeseen consequences.") +
         details([["Appointment", "Cleaning &amp; check-up"], ["When", "Thursday, 10:00 AM"], ["With", "Dr. Isaac Kleiner"], ["Where", "Sector C, Suite 17"]]) +
         button("Confirm appointment", freeman.color) +

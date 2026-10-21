@@ -426,7 +426,7 @@ export const MessageAttachments = ({
             </div>
             <div className={s.galleryCaption}>
               <span className={s.galleryName}>{currentImage.attachment.name}</span>
-              <span>
+              <span className={s.galleryCount}>
                 {galleryIndex + 1} / {galleryImages.length}
               </span>
             </div>

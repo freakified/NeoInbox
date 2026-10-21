@@ -6,9 +6,28 @@
     <title>NeoInbox demo</title>
     <meta name="description" content="Try NeoInbox in your browser: a sample mailbox running the real app, no Thunderbird needed." />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <style>
+      /* Shown while the demo seeds its mailbox; React's first render replaces
+         it. Fades in late so a fast load never flashes it. */
+      html, body { margin: 0; height: 100%; background: #f5f5f5; }
+      .loading {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        opacity: 0;
+        animation: loading-in 300ms ease-out 400ms forwards;
+      }
+      .loading img { width: 72px; height: 72px; animation: loading-pulse 1.6s ease-in-out infinite; }
+      @keyframes loading-in { to { opacity: 1; } }
+      @keyframes loading-pulse { 50% { opacity: 0.45; } }
+      @media (prefers-reduced-motion: reduce) {
+        .loading img { animation: none; }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="loading" role="status" aria-label="Loading the demo"><img src="/icon.svg" alt="" /></div></div>
     <script type="module" src="./demo-main.ts"></script>
   </body>
 </html>

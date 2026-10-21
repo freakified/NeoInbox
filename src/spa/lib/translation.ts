@@ -666,9 +666,11 @@ export const translateHtml = async (
     const translated = await translateTexts(parts.map(([, core]) => core), "html", config, target);
     runs.forEach((run, i) => {
       const [leading, , trailing] = parts[i]!;
-      const template = doc.createElement("template");
-      template.innerHTML = `${leading}${translated[i]}${trailing}`;
-      run[0]!.parentNode!.insertBefore(template.content, run[0]!);
+      // DOMParser, not innerHTML: addons.thunderbird.net's linter flags the latter.
+      const parsed = new DOMParser().parseFromString(`<body>${translated[i]}</body>`, "text/html");
+      const fragment = doc.createDocumentFragment();
+      fragment.append(doc.createTextNode(leading), ...parsed.body.childNodes, doc.createTextNode(trailing));
+      run[0]!.parentNode!.insertBefore(fragment, run[0]!);
       run.forEach((node) => node.parentNode?.removeChild(node));
     });
   } else {

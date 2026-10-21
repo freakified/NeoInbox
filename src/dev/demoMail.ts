@@ -110,7 +110,7 @@ export const items = (lines: LineItem[], totals: [string, string][]): string =>
       ([k, v], i) =>
         `<tr><td></td><td style="padding: ${i ? 4 : 12}px 0 0; text-align: right; color: ${i === totals.length - 1 ? "#111" : "#777"}; ` +
         `${i === totals.length - 1 ? "font-weight: bold" : ""}">${k}</td>` +
-        `<td style="padding: ${i ? 4 : 12}px 0 0 16px; text-align: right; ${i === totals.length - 1 ? "font-weight: bold" : ""}">${v}</td></tr>`,
+        `<td style="padding: ${i ? 4 : 12}px 0 0 16px; text-align: right; white-space: nowrap; ${i === totals.length - 1 ? "font-weight: bold" : ""}">${v}</td></tr>`,
     )
     .join("") +
   `</table>`;

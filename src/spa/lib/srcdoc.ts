@@ -270,7 +270,7 @@ const renderTextWithQuoteToggle = (raw: string): string => {
 
 // The frame is auto-sized to its content (useIframeAutoHeight), so a vertical
 // scrollbar inside it is only ever a sub-pixel measuring artifact.
-const BASE_CSS = `<style>
+const BASE_STYLES = `
   html{overflow-y:hidden!important}
   body{font-family:Roboto,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
        font-size:14px;margin:0!important;padding:8px 0!important;
@@ -286,7 +286,8 @@ const BASE_CSS = `<style>
   .nb-toggle-checkbox:not(:checked) ~ .nb-quoted{display:none}
   .nb-toggle-checkbox:checked ~ .nb-toggle-label{display:none}
   .nb-blocked-image{display:none!important}
-</style>`;
+`;
+const BASE_CSS = `<style>${BASE_STYLES}</style>`;
 
 // The rendered body is a srcdoc iframe with `sandbox="allow-same-origin"` (needed
 // so useIframeAutoHeight can measure contentDocument). Scripts are already off via
@@ -455,7 +456,14 @@ export const buildSrcdoc = (rawHtml: string, showImages: boolean): string => {
   if (!showImages) blockRemoteImages(doc);
   trimTrailingBlankLines(doc.body);
   markQuotedHtml(doc);
-  doc.head.insertAdjacentHTML("afterbegin", `${cspMeta(showImages)}${BASE_CSS}`);
+  // Built as elements, not markup: addons.thunderbird.net's linter rejects
+  // insertAdjacentHTML with a template string, however constant.
+  const meta = doc.createElement("meta");
+  meta.httpEquiv = "Content-Security-Policy";
+  meta.content = csp(showImages);
+  const style = doc.createElement("style");
+  style.textContent = BASE_STYLES;
+  doc.head.prepend(meta, style);
   return `<!DOCTYPE html>${doc.documentElement.outerHTML}`;
 }
 

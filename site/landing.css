@@ -6,6 +6,7 @@
   --text: #212121;
   --secondary: #5f6368;
   --background: #f5f5f5;
+  --header: #3c4043;
   --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.24), 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
@@ -26,7 +27,7 @@ a {
 }
 
 .hero {
-  background: var(--primary);
+  background: var(--header);
   color: #fff;
   text-align: center;
   padding: 32px 24px 160px;
@@ -70,15 +71,16 @@ a {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   font-size: 14px;
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: #fff;
+  color: var(--primary-dark);
+  border: 1px solid #fff;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16);
 }
 
 .button.primary {
-  background: #fff;
-  color: var(--primary-dark);
-  border-color: #fff;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16);
+  background: var(--primary-dark);
+  color: #fff;
+  border-color: var(--primary-dark);
 }
 
 .live {
@@ -220,6 +222,14 @@ a {
   border: 0;
 }
 
+/* The phone stand-in for the iframe (landing.ts), a 2x screenshot of the
+   same 1132x720 view. */
+.window-shot {
+  display: none;
+  width: 100%;
+  height: auto;
+}
+
 /* A Mavericks dock: one app standing on a glass shelf, with the glowing
    "running" dot while the window is only minimized. It sits on the blue band
    the window used to cover, like a dock on a desktop. */
@@ -356,22 +366,38 @@ a {
   gap: 20px;
 }
 
+.features > h2 {
+  grid-column: 1 / -1;
+  text-align: center;
+}
+
+/* Material image cards: a full-bleed screenshot over the title and text.
+   The screenshots (pnpm site-shots) share one 1.6 shape. */
 .features article {
   background: #fff;
   border-radius: 2px;
   box-shadow: var(--card-shadow);
-  padding: 20px 24px;
+  overflow: hidden;
 }
 
-.features h2 {
+.features img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1.6;
+  object-fit: cover;
+  object-position: top;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.features article h2 {
   font-size: 20px;
   font-weight: 500;
-  margin: 0 0 8px;
-  color: var(--accent);
+  margin: 20px 24px 8px;
 }
 
 .features p {
-  margin: 0;
+  margin: 0 24px 20px;
   color: var(--secondary);
 }
 
@@ -386,6 +412,7 @@ a {
   text-align: center;
 }
 
+.features > h2,
 .install h2,
 .faq h2 {
   font-size: 32px;
@@ -438,12 +465,6 @@ a {
   font-size: 14px;
 }
 
-.install .button.primary {
-  background: var(--primary-dark);
-  color: #fff;
-  border-color: var(--primary-dark);
-}
-
 .faq h3 {
   font-size: 18px;
   font-weight: 500;
@@ -463,17 +484,48 @@ footer {
   border-top: 1px solid #e0e0e0;
 }
 
-/* The app wants a desktop-sized window; on a phone, link to it instead. */
+/* The app wants a desktop-sized window; on a phone, the window shows a
+   screenshot instead, its traffic lights are only for looks, and the
+   caption links to the demo. */
 @media (max-width: 760px) {
   .hero {
-    padding-bottom: 48px;
+    padding-bottom: 128px;
   }
 
   .live {
-    margin-top: 32px;
+    margin-top: -88px;
   }
 
+  .window iframe {
+    display: none;
+  }
+
+  .window-shot {
+    display: block;
+  }
+
+  /* A miniature titlebar, so the screenshot gets the room. */
   .window {
+    border-radius: 3px 3px 0 0;
+  }
+
+  .window-bar {
+    height: 12px;
+  }
+
+  .lights {
+    top: 2px;
+    left: 5px;
+    gap: 4px;
+    pointer-events: none;
+  }
+
+  .lights > * {
+    width: 7px;
+    height: 7px;
+  }
+
+  .window-title {
     display: none;
   }
 
