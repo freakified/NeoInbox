@@ -838,3 +838,58 @@
     opacity: 0.4;
   }
 }
+
+/* A state worth knowing (where NeoInbox opens, host access) with the action
+   that changes it underneath, lined up like the choices around it. */
+.status {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 2px;
+  color: var(--color-md-on-surface);
+  font-size: 14px;
+}
+
+.statusIcon {
+  font-size: 20px;
+  color: var(--color-md-icon);
+}
+
+.statusOk,
+.statusOk .statusIcon {
+  color: #388e3c;
+}
+
+.statusWarn,
+.statusWarn .statusIcon {
+  color: #e65100;
+}
+
+.statusAction {
+  grid-column: 2;
+  justify-self: start;
+  border: none;
+  background: none;
+  padding: 2px 0;
+  color: var(--color-md-primary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.statusAction:hover {
+  text-decoration: underline;
+}
+
+.statusNote {
+  grid-column: 2;
+  margin-top: 4px;
+}
+
+/* For when the action is the point of the row, e.g. granting host access. */
+.statusButton {
+  grid-column: 2;
+  justify-self: start;
+  margin-top: 8px;
+}

@@ -1,17 +1,18 @@
-import { useState } from "react";
+import { clsx } from "clsx";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Icon } from "../Icon";
-import { useMailStore } from "../../../store/mailStore";
 import {
-  DEFAULT_TRANSLATION_CONFIG,
   ensureTranslationPermission,
   getTranslationConfig,
   setTranslationConfig,
   TARGET_LANGUAGES,
   TRANSLATION_PROVIDERS,
+  translationOrigin,
   uiTargetLanguage,
   type TranslationConfig,
   type TranslationProvider,
 } from "../../lib/translation";
+import { getOpenMode } from "../../../shared/openMode";
 import s from "../BundleManagerModal.module.css";
 
 const sameTranslationConfig = (a: TranslationConfig, b: TranslationConfig): boolean =>
@@ -23,64 +24,110 @@ const sameTranslationConfig = (a: TranslationConfig, b: TranslationConfig): bool
   a.model === b.model &&
   a.targetLanguage === b.targetLanguage;
 
-const TranslationSection = () => {
-  const notify = useMailStore((st) => st.notify);
-  const closeSettings = useMailStore((st) => st.closeBundleSettings);
-  const [config, setConfig] = useState<TranslationConfig>(() => getTranslationConfig());
+/**
+ * Whether NeoInbox can reach the host this config translates through. Host
+ * access is asked for apart from saving: fields save as they change, but
+ * only a click can raise the permission prompt.
+ */
+const HostAccess = ({ config }: { config: TranslationConfig }) => {
+  const origin = translationOrigin(config);
+  const [granted, setGranted] = useState<boolean | null>(null);
+  const [asking, setAsking] = useState(false);
+  // Thunderbird shows the prompt in its main window, which a window of our
+  // own can hide.
+  const [ownWindow, setOwnWindow] = useState(false);
+  useEffect(() => {
+    void getOpenMode().then((mode) => setOwnWindow(mode === "window"));
+  }, []);
 
-  const saved = getTranslationConfig();
-  const normalized: TranslationConfig = {
-    enabled: config.enabled,
-    provider: config.provider,
-    apiKey: config.apiKey.trim(),
-    endpoint: config.endpoint.trim(),
-    region: config.region.trim(),
-    model: config.model.trim(),
-    targetLanguage: config.targetLanguage,
+  useEffect(() => {
+    setGranted(null);
+    if (!origin) return;
+    let live = true;
+    void messenger.permissions
+      .contains({ origins: [origin] })
+      .catch(() => false)
+      .then((has) => live && setGranted(has));
+    return () => {
+      live = false;
+    };
+  }, [origin]);
+
+  if (!origin || granted === null) return null;
+  const host = new URL(origin.replace("/*", "/")).hostname;
+  if (granted) {
+    return (
+      <div className={clsx(s.status, s.statusOk)}>
+        <Icon name="check_circle" className={s.statusIcon} />
+        <span>NeoInbox can reach {host}.</span>
+      </div>
+    );
+  }
+
+  const allow = () => {
+    setAsking(true);
+    void ensureTranslationPermission(config)
+      .catch(() => false)
+      .then((has) => {
+        setAsking(false);
+        setGranted(has);
+      });
   };
+  return (
+    <div className={clsx(s.status, s.statusWarn)}>
+      <Icon name="warning" className={s.statusIcon} />
+      <span>NeoInbox needs access to {host}.</span>
+      <button type="button" className={clsx(s.primaryBtn, s.statusButton)} onClick={allow}>
+        Allow access
+      </button>
+      {asking && ownWindow && (
+        <span className={clsx(s.helpText, s.statusNote)}>
+          Check your main Thunderbird window to allow access.
+        </span>
+      )}
+    </div>
+  );
+};
+
+/** Choices save on change; typed fields save when they lose focus, on Enter, or on close. */
+const TranslationSection = () => {
+  const [config, setConfig] = useState<TranslationConfig>(() => getTranslationConfig());
+  const [saved, setSaved] = useState<TranslationConfig>(() => getTranslationConfig());
   const providerMeta = TRANSLATION_PROVIDERS[config.provider];
-  const hasChanges = !sameTranslationConfig(normalized, saved);
+
+  const commit = (next: TranslationConfig) => {
+    if (sameTranslationConfig(next, getTranslationConfig())) return;
+    setTranslationConfig(next);
+    setSaved(getTranslationConfig());
+  };
+
+  // Escape or a click outside unmounts the pane without blurring the field.
+  const latest = useRef(config);
+  latest.current = config;
+  useEffect(() => () => commit(latest.current), []);
 
   const updateConfig = (patch: Partial<TranslationConfig>) => {
     setConfig((prev) => ({ ...prev, ...patch }));
   };
 
+  const updateAndCommit = (patch: Partial<TranslationConfig>) => {
+    const next = { ...config, ...patch };
+    setConfig(next);
+    commit(next);
+  };
+
   // Swap in the new provider's usual endpoint, unless the user typed their own.
   const changeProvider = (provider: TranslationProvider) => {
     const typed = config.endpoint.trim() !== (providerMeta.defaultEndpoint ?? "");
-    updateConfig({
+    updateAndCommit({
       provider,
       endpoint: typed ? config.endpoint : TRANSLATION_PROVIDERS[provider].defaultEndpoint ?? "",
     });
   };
 
-  const save = () => {
-    // Enter in a field lands here too; with nothing to save it shouldn't close.
-    if (!hasChanges) return;
-    setTranslationConfig(normalized);
-    if (!normalized.enabled) {
-      notify("Translation turned off");
-      closeSettings();
-      return;
-    }
-    // Ask for the provider's host now, while the click still counts as a
-    // user gesture; a translate click asks again if this one is declined.
-    void ensureTranslationPermission(normalized)
-      .catch(() => false)
-      .then((granted) => {
-        notify(
-          granted
-            ? "Translation settings saved"
-            : "Translation settings saved — NeoInbox will ask for access when you translate",
-        );
-      });
-    closeSettings();
-  };
-
-  const reset = () => {
-    setTranslationConfig(DEFAULT_TRANSLATION_CONFIG);
-    setConfig(DEFAULT_TRANSLATION_CONFIG);
-    notify("Translation settings reset");
+  const fieldProps = {
+    onBlur: () => commit(config),
+    onKeyDown: (e: KeyboardEvent) => e.key === "Enter" && commit(config),
   };
 
   return (
@@ -92,7 +139,7 @@ const TranslationSection = () => {
             <input
               type="checkbox"
               checked={config.enabled}
-              onChange={(e) => updateConfig({ enabled: e.target.checked })}
+              onChange={(e) => updateAndCommit({ enabled: e.target.checked })}
               className={s.checkInput}
             />
             <span>Enable translation</span>
@@ -104,7 +151,7 @@ const TranslationSection = () => {
             <select
               className={s.select}
               value={config.targetLanguage}
-              onChange={(e) => updateConfig({ targetLanguage: e.target.value })}
+              onChange={(e) => updateAndCommit({ targetLanguage: e.target.value })}
             >
               <option value="">Thunderbird's language ({uiTargetLanguage().label})</option>
               {TARGET_LANGUAGES.map((lang) => (
@@ -147,7 +194,7 @@ const TranslationSection = () => {
                 value={config.apiKey}
                 placeholder={`${providerMeta.label} API key`}
                 onChange={(e) => updateConfig({ apiKey: e.target.value })}
-                onKeyDown={(e) => e.key === "Enter" && save()}
+                {...fieldProps}
               />
             </label>
           )}
@@ -162,7 +209,7 @@ const TranslationSection = () => {
                 value={config.endpoint}
                 placeholder={providerMeta.endpointPlaceholder}
                 onChange={(e) => updateConfig({ endpoint: e.target.value })}
-                onKeyDown={(e) => e.key === "Enter" && save()}
+                {...fieldProps}
               />
             </label>
           )}
@@ -175,7 +222,7 @@ const TranslationSection = () => {
                 value={config.region}
                 placeholder="Leave blank for a global resource, e.g. eastus, westeurope"
                 onChange={(e) => updateConfig({ region: e.target.value })}
-                onKeyDown={(e) => e.key === "Enter" && save()}
+                {...fieldProps}
               />
             </label>
           )}
@@ -188,21 +235,14 @@ const TranslationSection = () => {
                 value={config.model}
                 placeholder="e.g. gemma3, llama3.2, qwen3"
                 onChange={(e) => updateConfig({ model: e.target.value })}
-                onKeyDown={(e) => e.key === "Enter" && save()}
+                {...fieldProps}
               />
             </label>
           )}
           {providerMeta.helpText && <p className={s.helpText}>{providerMeta.helpText}</p>}
+          <HostAccess config={saved} />
         </section>
       )}
-      <div className={s.formActions}>
-        <button type="button" className={s.saveBtn} disabled={!hasChanges} onClick={save}>
-          Save
-        </button>
-        <button type="button" className={s.textBtn} onClick={reset}>
-          Reset
-        </button>
-      </div>
     </>
   );
 };

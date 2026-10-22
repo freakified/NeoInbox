@@ -251,7 +251,8 @@ export const CustomBundleEditor = ({
   onRuleValueChange,
   onAddRule,
   onRemoveDraftRule,
-  onSave,
+  onNameCommit,
+  onCreate,
   onDelete,
   conflict,
   saveHint,
@@ -270,7 +271,9 @@ export const CustomBundleEditor = ({
   onRuleValueChange: (value: string) => void;
   onAddRule: () => void;
   onRemoveDraftRule: (idx: number) => void;
-  onSave: () => void;
+  onNameCommit: () => void;
+  /** Only while drafting: a new bundle is made by a button, then saves as it's edited. */
+  onCreate?: () => void;
   onDelete?: () => void;
   conflict?: string;
   saveHint?: string;
@@ -313,6 +316,8 @@ export const CustomBundleEditor = ({
           value={form.name}
           placeholder="My Bundle"
           onChange={(e) => onFormChange({ name: e.target.value })}
+          onBlur={onNameCommit}
+          onKeyDown={(e) => e.key === "Enter" && (onCreate ?? onNameCommit)()}
         />
       </section>
 
@@ -410,9 +415,11 @@ export const CustomBundleEditor = ({
       </section>
 
       <div className={s.formActions}>
-        <button type="button" className={s.saveBtn} disabled={!form.name.trim()} onClick={onSave}>
-          Save bundle
-        </button>
+        {onCreate && (
+          <button type="button" className={s.saveBtn} disabled={!form.name.trim()} onClick={onCreate}>
+            Create bundle
+          </button>
+        )}
         {onDelete && (
           <button type="button" className={s.deleteBtn} onClick={onDelete}>
             Delete

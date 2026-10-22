@@ -132,6 +132,33 @@ export const BundleManagerModal = ({
     : null;
   const currentForm = form;
 
+  /**
+   * An existing bundle saves as it's edited: color and icon on click, the
+   * name once typing stops (blur, Enter, or leaving the pane). Reads the
+   * store directly, since leaving can run from an unmount.
+   */
+  const saveBundle = (f: BundleFormState) => {
+    const name = f.name.trim();
+    const current = useMailStore.getState().customBundles.find((b) => b.id === f.id);
+    if (!name || !current) return;
+    if (current.name === name && current.color === f.color && current.icon === f.icon) return;
+    setCustomBundle({ ...current, name, color: f.color, icon: f.icon });
+  };
+
+  const commitName = () => {
+    if (selected.kind !== "custom") return;
+    // A cleared name isn't saved; put the saved one back.
+    if (!form.name.trim() && selectedCustom) setForm((prev) => ({ ...prev, name: selectedCustom.name }));
+    else saveBundle(form);
+  };
+
+  // Escape or a click outside closes Settings without blurring the name field.
+  const pendingName = useRef<BundleFormState | null>(null);
+  pendingName.current = selected.kind === "custom" ? form : null;
+  useEffect(() => () => {
+    if (pendingName.current) saveBundle(pendingName.current);
+  }, []);
+
   const choose = (next: SelectedPane) => {
     setSelected(next);
     if (next.kind === "custom") {
@@ -168,7 +195,7 @@ export const BundleManagerModal = ({
       ? `Currently routed to ${targetName(composerConflict.target)}; adding moves it here.`
       : undefined;
 
-  const saveForm = () => {
+  const createBundle = () => {
     const name = currentForm.name.trim();
     if (!name) return;
     setCustomBundle({
@@ -178,19 +205,18 @@ export const BundleManagerModal = ({
       icon: currentForm.icon,
       order: currentForm.order,
     });
-    if (selected.kind === "new") {
-      for (const draft of currentForm.draftRules) {
-        setRouteRule({
-          id: crypto.randomUUID(),
-          target: currentForm.id,
-          type: draft.type,
-          value: draft.value,
-          createdAt: Date.now(),
-        });
-      }
+    for (const draft of currentForm.draftRules) {
+      setRouteRule({
+        id: crypto.randomUUID(),
+        target: currentForm.id,
+        type: draft.type,
+        value: draft.value,
+        createdAt: Date.now(),
+      });
     }
-    notify(selected.kind === "new" ? `Created ${name}` : `Updated ${name}`);
-    if (selected.kind === "new") setSelected({ kind: "custom", id: currentForm.id });
+    notify(`Created ${name}`);
+    setSelected({ kind: "custom", id: currentForm.id });
+    setForm((prev) => ({ ...prev, name, draftRules: [] }));
   };
 
   const removeCustom = () => {
@@ -201,7 +227,9 @@ export const BundleManagerModal = ({
   };
 
   const updateForm = (patch: Partial<BundleFormState>) => {
-    setForm((prev) => ({ ...prev, ...patch }));
+    const next = { ...form, ...patch };
+    setForm(next);
+    if (selected.kind === "custom" && !("name" in patch)) saveBundle(next);
   };
 
   const removeDraftRule = (idx: number) => {
@@ -466,10 +494,11 @@ export const BundleManagerModal = ({
                     onRuleValueChange={setRuleValue}
                     onAddRule={addRule}
                     onRemoveDraftRule={removeDraftRule}
-                    onSave={saveForm}
+                    onNameCommit={commitName}
+                    onCreate={selected.kind === "new" ? createBundle : undefined}
                     onDelete={selected.kind === "custom" ? removeCustom : undefined}
                     conflict={conflictNote}
-                    saveHint={selected.kind === "new" ? "Rules are added when you save." : undefined}
+                    saveHint={selected.kind === "new" ? "Rules are added when you create the bundle." : undefined}
                   />
                 )}
               </>
