@@ -113,6 +113,17 @@ export const applyServerMsg = (
       set({ reclassifying: false, toasts: [...get().toasts, toast].slice(-TOAST_LIMIT) });
       return;
     }
+    case "backup-imported": {
+      if (msg.error) {
+        const toast: ToastRecord = { id: nextToastId(), message: `Couldn't import — ${msg.error}` };
+        set({ importingBackup: false, toasts: [...get().toasts, toast].slice(-TOAST_LIMIT) });
+        return;
+      }
+      // Bundles, rules, reminders and page settings all changed at once;
+      // starting over reads them fresh rather than patching each slice.
+      location.reload();
+      return;
+    }
     case "compose-result": {
       const toastId = pendingCompose.get(msg.requestId);
       pendingCompose.delete(msg.requestId);

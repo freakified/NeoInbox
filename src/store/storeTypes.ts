@@ -1,3 +1,4 @@
+import type { Backup } from "../shared/backup";
 import type { ComposeDraft } from "../shared/compose";
 import type { MessageKey } from "../shared/messageKey";
 import type { ThreadRef } from "../shared/threading";
@@ -109,6 +110,8 @@ export interface MailStore {
   pendingReplies: PendingReply[];
   bundleSettings: BundleSettingsRequest | null;
   reclassifying: boolean;
+  /** Settings → Advanced: a backup import is running in the background. */
+  importingBackup: boolean;
   /** The Settings → Trips scan: running progress, else the last result. */
   tripScan: TripScanStatus | null;
   /** Settings → Advanced: the running import, else the last one. */
@@ -185,6 +188,8 @@ export interface MailStore {
   closeBundleSettings: () => void;
   /** Re-run bundling rules in the background; whole inbox when no ids given. */
   reclassify: (messageKeys?: MessageKey[]) => void;
+  /** Replace the user's setup with a backup's; the page reloads when done. */
+  importBackup: (backup: Backup) => void;
   /** Find trips (in archived mail too when `archive`); `rebuild` starts over. */
   /** `importSince` imports the archive back that far first (null: everything). */
   scanTrips: (options: {

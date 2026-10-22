@@ -1,3 +1,4 @@
+import type { BackupData } from "./backup";
 import type { ComposeDraft } from "./compose";
 import type { MessageKey } from "./messageKey";
 import type {
@@ -83,6 +84,11 @@ export type ClientMsg =
    */
   | { type: "archive-import"; since: number | null }
   | { type: "archive-import-cancel" }
+  /**
+   * Settings → Advanced: replace bundles, rules, pins, reminders and
+   * settings with a backup's, then reclassify the inbox.
+   */
+  | { type: "import-backup"; data: BackupData }
   | ({ type: "write-trips" } & TripWrite);
 
 /** Progress of the archive trip scan; the last finished one is persisted. */
@@ -175,6 +181,8 @@ export type ServerMsg =
       reason: string;
     }
   | { type: "reclassify-done"; scanned: number; moved: number }
+  /** An import-backup finished (or failed, with `error`); the SPA reloads. */
+  | { type: "backup-imported"; error?: string }
   /**
    * How far into the inbox the last full scan reached. `skipped` counts the
    * inbox messages with no cached row — older than the window and not

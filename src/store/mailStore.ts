@@ -64,6 +64,7 @@ export const useMailStore = create<MailStore>((set, get) => ({
   poppedReply: null,
   bundleSettings: null,
   reclassifying: false,
+  importingBackup: false,
   tripScan: null,
   archiveImport: null,
   inboxImport: null,
@@ -124,8 +125,8 @@ export const useMailStore = create<MailStore>((set, get) => ({
     connectPort({
       onMessage: (msg) => applyServerMsg(set, get, msg),
       onConnected: () => set({ connectionState: "connected" }),
-      // A reclassify in flight died with the port; unstick the button.
-      onDisconnected: () => set({ connectionState: "reconnecting", reclassifying: false }),
+      // A reclassify or import in flight died with the port; unstick the button.
+      onDisconnected: () => set({ connectionState: "reconnecting", reclassifying: false, importingBackup: false }),
     });
   },
 

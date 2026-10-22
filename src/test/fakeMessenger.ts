@@ -823,8 +823,10 @@ export class FakeMessenger {
       },
       storage: {
         local: {
-          get: async (key: string) =>
-            key in self.storageData ? { [key]: self.storageData[key] } : {},
+          get: async (keys: string | string[]) =>
+            Object.fromEntries(
+              [keys].flat().filter((k) => k in self.storageData).map((k) => [k, self.storageData[k]]),
+            ),
           set: async (values: Record<string, unknown>) => {
             Object.assign(self.storageData, values);
           },

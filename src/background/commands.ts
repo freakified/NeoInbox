@@ -41,7 +41,7 @@ import { extractFeatures } from "../classifier/features";
 import { matchesTravel } from "../classifier/rules/travel";
 import { setTripsEnabled } from "../shared/tripsSetting";
 import { pushMyEmails } from "./sync";
-import { applyLocalState, clearResurfaced } from "./localState";
+import { applyLocalState, clearResurfaced, invalidatePinKeys } from "./localState";
 import { messageKeyOf, type MessageKey } from "../shared/messageKey";
 import { pinKeyOf } from "../shared/pinKey";
 import { broadcast } from "./port";
@@ -51,6 +51,7 @@ import { liveTbId } from "../shared/liveMessage";
 import { collectInboxFolders } from "../shared/folders";
 import { ruleMatchesMessage } from "../shared/routeRules";
 import { log } from "../shared/log";
+import type { BackupData } from "../shared/backup";
 import type { ClientMsg } from "../shared/messaging";
 import type { RawMessage, RouteRuleRecord } from "../shared/types";
 
@@ -130,6 +131,42 @@ const reclassifyRuleMatches = async (rule: RouteRuleRecord): Promise<void> => {
   await sleep(RULE_SWEEP_SETTLE_MS);
   await sweep();
 }
+
+/**
+ * Replace everything a backup carries, then reclassify the whole inbox under
+ * the imported rules and pins. All four tables go in one transaction, so a
+ * failed import leaves the old setup intact.
+ */
+const importBackup = async (data: BackupData): Promise<void> => {
+  // One destination per (type, value), as set-route-rule keeps it; the
+  // unique index would otherwise fail the whole import.
+  const rules = new Map(data.routeRules.map((r) => [`${r.type}\n${r.value}`, r]));
+  await db.transaction(
+    "rw",
+    [db.customBundles, db.routeRules, db.pins, db.reminders],
+    async () => {
+      await Promise.all([
+        db.customBundles.clear(),
+        db.routeRules.clear(),
+        db.pins.clear(),
+        db.reminders.clear(),
+      ]);
+      await db.customBundles.bulkPut(data.customBundles);
+      await db.routeRules.bulkPut([...rules.values()]);
+      await db.pins.bulkPut(data.pins);
+      await db.reminders.bulkPut(data.reminders);
+    },
+  );
+  invalidateRouteRules();
+  invalidatePinKeys();
+  const { tripsEnabled, ...storage } = data.storage;
+  await messenger.storage.local.set(storage);
+  // Through the setter, which also resets the classifier's cached copy.
+  if (tripsEnabled !== undefined) await setTripsEnabled(tripsEnabled !== false);
+  const cached = (await db.messages.toArray()).filter((m) => m.origin === "inbox");
+  await reclassifyMessages(cached);
+  if (tripsEnabled !== false) scheduleTripExtraction();
+};
 
 export const handleCommand = async (msg: ClientMsg): Promise<void> => {
 
@@ -444,6 +481,16 @@ export const handleCommand = async (msg: ClientMsg): Promise<void> => {
       );
       const result = await reclassifyMessages(cached);
       broadcast({ type: "reclassify-done", ...result });
+      return;
+    }
+    case "import-backup": {
+      try {
+        await importBackup(msg.data);
+        broadcast({ type: "backup-imported" });
+      } catch (e) {
+        log.warn("backup", "import failed", e);
+        broadcast({ type: "backup-imported", error: e instanceof Error ? e.message : String(e) });
+      }
       return;
     }
     case "compose": {

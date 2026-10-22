@@ -64,6 +64,11 @@ export const invalidateSnoozeIndex = (): void => {
   snoozeIndex = null;
 };
 
+/** Call after replacing db.pins wholesale (a backup import). */
+export const invalidatePinKeys = (): void => {
+  pinKeys = null;
+};
+
 export const setPinned = async (key: string, pinned: boolean): Promise<void> => {
   const keys = await loadPinKeys();
   if (pinned) {

@@ -11,6 +11,7 @@ import {
   UNDO_TIMEOUT_MS,
   undoTimers,
 } from "./toastsSlice";
+import { BACKUP_LOCAL_KEYS } from "../shared/backup";
 import { MESSAGE_DETAILS_VERSION } from "../shared/details";
 import type { MessageKey } from "../shared/messageKey";
 
@@ -57,7 +58,7 @@ export const mailSlice = (
   get: StoreGet,
 ): Pick<
   MailStore,
-  "pin" | "doneThread" | "snoozeThread" | "unsnoozeThread" | "trashThread" | "spamThread" | "moveToInboxThread" | "setRouteRule" | "deleteRouteRule" | "applyCategoryLocally" | "setCustomBundle" | "deleteCustomBundle" | "hydrateThreadDetails" | "markThreadRead" | "retryBackfill" | "openBundleSettings" | "closeBundleSettings" | "reclassify" | "importArchive" | "stopArchiveImport"
+  "pin" | "doneThread" | "snoozeThread" | "unsnoozeThread" | "trashThread" | "spamThread" | "moveToInboxThread" | "setRouteRule" | "deleteRouteRule" | "applyCategoryLocally" | "setCustomBundle" | "deleteCustomBundle" | "hydrateThreadDetails" | "markThreadRead" | "retryBackfill" | "openBundleSettings" | "closeBundleSettings" | "reclassify" | "importBackup" | "importArchive" | "stopArchiveImport"
 > => ({
   pin: (messageKey, pinned) => {
     flushDelta(set, get);
@@ -261,5 +262,18 @@ export const mailSlice = (
     if (get().reclassifying) return;
     set({ reclassifying: true });
     send({ type: "reclassify", messageKeys });
+  },
+  importBackup: (backup) => {
+    if (get().importingBackup) return;
+    set({ importingBackup: true });
+    // Page settings live here, not in the background; replace them too.
+    for (const key of BACKUP_LOCAL_KEYS) {
+      const value = backup.localStorage[key];
+      if (value === undefined) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    }
+    const { format: _format, version: _version, exportedAt: _at, localStorage: _local, ...data } =
+      backup;
+    send({ type: "import-backup", data });
   },
 });
