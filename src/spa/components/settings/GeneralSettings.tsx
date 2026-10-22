@@ -17,6 +17,7 @@ type GeneralForm = OpenSettings & AccountSettings;
 
 export const GeneralSettings = () => {
   const notify = useMailStore((st) => st.notify);
+  const closeSettings = useMailStore((st) => st.closeBundleSettings);
   const accounts = useAccounts();
   const [saved, setSaved] = useState<GeneralForm | null>(null);
   const [draft, setDraft] = useState<GeneralForm | null>(null);
@@ -49,8 +50,8 @@ export const GeneralSettings = () => {
     setDefaultAccount(draft.defaultAccount);
     void saveOpenSettings(saved, draft)
       .then(() => {
-        setSaved(draft);
         notify("Settings saved");
+        closeSettings();
       })
       .catch(() => notify("Couldn't save that setting"));
   };

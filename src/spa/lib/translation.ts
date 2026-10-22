@@ -22,6 +22,8 @@ export type TranslationProvider =
   | "custom";
 
 export interface TranslationConfig {
+  /** Off by default: the Translate menu item only shows once it's turned on. */
+  enabled: boolean;
   provider: TranslationProvider;
   apiKey: string;
   endpoint: string;
@@ -32,6 +34,7 @@ export interface TranslationConfig {
 }
 
 export const DEFAULT_TRANSLATION_CONFIG: TranslationConfig = {
+  enabled: false,
   provider: "deepl",
   apiKey: "",
   endpoint: "",
@@ -48,6 +51,8 @@ export const TRANSLATION_PROVIDERS: Record<
     /** "override" replaces a built-in default; "required" has none. */
     endpoint: "required" | "override" | "none";
     endpointPlaceholder?: string;
+    /** Filled in when the provider is picked, where the usual endpoint is a safe guess. */
+    defaultEndpoint?: string;
     region?: boolean;
     model?: boolean;
     helpText?: string;
@@ -72,6 +77,7 @@ export const TRANSLATION_PROVIDERS: Record<
     apiKey: "optional",
     endpoint: "required",
     endpointPlaceholder: "https://libretranslate.com/translate",
+    defaultEndpoint: "https://libretranslate.com/translate",
     helpText: "Any LibreTranslate-compatible endpoint.",
   },
   openaiCompatible: {
@@ -79,6 +85,7 @@ export const TRANSLATION_PROVIDERS: Record<
     apiKey: "optional",
     endpoint: "required",
     endpointPlaceholder: "http://localhost:1234/v1/chat/completions",
+    defaultEndpoint: "http://localhost:1234/v1/chat/completions",
     model: true,
     helpText:
       "Works with LM Studio (http://localhost:1234/v1/chat/completions), " +
@@ -212,6 +219,7 @@ const parseProvider = (value: unknown): TranslationProvider =>
     : DEFAULT_TRANSLATION_CONFIG.provider;
 
 const normalizeConfig = (config: TranslationConfig): TranslationConfig => ({
+  enabled: config.enabled,
   provider: config.provider,
   apiKey: config.apiKey.trim(),
   endpoint: config.endpoint.trim(),
@@ -227,6 +235,7 @@ export const getTranslationConfig = (): TranslationConfig => {
       const parsed = JSON.parse(raw) as Partial<TranslationConfig>;
       const str = (value: unknown): string => (typeof value === "string" ? value : "");
       return normalizeConfig({
+        enabled: parsed.enabled === true,
         provider: parseProvider(parsed.provider),
         apiKey: str(parsed.apiKey),
         endpoint: str(parsed.endpoint),
@@ -241,6 +250,8 @@ export const getTranslationConfig = (): TranslationConfig => {
 
   return DEFAULT_TRANSLATION_CONFIG;
 };
+
+export const translationEnabled = (): boolean => getTranslationConfig().enabled;
 
 export const setTranslationConfig = (config: TranslationConfig): void => {
   localStorage.setItem(TRANSLATION_CONFIG_KEY, JSON.stringify(normalizeConfig(config)));
@@ -728,14 +739,14 @@ export const translationOrigin = (config: TranslationConfig): string | null => {
  * Host access is an optional permission, asked for one provider host at a
  * time when the user configures or first uses translation, so installing
  * NeoInbox grants it no network access at all. Thunderbird only shows the
- * prompt from a user gesture, so callers make this their first await.
+ * prompt from a user gesture, so callers make this their first await, and
+ * request() is called straight away: awaiting contains() first uses up the
+ * gesture. request() resolves true without a prompt if access is already held.
  */
 export const ensureTranslationPermission = async (config: TranslationConfig): Promise<boolean> => {
   const origin = translationOrigin(config);
   if (!origin) return false;
-  const permissions = { origins: [origin] };
-  if (await messenger.permissions.contains(permissions)) return true;
-  return messenger.permissions.request(permissions);
+  return messenger.permissions.request({ origins: [origin] });
 };
 
 export const translateMessage = async (message: RawMessage): Promise<TranslationRecord> => {

@@ -12,7 +12,7 @@ import {
   useTripMemberships,
   useTrips,
 } from "../../store/mailStore";
-import { translationTargetLabel } from "../lib/translation";
+import { translationEnabled, translationTargetLabel } from "../lib/translation";
 import { useAnchoredMenu } from "../lib/useAnchoredMenu";
 import { useMenuFocus } from "../lib/useMenuFocus";
 import { Icon } from "./Icon";
@@ -215,7 +215,7 @@ export const BundleMenu = ({
                 <span className={s.menuItemLabel}>Move to</span>
                 <Icon name="chevron_right" className={s.menuChevron} />
               </button>
-              {onTranslate && (
+              {onTranslate && translationEnabled() && (
                 <button
                   type="button"
                   className={s.menuItem}

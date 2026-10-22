@@ -3,6 +3,7 @@ import {
   assertTranslationConfigured,
   DEFAULT_TRANSLATION_CONFIG,
   setTranslationConfig,
+  translationEnabled,
   TARGET_LANGUAGES,
   translateHtml,
   translatePlainText,
@@ -156,6 +157,13 @@ describe("assertTranslationConfigured", () => {
     const deepl = config({ provider: "deepl", apiKey: "abc:fx" });
     setTranslationConfig(deepl);
     expect(() => assertTranslationConfigured(deepl)).not.toThrow();
+  });
+
+  it("ships with translation off until it's turned on", () => {
+    stubStorage();
+    expect(translationEnabled()).toBe(false);
+    setTranslationConfig(config({ enabled: true }));
+    expect(translationEnabled()).toBe(true);
   });
 });
 

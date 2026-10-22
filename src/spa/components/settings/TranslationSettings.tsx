@@ -15,6 +15,7 @@ import {
 import s from "../BundleManagerModal.module.css";
 
 const sameTranslationConfig = (a: TranslationConfig, b: TranslationConfig): boolean =>
+  a.enabled === b.enabled &&
   a.provider === b.provider &&
   a.apiKey === b.apiKey &&
   a.endpoint === b.endpoint &&
@@ -24,10 +25,12 @@ const sameTranslationConfig = (a: TranslationConfig, b: TranslationConfig): bool
 
 const TranslationSection = () => {
   const notify = useMailStore((st) => st.notify);
+  const closeSettings = useMailStore((st) => st.closeBundleSettings);
   const [config, setConfig] = useState<TranslationConfig>(() => getTranslationConfig());
 
   const saved = getTranslationConfig();
   const normalized: TranslationConfig = {
+    enabled: config.enabled,
     provider: config.provider,
     apiKey: config.apiKey.trim(),
     endpoint: config.endpoint.trim(),
@@ -42,7 +45,24 @@ const TranslationSection = () => {
     setConfig((prev) => ({ ...prev, ...patch }));
   };
 
+  // Swap in the new provider's usual endpoint, unless the user typed their own.
+  const changeProvider = (provider: TranslationProvider) => {
+    const typed = config.endpoint.trim() !== (providerMeta.defaultEndpoint ?? "");
+    updateConfig({
+      provider,
+      endpoint: typed ? config.endpoint : TRANSLATION_PROVIDERS[provider].defaultEndpoint ?? "",
+    });
+  };
+
   const save = () => {
+    // Enter in a field lands here too; with nothing to save it shouldn't close.
+    if (!hasChanges) return;
+    setTranslationConfig(normalized);
+    if (!normalized.enabled) {
+      notify("Translation turned off");
+      closeSettings();
+      return;
+    }
     // Ask for the provider's host now, while the click still counts as a
     // user gesture; a translate click asks again if this one is declined.
     void ensureTranslationPermission(normalized)
@@ -54,8 +74,7 @@ const TranslationSection = () => {
             : "Translation settings saved — NeoInbox will ask for access when you translate",
         );
       });
-    setTranslationConfig(normalized);
-    setConfig(normalized);
+    closeSettings();
   };
 
   const reset = () => {
@@ -65,94 +84,117 @@ const TranslationSection = () => {
   };
 
   return (
-    <section className={s.section}>
-      <p className={s.helpText}>Text is only sent when you click Translate.</p>
-      <label className={s.fieldBlock}>
-        <span className={s.label}>Translate into</span>
-        <select
-          className={s.select}
-          value={config.targetLanguage}
-          onChange={(e) => updateConfig({ targetLanguage: e.target.value })}
-        >
-          <option value="">Thunderbird's language ({uiTargetLanguage().label})</option>
-          {TARGET_LANGUAGES.map((lang) => (
-            <option key={lang.code} value={lang.code}>
-              {lang.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className={s.fieldBlock}>
-        <span className={s.label}>Service</span>
-        <select
-          className={s.select}
-          value={config.provider}
-          onChange={(e) => updateConfig({ provider: e.target.value as TranslationProvider })}
-        >
-          {(Object.keys(TRANSLATION_PROVIDERS) as TranslationProvider[]).map((provider) => (
-            <option key={provider} value={provider}>
-              {TRANSLATION_PROVIDERS[provider].label}
-            </option>
-          ))}
-        </select>
-      </label>
-      {providerMeta.apiKey !== "none" && (
-        <label className={s.fieldBlock}>
-          <span className={s.label}>
-            {providerMeta.apiKey === "optional" ? "API key (optional)" : "API key"}
-          </span>
-          <input
-            type="password"
-            className={s.input}
-            value={config.apiKey}
-            placeholder={`${providerMeta.label} API key`}
-            onChange={(e) => updateConfig({ apiKey: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && save()}
-          />
-        </label>
+    <>
+      <section className={s.section}>
+        <h4 className={s.sectionTitle}>General</h4>
+        <div className={s.policyChoices}>
+          <label className={s.policyChoice}>
+            <input
+              type="checkbox"
+              checked={config.enabled}
+              onChange={(e) => updateConfig({ enabled: e.target.checked })}
+              className={s.checkInput}
+            />
+            <span>Enable translation</span>
+          </label>
+        </div>
+        {config.enabled && (
+          <label className={s.fieldBlock}>
+            <span className={s.label}>Translate into</span>
+            <select
+              className={s.select}
+              value={config.targetLanguage}
+              onChange={(e) => updateConfig({ targetLanguage: e.target.value })}
+            >
+              <option value="">Thunderbird's language ({uiTargetLanguage().label})</option>
+              {TARGET_LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </section>
+      {config.enabled && (
+        <section className={s.section}>
+          <h4 className={s.sectionTitle}>Translation Service</h4>
+          <p className={s.helpText}>
+            Email content is sent to the service you specify only when you click "Translate".
+          </p>
+          <label className={s.fieldBlock}>
+            <span className={s.label}>Service</span>
+            <select
+              className={s.select}
+              value={config.provider}
+              onChange={(e) => changeProvider(e.target.value as TranslationProvider)}
+            >
+              {(Object.keys(TRANSLATION_PROVIDERS) as TranslationProvider[]).map((provider) => (
+                <option key={provider} value={provider}>
+                  {TRANSLATION_PROVIDERS[provider].label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {providerMeta.apiKey !== "none" && (
+            <label className={s.fieldBlock}>
+              <span className={s.label}>
+                {providerMeta.apiKey === "optional" ? "API key (optional)" : "API key"}
+              </span>
+              <input
+                type="password"
+                className={s.input}
+                value={config.apiKey}
+                placeholder={`${providerMeta.label} API key`}
+                onChange={(e) => updateConfig({ apiKey: e.target.value })}
+                onKeyDown={(e) => e.key === "Enter" && save()}
+              />
+            </label>
+          )}
+          {providerMeta.endpoint !== "none" && (
+            <label className={s.fieldBlock}>
+              <span className={s.label}>
+                {providerMeta.endpoint === "override" ? "Endpoint override (optional)" : "Endpoint"}
+              </span>
+              <input
+                type="url"
+                className={s.input}
+                value={config.endpoint}
+                placeholder={providerMeta.endpointPlaceholder}
+                onChange={(e) => updateConfig({ endpoint: e.target.value })}
+                onKeyDown={(e) => e.key === "Enter" && save()}
+              />
+            </label>
+          )}
+          {providerMeta.region && (
+            <label className={s.fieldBlock}>
+              <span className={s.label}>Region (optional)</span>
+              <input
+                type="text"
+                className={s.input}
+                value={config.region}
+                placeholder="Leave blank for a global resource, e.g. eastus, westeurope"
+                onChange={(e) => updateConfig({ region: e.target.value })}
+                onKeyDown={(e) => e.key === "Enter" && save()}
+              />
+            </label>
+          )}
+          {providerMeta.model && (
+            <label className={s.fieldBlock}>
+              <span className={s.label}>Model</span>
+              <input
+                type="text"
+                className={s.input}
+                value={config.model}
+                placeholder="e.g. gemma3, llama3.2, qwen3"
+                onChange={(e) => updateConfig({ model: e.target.value })}
+                onKeyDown={(e) => e.key === "Enter" && save()}
+              />
+            </label>
+          )}
+          {providerMeta.helpText && <p className={s.helpText}>{providerMeta.helpText}</p>}
+        </section>
       )}
-      {providerMeta.endpoint !== "none" && (
-        <label className={s.fieldBlock}>
-          <span className={s.label}>
-            {providerMeta.endpoint === "override" ? "Endpoint override (optional)" : "Endpoint"}
-          </span>
-          <input
-            type="url"
-            className={s.input}
-            value={config.endpoint}
-            placeholder={providerMeta.endpointPlaceholder}
-            onChange={(e) => updateConfig({ endpoint: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && save()}
-          />
-        </label>
-      )}
-      {providerMeta.region && (
-        <label className={s.fieldBlock}>
-          <span className={s.label}>Region (optional)</span>
-          <input
-            type="text"
-            className={s.input}
-            value={config.region}
-            placeholder="Leave blank for a global resource, e.g. eastus, westeurope"
-            onChange={(e) => updateConfig({ region: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && save()}
-          />
-        </label>
-      )}
-      {providerMeta.model && (
-        <label className={s.fieldBlock}>
-          <span className={s.label}>Model</span>
-          <input
-            type="text"
-            className={s.input}
-            value={config.model}
-            placeholder="e.g. gemma3, llama3.2, qwen3"
-            onChange={(e) => updateConfig({ model: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && save()}
-          />
-        </label>
-      )}
-      {providerMeta.helpText && <p className={s.helpText}>{providerMeta.helpText}</p>}
       <div className={s.formActions}>
         <button type="button" className={s.saveBtn} disabled={!hasChanges} onClick={save}>
           Save
@@ -161,7 +203,7 @@ const TranslationSection = () => {
           Reset
         </button>
       </div>
-    </section>
+    </>
   );
 };
 
