@@ -563,7 +563,7 @@ const purchases = (now: number): FakeMessageSpec[] => [
         para("Your order is out for delivery and is scheduled to arrive today by 8:00 PM. No action is required at this time.") +
         progress(["Ordered", "Shipped", "Out for delivery", "Delivered"], 2, totalBooks.color) +
         items(
-          [{ thumb: birdBook, name: "A Field Guide to Coastal Birds", detail: "Hardcover · M. Albatross · Qty 1", price: "$27.50" }],
+          [{ thumb: birdBook, name: "Getting the most out of your Apple Car: A guide to Apple's latest and best drive", detail: "Hardcover · J. Appleseed· Qty 1", price: "$27.50" }],
           [["Total", "$31.42"]],
         ) +
         para(
@@ -572,8 +572,7 @@ const purchases = (now: number): FakeMessageSpec[] => [
         ) +
         para("A complimentary eBook edition has been delivered to your registered device (Zune HD 6).") +
         para("USPS tracking: <b>9400100000000000000006</b>", "margin-top: 18px") +
-        button("Track with USPS", totalBooks.color) +
-        small("Customers who purchased this item also purchased <i>Gulls: A Defence</i> and <i>Is That a Heron?</i>"),
+        button("Track with USPS", totalBooks.color)
     }),
   ),
   notice(
@@ -697,10 +696,10 @@ const promos = (now: number): FakeMessageSpec[] => [
       body:
         hero(coffeeHero, "Coffee", "Your first 2 months for $10") +
         para("Robusta Coffee Corporation is pleased to offer you coffee. Each month, one bag of coffee will be delivered to your address. It can be used to make coffee.") +
-        details([["Product", "Coffee"], ["Coffee content", "At least 50.1%"], ["Bag size", "340 g"], ["After your trial", "$18/month"]]) +
+        details([["Product", "Coffee"], ["Bag size", "340 g"], ["After your trial", "$18/month"]]) +
         code("Your trial code", "COFFEE", robusta.color) +
         button("Start my subscription", robusta.color) +
-        small("Robusta Coffee Corporation assures customers that its coffee is at least 50.1% coffee. Questions about the remaining 49.9% may be directed to Customer Communications."),
+        small("Robusta Coffee Corporation assures customers that its coffee is at least 50.1% coffee."),
       unsubscribe: true,
     }),
     { headers: unsubscribe, read: true },
@@ -772,13 +771,13 @@ export const demoSeed = (loadedAt = Date.now()): DemoSeed => {
         from: "Sam Sampleton <sam.sampleton@example.com>",
         hoursAgo: 20,
         read: true,
-        body: ["Sure! Should we switch this thread to messages? I just installed the latest Google Talk release.", "Sam"],
+        body: ["I'll look up some good hikes using AskJeeves 2026 Ultra, the world's most advanced AI query system!", "Sam"],
       },
       {
         from: "Julian Placeholder <julian.placeholder@example.com>",
         hoursAgo: 1.5,
         body: [
-          "Sounds great, I'm in! I'll make sure everyone is added on the group message.",
+          "Well, did you find anything?",
           "J",
         ],
       },

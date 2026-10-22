@@ -425,32 +425,48 @@ a {
   margin: 0 0 24px;
 }
 
-/* Numbered cards, one per step, like the feature cards above. */
+/* One card per section, like the feature cards above, holding numbered steps. */
+.install-card {
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: var(--card-shadow);
+  padding: 24px;
+  margin-top: 24px;
+  text-align: left;
+}
+
+.install-card h3 {
+  font-size: 20px;
+  font-weight: 500;
+  margin: 0 0 8px;
+}
+
+.install-card .note {
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
 .steps {
   list-style: none;
   counter-reset: step;
   padding: 0;
-  margin: 0 0 24px;
-  text-align: left;
+  margin: 0;
   display: grid;
-  gap: 8px;
+  gap: 16px;
 }
 
 .steps li {
   counter-increment: step;
   position: relative;
-  background: #fff;
-  border-radius: 4px;
-  box-shadow: var(--card-shadow);
-  padding: 14px 20px 14px 64px;
+  min-height: 28px;
+  padding: 2px 0 0 44px;
 }
 
 .steps li::before {
   content: counter(step);
   position: absolute;
-  left: 20px;
-  top: 50%;
-  transform: translateY(-50%);
+  left: 0;
+  top: 0;
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -459,20 +475,6 @@ a {
   font-weight: 500;
   text-align: center;
   line-height: 28px;
-}
-
-.install .note {
-  font-size: 14px;
-}
-
-.install h3 {
-  font-size: 20px;
-  font-weight: 500;
-  margin: 40px 0 8px;
-}
-
-.install h3 + .note {
-  margin-bottom: 16px;
 }
 
 .faq h3 {
