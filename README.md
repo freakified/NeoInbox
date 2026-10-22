@@ -1,8 +1,10 @@
 # NeoInbox
 
-An open-source re-creation of Google Inbox as a Thunderbird MailExtension.
+Recreating the classic Google™ Inbox experience as a fully local Thunderbird extension that works with any email account.
 
-![NeoInbox](docs/screenshot.png)
+Website: [neoinbox.freakified.net](https://neoinbox.freakified.net)
+
+![NeoInbox](site/public/shots/demo.webp)
 
 NeoInbox works with any email account, runs completely locally, and includes
 all your favorite classic Google Inbox features like a unified mail stream,
@@ -34,7 +36,7 @@ should give the same output.
 
 The add-on's files are in `dist/`, zipped as `neoinbox.xpi`. They are built from
 `inbox.html`, `src/` and `public/` (see `vite.config.ts`) plus the npm packages in
-`pnpm-lock.yaml`. `site/` (the project website), `docs/`, `scripts/`, `dev.html`
+`pnpm-lock.yaml`. `site/` (the project website), `scripts/`, `dev.html`
 and `src/eval/` are not part of the add-on.
 
 `pnpm source-zip` packages the committed source as `neoinbox-source.zip`.

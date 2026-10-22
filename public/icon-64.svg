@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2.5 -3.5 64 64">
+  <!-- icon.svg redrawn on a 64-unit grid (envelope 58×54 instead of 44×41) so it renders crisply at 64px;
+       viewBox is offset by half a unit so 1-unit strokes on integer coords land on whole pixels -->
+  <defs>
+    <!-- envelope silhouette: roof + body -->
+    <path id="env" d="M1.6 18.8l25-18c.7-.54 1.5-.8 2.4-.8s1.7.26 2.4.8l25 18c.9.7 1.6 1.9 1.6 3.2v28c0 2.2-1.8 4-4 4H4c-2.2 0-4-1.8-4-4V22c0-1.3.7-2.5 1.6-3.2z"/>
+    <path id="check" d="M21.75 15.15L18.45 18.45l10.55 10.55L50.75 7.25 47.45 3.95 29 22.4z"/>
+    <clipPath id="envClip"><use href="#env"/></clipPath>
+
+    <filter id="shadow" filterUnits="userSpaceOnUse" x="-2.5" y="-3.5" width="64" height="64">
+      <feGaussianBlur in="SourceAlpha" stdDeviation=".66"/>
+      <feOffset dx=".9" dy="1.3"/>
+      <feComponentTransfer><feFuncA type="linear" slope=".45"/></feComponentTransfer>
+    </filter>
+
+    <!-- inside of the envelope: deep, shadowed blue -->
+    <linearGradient id="inside" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4f8ef0"/>
+      <stop offset=".55" stop-color="#2459c9"/>
+      <stop offset="1" stop-color="#123a9c"/>
+    </linearGradient>
+    <!-- front pocket flaps: bright Luna sky blue -->
+    <linearGradient id="flapL" x1="0" y1="22" x2="0" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7fd6ff"/>
+      <stop offset=".5" stop-color="#2aa8f2"/>
+      <stop offset="1" stop-color="#0a6fcc"/>
+    </linearGradient>
+    <linearGradient id="flapR" x1="0" y1="22" x2="0" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#c4efff"/>
+      <stop offset=".5" stop-color="#62c6fa"/>
+      <stop offset="1" stop-color="#2493e0"/>
+    </linearGradient>
+    <!-- glossy white check with a cool grey underside -->
+    <linearGradient id="checkFill" x1="0" y1="4" x2="0" y2="29" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset=".5" stop-color="#f1f4f9"/>
+      <stop offset="1" stop-color="#c9d1de"/>
+    </linearGradient>
+    <!-- top-down gloss sheen -->
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".75"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".05"/>
+    </linearGradient>
+    <!-- inner bevel: bright along the top, fading out toward the bottom -->
+    <linearGradient id="bevel" x1="0" y1="0" x2="0" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff" stop-opacity=".8"/>
+      <stop offset=".45" stop-color="#fff" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".15"/>
+    </linearGradient>
+  </defs>
+
+  <!-- drop shadow drawn from a silhouette, so only it goes through the filter;
+       WebKit rasterizes filtered content at low resolution, which blurred the whole icon -->
+  <g filter="url(#shadow)">
+    <use href="#env"/>
+    <use href="#check" transform="translate(34.6 16.45) scale(1.15) translate(-34.6 -16.45)" stroke="#000" stroke-width=".87" stroke-linejoin="round"/>
+  </g>
+
+  <g>
+    <!-- envelope interior (roof + back wall) -->
+    <use href="#env" fill="url(#inside)"/>
+
+    <g clip-path="url(#envClip)">
+      <!-- soft sheen on the roof -->
+      <path d="M2.6 20L27.7 1.85c.8-.55 1.85-.55 2.6 0L55.4 20c-7.9 2.1-17.1 3.2-26.4 3.2S10.5 22.1 2.6 20z" fill="url(#gloss)" opacity=".55"/>
+
+      <!-- roof fold behind the check: dark crease with a light bevel just below -->
+      <path d="M0 22h58" stroke="#0a2f80" stroke-width="1"/>
+      <path d="M0 23h58" stroke="#fff" stroke-opacity=".45" stroke-width="1"/>
+
+      <!-- front pocket -->
+      <path d="M0 22v28c0 2.2 1.8 4 4 4h50z" fill="url(#flapL)"/>
+      <path d="M58 22v28c0 2.2-1.8 4-4 4H4z" fill="url(#flapR)"/>
+      <!-- top fold: dark crease with a light bevel just below -->
+      <path d="M0 22l29 17L58 22" fill="none" stroke="#0b3f8f" stroke-width="1" stroke-linejoin="round"/>
+      <path d="M0 23l29 17L58 23" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="1" stroke-linejoin="round"/>
+      <!-- lower crease: edge of the right flap, which overlaps the left -->
+      <path d="M4 54l25-15" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1" transform="translate(0 1)"/>
+      <path d="M4 54l25-15" fill="none" stroke="#0b4a9a" stroke-opacity=".85" stroke-width="1"/>
+
+      <!-- glassy highlight across the upper half of the pocket -->
+      <path d="M-1.3 24l30.3 17 30.3-17v10.25c-9.2 4.6-19.8 6.6-30.3 6.6S7.9 38.85-1.3 34.25z" fill="#fff" opacity=".18"/>
+      <!-- inner bevel: double-width stroke clipped to the silhouette, so exactly 1 unit shows inside the edge -->
+      <use href="#env" fill="none" stroke="url(#bevel)" stroke-width="3"/>
+    </g>
+
+    <!-- crisp dark navy outline -->
+    <use href="#env" fill="none" stroke="#0a2a6e" stroke-width="1" stroke-linejoin="round"/>
+
+    <!-- checkmark, scaled up 15% around its centre; stroke compensated to stay 1 unit -->
+    <g transform="translate(34.6 16.45) scale(1.15) translate(-34.6 -16.45)">
+      <use href="#check" fill="url(#checkFill)" stroke="#3f5378" stroke-width=".87" stroke-linejoin="round"/>
+      <path d="M20.05 18.45l1.7-1.7 7.25 7.25L47.45 5.55l1.6 1.6L47.45 6.05 29 24.5z" fill="#fff" opacity=".9"/>
+    </g>
+  </g>
+</svg>
