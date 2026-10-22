@@ -81,6 +81,34 @@ const start = async (): Promise<void> => {
   };
   (window as unknown as { neo: typeof neo }).neo = neo;
 
+  if (demo) {
+    // The demo has no Thunderbird behind it, so what would open there says so
+    // instead of doing nothing, and links leave for the real web. The fake's
+    // own handlers still run, so its call log stays complete.
+    const notify = (what: string): void =>
+      useMailStore.getState().notify(`In Thunderbird, this opens ${what}`);
+    const before = (api: object, name: string, hook: (...args: never[]) => void): void => {
+      const target = api as Record<string, (...args: unknown[]) => unknown>;
+      const original = target[name]!;
+      target[name] = (...args) => {
+        (hook as (...args: unknown[]) => void)(...args);
+        return original(...args);
+      };
+    };
+    const folderNames: Record<string, string> = { trash: "your Trash folder", junk: "your Spam folder" };
+    before(messenger.mailTabs, "create", (props?: { displayedFolder?: string | { id?: string } }) => {
+      const folder = props?.displayedFolder;
+      const id = typeof folder === "string" ? folder : folder?.id;
+      // Searches show the archive; setQuickFilter announces those.
+      if (id && folderNames[id]) notify(folderNames[id]);
+    });
+    before(messenger.mailTabs, "setQuickFilter", () => notify("the same search over all your mail, bodies included"));
+    before(messenger.addressBooks, "openUI", () => notify("your address book"));
+    before(messenger.windows, "openDefaultBrowser", (url: string) => {
+      window.open(url, "_blank", "noopener");
+    });
+  }
+
   if (demo && fresh) {
     // Let the archive job finish before the app mounts. The SPA then learns
     // of the finished scan through hello rather than watching it end, so the

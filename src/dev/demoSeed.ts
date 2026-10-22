@@ -922,6 +922,10 @@ export const demoSeed = (loadedAt = Date.now()): DemoSeed => {
           { id: "sent", name: "Sent", specialUse: ["sent"], messages: hike.sent },
           { id: "drafts", name: "Drafts", specialUse: ["drafts"] },
           { id: ARCHIVE, name: "Archives", specialUse: ["archives"], messages: done },
+          // Empty, but there so the drawer's Trash and Spam reach Thunderbird
+          // (the harness turns that into a toast).
+          { id: "trash", name: "Trash", specialUse: ["trash"] },
+          { id: "junk", name: "Spam", specialUse: ["junk"] },
         ],
       },
       {
